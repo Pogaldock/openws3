@@ -4,7 +4,7 @@
 #   make screens  render the screens of the user guide into docs/screens (host build of the real screen code)
 #   make clean
 SDCC   ?= sdcc
-SRCS    = src/main.c src/hal.c src/adc.c src/cal.c src/ctl.c src/fmt.c src/font.c src/lcd.c src/ui.c src/cfg.c src/cfg_pure.c src/input_pure.c src/buzz_pure.c src/chg.c src/sup.c src/app.c src/ports.c src/usb.c src/dbgscr.c src/rowbuf.c src/limits.c src/menu.c src/portset.c src/theme.c src/dev.c src/tele.c
+SRCS    = src/main.c src/hal.c src/adc.c src/cal.c src/ctl.c src/fmt.c src/font.c src/lcd.c src/ui.c src/cfg.c src/cfg_pure.c src/input_pure.c src/buzz_pure.c src/chg.c src/sup.c src/app.c src/ports.c src/usb.c src/dbgscr.c src/rowbuf.c src/limits.c src/menu.c src/portset.c src/theme.c src/dev.c src/tele.c src/sprites.c src/logo.c
 # large model on purpose: locals live in XRAM, IRAM is left for the stack.  NOT medium: MOVX @Ri would use P2
 # (a power-path port on this board) as the high address byte.
 BUILD  ?= build
@@ -55,9 +55,9 @@ TESTS   = $(patsubst test/%.c,$(BUILD)/%,$(wildcard test/test_*.c))
 test: $(TESTS)
 	@for t in $(TESTS); do ./$$t || exit 1; done
 
-$(BUILD)/render_screens: tools/render_screens.c src/ui.c src/font.c $(PURE) $(wildcard src/*.h) $(BUILD)/version_build.h
+$(BUILD)/render_screens: tools/render_screens.c src/ui.c src/font.c src/sprites.c src/logo.c $(PURE) $(wildcard src/*.h) $(BUILD)/version_build.h
 	@mkdir -p $(BUILD)
-	$(HOSTCC) -std=c99 -Wall -Wextra -Werror -Isrc -I$(BUILD) -D__code= -o $@ tools/render_screens.c src/ui.c src/font.c $(PURE) -lm
+	$(HOSTCC) -std=c99 -Wall -Wextra -Werror -Isrc -I$(BUILD) -D__code= -o $@ tools/render_screens.c src/ui.c src/font.c src/sprites.c src/logo.c $(PURE) -lm
 
 screens: $(BUILD)/render_screens
 	python3 tools/render_screens.py $< docs/screens

@@ -13,4 +13,15 @@ void lcd_fill(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t color);
 /* sx, sy: integer stretch of the 6x8 cell.  Characters outside the font draw as space. */
 void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint16_t fg, uint16_t bg);
 
+/* ---- ROT theme drawing ---- */
+/* Poked text: with the ROT theme a glyph stretched in both directions (2x2) is inked as a checkerboard of dots, like hand-poke
+ * shading.  r = row inside the stretch (0..sy-1), j = column inside it (0..sx-1).  Text 1 pixel wide stays solid (it would break up). */
+#define LCD_POKE(r, j) ((((r) + (j)) & 1) == 0)
+/* Static: one step of a 16-bit Galois LFSR, and the grey of a noise pixel from its state (mostly black, some dark, a few bright) */
+#define LCD_LFSR(s)   ((uint16_t)(((s) >> 1) ^ (((s) & 1) ? 0xB400u : 0u)))
+#define LCD_STATIC(s) (((s) & 7) < 5 ? 0x0000 : ((s) & 7) == 5 ? 0x2945 : ((s) & 7) == 6 ? 0x6B4D : 0xD69A)
+void lcd_noise(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t seed);
+/* 1 bit per pixel, rows top to bottom padded to whole bytes, MSB = leftmost (tools/gen_sprites.py, tools/gen_logo.py) */
+void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const CODE uint8_t *bits, uint16_t fg, uint16_t bg);
+
 #endif

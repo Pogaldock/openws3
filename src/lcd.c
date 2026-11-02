@@ -6,6 +6,7 @@
 #include "lcd.h"
 #include "hal.h"
 #include "font.h"
+#include "theme.h"
 
 __sbit __at (0xB5) SDA;
 __sbit __at (0xB7) SCL;
@@ -190,6 +191,7 @@ void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint1
 {
     uint8_t col[5], c, r, i, j, k, rows = FONT_H_PX * sy, cols = FONT_W * sx;
     uint8_t fh = fg >> 8, fl = fg & 0xFF, bh = bg >> 8, bl = bg & 0xFF;
+    uint8_t poke = th_get() == TH_ROT && sx > 1 && sy > 1, rr;
 
     for (; *s; s++, x += cols) {
         c = (uint8_t)*s;
@@ -198,13 +200,35 @@ void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint1
         for (i = 0; i < 5; i++) col[i] = font5x7[(uint8_t)(c - FONT_FIRST) * 5 + i];
         window(x, y, cols, rows);
         for (r = 0; r < rows; r++) {
-            k = r / sy;
+            k = r / sy; rr = r - k * sy;
             for (i = 0; i < 5; i++) {
                 uint8_t on = k < 7 && ((col[i] >> k) & 1);
-                for (j = 0; j < sx; j++) { if (on) { tx(fh); tx(fl); } else { tx(bh); tx(bl); } }
+                for (j = 0; j < sx; j++) {
+                    if (on && (!poke || LCD_POKE(rr, j))) { tx(fh); tx(fl); } else { tx(bh); tx(bl); }
+                }
             }
             for (j = 0; j < sx; j++) { tx(bh); tx(bl); }         /* spacing column */
         }
         CS = 1;
     }
+}
+
+void lcd_noise(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t seed)
+{
+    uint16_t n = (uint16_t)w * h, s = seed ? seed : 1, c;
+    window(x, y, w, h);
+    while (n--) { s = LCD_LFSR(s); c = LCD_STATIC(s); tx(c >> 8); tx(c & 0xFF); }
+    CS = 1;
+}
+
+void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const CODE uint8_t *bits, uint16_t fg, uint16_t bg)
+{
+    uint8_t i, j, stride = (w + 7) >> 3;
+    uint8_t fh = fg >> 8, fl = fg & 0xFF, bh = bg >> 8, bl = bg & 0xFF;
+    window(x, y, w, h);
+    for (j = 0; j < h; j++, bits += stride)
+        for (i = 0; i < w; i++) {
+            if (bits[i >> 3] & (0x80 >> (i & 7))) { tx(fh); tx(fl); } else { tx(bh); tx(bl); }
+        }
+    CS = 1;
 }

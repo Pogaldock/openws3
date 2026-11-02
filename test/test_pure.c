@@ -327,7 +327,8 @@ static void t_theme(void)
         for (k = 0; k < 6; k++) CHECK(th(R_BADGE0 + k) != th(R_BG));       /* the badge digit is drawn in the background colour */
         CHECK(th(R_FULLTX) != th(R_FULL) && th(R_FULL) != th(R_BOX) && th(R_FULL) != th(R_BG));     /* a full cell stands out, its text reads */
         CHECK(th(R_DOT0 + PS_FULL) == th(R_FULLTX));                       /* the dot on a full cell is drawn like its text */
-        CHECK(th(R_DOT0) == th(R_BOX));                                    /* an idle port's dot disappears into the cell */
+        if (t != TH_ROT) CHECK(th(R_DOT0) == th(R_BOX));                   /* an idle port's dot disappears into the cell */
+        else CHECK(th(R_DOT0) != th(R_BOX));                               /* ...except in ROT, where idle is a shut eye */
         CHECK(th_name(t)[0] != 0);
     }
     th_set(99); CHECK(th_get() == TH_CLASSIC);

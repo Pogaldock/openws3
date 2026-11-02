@@ -9,6 +9,8 @@
 #include "portset.h"
 #include "version.h"
 #include "version_build.h"
+#include "sprites.h"
+#include "logo.h"
 
 #define NELEM (3 + NPORTS * 3)           /* 3 header boxes, then per port: voltage, status text, dot */
 #define NBOX  (3 + NPORTS)               /* the 3 header boxes, then the port cells */
@@ -65,8 +67,47 @@ static void centered(uint8_t y, const char *text, uint8_t sx, uint8_t sy, uint16
 #define FW_STAGE ""
 #endif
 
+#define ROT (th_get() == TH_ROT)
+
+/* ROT: a thorned line.  A 1-pixel line with a barb of `len` pixels every `step` pixels, pointing down (dir 1) or up (dir -1). */
+static void thorns(uint8_t x, uint8_t y, uint8_t w, int8_t dir, uint8_t len, uint8_t step, uint16_t c)
+{
+    uint8_t i, k;
+    lcd_fill(x, y, w, 1, c);
+    for (i = 2; i + 2 < w; i += step)
+        for (k = 1; k <= len; k++) lcd_fill((uint8_t)(x + i), (uint8_t)(y + dir * (int8_t)k), 1, 1, c);
+}
+
+/* ROT: the border of a box, thorns pointing inward on the top and bottom edges */
+static void border(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t c)
+{
+    thorns(x, y, w, 1, 1, 5, c);
+    thorns(x, (uint8_t)(y + h - 1), w, -1, 1, 5, c);
+    lcd_fill(x, y, 1, h, c);
+    lcd_fill((uint8_t)(x + w - 1), y, 1, h, c);
+}
+
+/* ROT splash: static, a black band with barbed edges, the wordmark between two skulls, the version on its own strip */
+static void rot_splash(void)
+{
+    uint8_t lx = (uint8_t)((LCD_PX_W - LOGO_W) / 2), sw = spr_w[SPR_SKULL], sh = spr_h[SPR_SKULL];
+    lcd_noise(0, 0, LCD_PX_W, LCD_PX_H, 0x5EED);
+    lcd_fill(0, 9, LCD_PX_W, 50, th(R_BG));
+    thorns(0, 9, LCD_PX_W, -1, 2, 6, th(R_DIM));
+    thorns(0, 58, LCD_PX_W, 1, 2, 6, th(R_DIM));
+    lcd_bitmap(lx, 12, LOGO_W, LOGO_H, logo_bits, th(R_TEXT), th(R_BG));
+    lcd_bitmap((uint8_t)((lx - sw) / 2), (uint8_t)(34 - sh / 2), sw, sh, SPR_BITS(SPR_SKULL), th(R_TEXT), th(R_BG));
+    lcd_bitmap((uint8_t)(lx + LOGO_W + (LCD_PX_W - lx - LOGO_W - sw) / 2), (uint8_t)(34 - sh / 2), sw, sh, SPR_BITS(SPR_SKULL), th(R_TEXT), th(R_BG));
+    lcd_fill(0, 68, LCD_PX_W, 10, th(R_BG));
+}
+
 void ui_splash(void)
 {
+    if (ROT) {
+        rot_splash();
+        centered(69, "V" STR(FW_MAJOR) "." STR(FW_MINOR) FW_STAGE " " FW_BUILD_STR, 1, 1, th(R_DIM), th(R_BG));
+        return;
+    }
     lcd_fill(0, 0, LCD_PX_W, LCD_PX_H, th(R_BG));
     lcd_fill(0, 14, LCD_PX_W, 3, th(R_BAD));
     lcd_fill(0, 63, LCD_PX_W, 3, th(R_BAD));
@@ -80,6 +121,7 @@ static char XD mbig[8];                              /* the big line of the mess
 void ui_message(uint8_t role, const char *title, const char *line2, const char *big, const char *small)
 {
     lcd_fill(0, 0, LCD_PX_W, LCD_PX_H, th(R_BG));
+    if (ROT) { lcd_noise(0, 0, LCD_PX_W, 4, 0xB0B0); lcd_noise(0, 76, LCD_PX_W, 4, 0x0666); }
     centered(6, title, 1, 2, th(role), th(R_BG));
     centered(28, line2, 1, 1, th(R_TEXT), th(R_BG));
     if (big) { centered(42, big, 2, 2, th(R_WARN), th(R_BG)); scopy(mbig, big); } else mbig[0] = 0;
@@ -136,6 +178,7 @@ static void box_draw(uint8_t b, uint16_t bg)
     box_bg[b] = bg;
     if (b < 3) {
         lcd_fill(box_x(b), UI_HDR_Y, UI_BOX_W, UI_HDR_H, bg);
+        if (ROT) border(box_x(b), UI_HDR_Y, UI_BOX_W, UI_HDR_H, th(R_DIM));
         shown[b][0] = 0;
         return;
     }
@@ -144,6 +187,7 @@ static void box_draw(uint8_t b, uint16_t bg)
     lcd_fill(x + UI_BADGE_X, y + 2, UI_BADGE_W, UI_CELL_H - 4, th(R_BADGE0 + p));
     d[0] = (char)('1' + p); d[1] = 0;
     lcd_text(x + UI_BADGE_X + 2, y + 6, d, 1, 2, th(R_BG), th(R_BADGE0 + p));
+    if (ROT) border(x, y, UI_BOX_W, UI_CELL_H, th(R_DIM));
     for (k = 0; k < 3; k++) shown[3 + p * 3 + k][0] = 0;
 }
 
@@ -166,6 +210,7 @@ static void frame(uint8_t x, uint8_t y, uint16_t c)
     lcd_fill(x, (uint8_t)(y + UI_CELL_H - UI_FRAME), UI_BOX_W, UI_FRAME, c);
     lcd_fill(x, y, UI_FRAME, UI_CELL_H, c);
     lcd_fill((uint8_t)(x + UI_BOX_W - UI_FRAME), y, UI_FRAME, UI_CELL_H, c);
+    if (ROT && c == th(R_BOX)) border(x, y, UI_BOX_W, UI_CELL_H, th(R_DIM));     /* taking the frame off puts the thorns back */
 }
 
 static uint16_t status_color(uint8_t state)
@@ -197,6 +242,7 @@ static void header(const ui_state_t *s, uint8_t e, char XD *t) REENT
         else if (s->usb_off && s->tphase) { scopy(t, "USB OFF"); col = th(R_GOOD); }   /* 1 s in 4, like the targets in the port cells */
         else { fmt_vin(t, cal_vin_mv(s->vin)); col = s->usb_off ? th(R_GOOD) : th(R_VIN); }
     } else fmt_v2(t, cal_port_mv(s->tgt));
+    if (col == bg) col = th(R_BG);                   /* a theme whose running header is the text colour (ROT): ink the text */
     pad(t, 7);
     box(e, bg);
     put(e, box_x(e) + UI_HDR_TX, UI_HDR_Y + UI_HDR_TY, 2, col, bg, t);
@@ -256,7 +302,10 @@ static void element(const ui_state_t *s, uint8_t e) REENT
         st &= 7;
         fg = th(R_DOT0 + st);
         if (st == PS_FAULT && !s->blink) fg = bg;              /* errors blink */
-        if (changed(e, fg)) lcd_fill(x + UI_DOT_X, y + UI_DOT_Y, UI_DOT_S, UI_DOT_S, fg);
+        if (changed(e, fg)) {
+            if (ROT) lcd_bitmap(x + UI_DOT_X, y + UI_DOT_Y - 1, spr_w[st], spr_h[st], SPR_BITS(st), fg, bg);   /* sprites 0..6 = PS_* */
+            else lcd_fill(x + UI_DOT_X, y + UI_DOT_Y, UI_DOT_S, UI_DOT_S, fg);
+        }
         return;
     }
     put(e, x + FLD[part].dx, y + FLD[part].dy, FLD[part].sy, fg, bg, t);

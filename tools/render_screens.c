@@ -37,9 +37,26 @@ void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint1
             for (i = 0; i < FONT_W * sx; i++) {
                 uint8_t col = i / sx, k = r / sy;
                 int on = col < 5 && k < 7 && ((font5x7[(c - FONT_FIRST) * 5 + col] >> k) & 1);
+                if (on && th_get() == TH_ROT && sx > 1 && sy > 1 && !LCD_POKE(r % sy, i % sx)) on = 0;
                 if (x + i < LCD_PX_W && y + r < LCD_PX_H) fb[y + r][x + i] = on ? fg : bg;
             }
     }
+}
+
+void lcd_noise(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t seed)
+{
+    unsigned i, j;
+    uint16_t s = seed ? seed : 1;
+    for (j = y; j < (unsigned)y + h; j++)
+        for (i = x; i < (unsigned)x + w; i++) { s = LCD_LFSR(s); if (i < LCD_PX_W && j < LCD_PX_H) fb[j][i] = LCD_STATIC(s); }
+}
+
+void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const uint8_t *bits, uint16_t fg, uint16_t bg)
+{
+    unsigned i, j, stride = (w + 7) / 8;
+    for (j = 0; j < h; j++)
+        for (i = 0; i < w; i++)
+            if (x + i < LCD_PX_W && y + j < LCD_PX_H) fb[y + j][x + i] = (bits[j * stride + i / 8] & (0x80 >> (i % 8))) ? fg : bg;
 }
 
 static const char *outdir;
@@ -156,8 +173,6 @@ static void diag_screen(void)
 {
     uint8_t r;
     memset(&dbg_view, 0, sizeof dbg_view);
-    dbg_view.ilim = 0; dbg_view.vmin = settings.vmin; dbg_view.vcut = 0; dbg_view.lmode = settings.lmode;
-    dbg_view.est_ma = 1230; dbg_view.budget = 52; dbg_view.bcnt = iu(1500);
     dbg_view.held[0] = 0; dbg_view.held[1] = 1; dbg_view.held[2] = 2; dbg_view.stop = STOP_NONE;
     ui_text_enter();
     for (r = 0; r < DBG_ROWS; r++) ui_text_row(r, dbg_text(6, r), r == 0 ? th(R_INFO) : th(R_TEXT));
@@ -180,6 +195,22 @@ static void ports_screens(void)
     s = charging_state();
     s.ps = 1; s.sel = 0; s.locked = 1;
     draw_main(&s); save("ports_locked");
+}
+
+/* ---- the ROT theme: every screen it draws differently ---- */
+static void rot_screens(void)
+{
+    ui_state_t s;
+    th_set(TH_ROT);
+    ui_splash(); save("rot_splash");
+    ui_message(R_WAIT, "INPUT LOW", "CHECK THE SUPPLY", "4.52V", 0); save("rot_input_low");
+    s = idle_state(); draw_main(&s); save("rot_idle");
+    s = charging_state(); draw_main(&s); save("rot_charging");
+    s.state[2] = PS_FAULT; s.blink = 1; s.state[4] = PS_BLEED; draw_main(&s); save("rot_fault");
+    s = idle_state(); s.ps = 1; s.sel = 1; draw_main(&s); save("rot_ports_select");
+    settings.theme = TH_ROT; menu_open(0); keys(2, EV_B2); keys(1, EV_OK); keys(1, EV_B2); draw_menu(); save("rot_menu");
+    settings.theme = TH_CLASSIC;
+    th_set(TH_CLASSIC);
 }
 
 int main(int argc, char **argv)
@@ -210,5 +241,6 @@ int main(int argc, char **argv)
     diag_screen();
 
     themed("calm", TH_CALM); themed("amber", TH_AMBER); themed("contrast", TH_CONTRAST);
+    rot_screens();
     return 0;
 }
