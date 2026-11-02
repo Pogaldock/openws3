@@ -59,7 +59,7 @@ The Advanced view adds the raw inputs, the limiter, setpoints, an event log and 
 an inverted rail with sag, six ports, cells with a polarisation model, an ADC referenced to VCC with optional noise, gain errors and
 bandgap spread, and the display's bus time.  It drives the buttons like a person and checks what the board does in 18 scenarios:
 full charges at VCC 4.45 to 4.95 V, bandgap +-1 %, ADC noise, user stop, input loss, cell removal, a 2.3 V cell, a 2.7 V cell, a
-stuck rail, a short, storage, a power cycle mid-charge and a cell that never fills.  The original firmware fails five of them (cells
+stuck rail, a short, storage, a power cycle mid-charge and a cell that never fills.  The upstream OpenWS3 firmware (before this fork's fixes; not the VIFLY firmware, which has no source to simulate) fails five of them (cells
 to 4.57 V at VCC 4.95 V, a 2.3 V cell charged, no gentle start, no time limit); breaking the stop paths in `app.c` on purpose fails
 the matching scenarios.  What it cannot check: the board's real voltage scale, the bandgap of your chip, heat, and anything about the
 hardware the model leaves out.
