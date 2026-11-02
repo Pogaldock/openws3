@@ -25,7 +25,7 @@ uint16_t cal_vin_mv(uint16_t raw);
  * internal 1.19 V bandgap read on the same ADC gives the ratio: gain = 4096 * BG_NOM / bandgap, and corrected = raw * gain / 4096.
  * At the VCC the scales were made at (bandgap BG_NOM) nothing changes.  The bandgap itself differs by about 1 % from chip to chip,
  * which is the error left: far smaller than the up to 10 % a VCC between 4.55 V and the 5.0 V fatal limit would give uncorrected
- * (a cell charged to 4.6 V instead of 4.2 V).  bg8 is the bandgap count x 8 (smoothed, adc.c); it is clamped to the range the supply
+ * (a cell charged to 4.6 V instead of 4.2 V).  bg8 is the bandgap count x 8 (read every pass, unsmoothed: adc.c); it is clamped to the range the supply
  * supervision allows plus a margin, so a bad reading cannot make an absurd gain. */
 #define BG_NOM      1071
 #define BG8_MIN     (900 * 8)

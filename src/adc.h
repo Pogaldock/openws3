@@ -1,7 +1,7 @@
 /*
  * ADC scanner.  Conversion time on the hardware is not measured yet, so a pass converts only what the control needs:
- *   fast (every pass):  6 port voltages, 6 port currents, the rail - 2 samples each
- *   slow (every 8th):   VIN, bandgap (VCC), ADC0 - 4 samples each
+ *   fast (every pass):  the bandgap (VCC, first), 6 port voltages, 6 port currents, the rail - 2 samples each
+ *   slow (every 8th):   VIN, ADC0 - 4 samples each
  *
  * Values are the ADC counts as converted (the mean of the samples), 0..4095 relative to VCC.  A count is in a fixed unit of the measured
  * quantity:

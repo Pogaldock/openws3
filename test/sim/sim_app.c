@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include "sim.h"
 #include "app.h"
+#include "cfg.h"
 #include "../check.h"
 
 #define SEC(s) ((uint64_t)((s) * 2000))
@@ -223,13 +224,150 @@ static void s_never_full(void)
     CHECK(S.pwm[0] == 0);
 }
 
+/* VCC jumps mid-charge (another supply plugged in, a sagging input): the readings must not let the cells see a rail spike */
+static void s_vcc_step(void)
+{
+    int p;
+    double rail_before;
+    for (p = 0; p < 4; p++) sim_attach(p, 4.05 + 0.04 * p, 120);
+    boot(); set_current(6); start(); run_for(120);
+    rail_before = S.max_rail_driven;
+    S.vcc = 4.95; run_for(60);
+    S.vcc = 4.45; run_for(60);
+    S.vcc = 4.95; run_for(60);
+    printf("  VCC steps 4.55 -> 4.95 -> 4.45 -> 4.95 V mid-charge: rail peak %.3f V (before the steps %.3f), cell peaks", S.max_rail_driven, rail_before);
+    for (p = 0; p < 4; p++) printf(" %.3f", S.max_cell_v[p]);
+    printf(" V\n");
+    CHECK(S.max_rail_driven < 4.26);
+    for (p = 0; p < 4; p++) CHECK(S.max_cell_v[p] < 4.215);
+}
+
+/* a damaged cell leaking 50 mA inside: it tapers (below the tail current), goes full, sags, gets topped up, sags... for ever unless the
+   time spent charging adds up across the top-ups */
+static void s_leaky(void)
+{
+    int faulted = 0;
+    uint64_t end;
+    sim_attach(0, 4.0, 120); S.cell[0].leak = 0.05;
+    boot(); start();
+    end = S.ticks + SEC(12 * 3600);
+    while (S.ticks < end) {
+        run_for(60);
+        if (!S.pwm[0] && !S.sw[0] && sim_cell_v(0) < 3.9) { faulted = 1; break; }    /* left alone: it was given up on */
+    }
+    printf("  cell leaking 50 mA: %s after %.1f h\n", faulted ? "given up on (port off, cell draining)" : "STILL being topped up", S.ticks / 2000.0 / 3600);
+    CHECK(faulted);
+}
+
+static void both(double s) { S.btn1 = S.btn2 = 1; run_for(s); S.btn1 = S.btn2 = 0; run_for(0.25); }
+static void usb(const uint8_t *c, int n) { memset(S.usb_cmd, 0, sizeof S.usb_cmd); memcpy(S.usb_cmd, c, (size_t)n); S.usb_pending = 1; pass(); pass(); }
+
+/* the menu while charging: the target voltage and the current must not change, whatever is pressed */
+static void s_menu_lock(void)
+{
+    int k;
+    sim_attach(0, 3.9, 120);
+    boot(); start(); run_for(10);
+    both(0.12);                                                   /* open the menu */
+    both(0.12);                                                   /* open CHARGING */
+    for (k = 0; k < 2; k++) { both(0.12); tap(2); tap(2); both(0.12); tap(2); }    /* try to edit VOLTAGE and CURRENT */
+    both(1.0);                                                    /* close and save */
+    run_for(5);
+    printf("  menu while charging: target index %u (0 = 4.20 V), current %u (21 = 0.3 A), still charging: %s\n", settings.volt, settings.cur, S.pwm[0] ? "yes" : "no");
+    CHECK(settings.volt == 0 && settings.cur == 21);
+    CHECK(S.pwm[0] > 0 && S.global);
+}
+
+/* the rail goes out of range (4.35 V, still measurable) for 5 s: the run pauses with nothing driven, then resumes by itself */
+static void s_rail_pause(void)
+{
+    double t;
+    sim_attach(0, 3.9, 120); sim_attach(1, 4.15, 120);
+    boot(); start(); run_for(20);
+    S.rail_stuck = 4.35;
+    t = time_until(all_off, 5.0);
+    run_for(5); S.rail_stuck = 0; run_for(10);
+    printf("  rail stuck at 4.35 V for a while: outputs off after %.2f s, cell peaks %.3f %.3f V, charging again afterwards: %s\n", t, S.max_cell_v[0], S.max_cell_v[1], S.pwm[0] ? "yes" : "no");
+    CHECK(t >= 0 && t < 2.0);
+    CHECK(S.max_cell_v[1] < 4.215);
+    CHECK(S.pwm[0] > 0);
+}
+
+/* VCC over 5.0 V: everything off and locked until the power is cycled */
+static void s_vcc_fatal(void)
+{
+    double t;
+    sim_attach(0, 3.9, 120);
+    boot(); start(); run_for(10);
+    S.vcc = 5.15;
+    t = time_until(all_off, 2.0);
+    S.vcc = 4.55; run_for(30); start(); run_for(10);
+    printf("  VCC 5.15 V: outputs off after %.2f s; back to normal and start pressed: still locked off: %s\n", t, all_off() ? "yes" : "NO");
+    CHECK(t >= 0 && t < 0.5);
+    CHECK(all_off());
+}
+
+/* the rail cannot be regulated from the start (it sits at 4.20 V): the self-test fails, a run can never start */
+static void s_selftest_fail(void)
+{
+    uint64_t end;
+    int driven = 0;
+    sim_attach(0, 3.9, 120);
+    S.rail_stuck = 4.20;
+    app_boot(); S.booted = 1;
+    end = S.ticks + SEC(20);
+    while (S.ticks < end) { pass(); if (S.global || any_pwm()) driven = 1; }
+    start(); run_for(10); if (S.global || any_pwm()) driven = 1;
+    printf("  rail that does not respond at boot: outputs ever driven: %s\n", driven ? "YES" : "no");
+    CHECK(!driven);
+}
+
+/* developer mode from a PC: drive port 1 flat out with the rail raw.  At the rail's top the ADC saturates and the unit locks out; just
+   under that (about 4.45 V) the per-port guard must cut the port.  And the outputs must go off by themselves when the PC goes quiet */
+static void dev_drive(int rail_duty, double secs)
+{
+    static const uint8_t enter[] = { 7, 9, 1 };
+    uint8_t set[19] = { 8, 0x11, 2, 0, 0, 0, 0x01, 0x90 };          /* P5.2 on + rail raw, port 1 duty 400 */
+    int k;
+    set[4] = (uint8_t)(rail_duty >> 8); set[5] = (uint8_t)rail_duty; set[18] = 9;
+    usb(enter, 3);
+    for (k = 0; k < secs * 10; k++) { usb(set, 19); run_for(0.1); }
+}
+
+static void s_dev_top(void)
+{
+    sim_attach(0, 4.10, 120);
+    boot(); dev_drive(0, 20);
+    printf("  developer mode, rail raw at its top: locked out: %s, cell peak %.3f V\n", all_off() ? "yes" : "NO", S.max_cell_v[0]);
+    CHECK(all_off());
+}
+
+static void s_dev_mode(void)
+{
+    uint8_t set[19] = { 8, 0x11, 2, 0, 0, 137, 0, 0, 0x01, 0x90 };  /* port 2 duty 400, rail raw 137 */
+    double t;
+    sim_attach(0, 4.10, 120); sim_attach(1, 4.10, 120);
+    boot();
+    dev_drive(137, 600);                                            /* 10 min of a host holding port 1 on, rail about 4.45 V */
+    printf("  developer mode, port driven flat out, rail ~%.2f V: cell held at %.3f V, PWM %u (developer mode only cuts at 4.40 V)\n", S.rail, S.max_cell_v[0], S.pwm[0]);
+    CHECK(S.max_cell_v[0] < 4.41);                                  /* all developer mode promises: the 4.40 V port guard */
+    set[18] = 9;
+    usb(set, 19); run_for(0.2);
+    CHECK(S.pwm[1] > 0);
+    t = time_until(all_off, 3.0);                                   /* the PC goes quiet */
+    printf("  developer mode, PC stops sending: outputs off after %.2f s\n", t);
+    CHECK(t >= 0 && t < 0.8);
+}
+
 typedef struct { const char *name; void (*fn)(void); } scen_t;
 static const scen_t SC[] = {
     { "nominal", s_nominal }, { "vcc_low", s_vcc_low }, { "vcc_mid", s_vcc_mid }, { "vcc_high", s_vcc_high },
     { "bg_plus", s_bg_plus }, { "bg_minus", s_bg_minus }, { "noise", s_noise }, { "noise_vcc", s_noise_vcc },
     { "user_stop", s_user_stop }, { "input_loss", s_input_loss }, { "removal", s_removal }, { "dead_cell", s_dead_cell },
     { "gentle", s_gentle }, { "broken_rail", s_broken_rail }, { "short", s_short }, { "storage", s_storage },
-    { "power_cycle", s_power_cycle }, { "never_full", s_never_full },
+    { "power_cycle", s_power_cycle }, { "never_full", s_never_full }, { "vcc_step", s_vcc_step }, { "leaky", s_leaky },
+    { "menu_lock", s_menu_lock }, { "rail_pause", s_rail_pause }, { "vcc_fatal", s_vcc_fatal }, { "selftest_fail", s_selftest_fail },
+    { "dev_top", s_dev_top }, { "dev_mode", s_dev_mode },
 };
 
 int main(int argc, char **argv)
@@ -241,7 +379,7 @@ int main(int argc, char **argv)
         if (argc > 1 && strcmp(argv[1], SC[k].name)) continue;
         fflush(stdout);
         pid = fork();
-        if (pid == 0) { srand(1234 + k); sim_reset(); SC[k].fn(); fflush(stdout); _exit(fails ? (check_report(SC[k].name), 1) : 0); }
+        if (pid == 0) { srand(1234 + k); sim_reset(); SC[k].fn(); fflush(stdout); exit(fails ? (check_report(SC[k].name), 1) : 0); }
         waitpid(pid, &st, 0);
         if (!WIFEXITED(st) || WEXITSTATUS(st)) { failed++; printf("  ** %s FAILED\n", SC[k].name); }
     }

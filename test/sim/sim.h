@@ -9,6 +9,7 @@
 typedef struct {
     double q, cap_c;            /* charge (coulombs) and capacity */
     double r, r2, tau, vp;      /* series ohms; polarisation: ohms, time constant (s), its voltage now */
+    double leak;                /* A drained inside the cell all the time (a damaged cell self-discharging) */
     int present;
 } sim_cell_t;
 
@@ -40,6 +41,8 @@ typedef struct {
     double max_rail_driven;     /* the highest rail while a port is driven (P5.2 on and a PWM above 0) */
     int booted;
     int reboot_isp;
+    uint8_t usb_cmd[24];        /* a command from a host on USB, delivered once when usb_pending is set */
+    int usb_pending;
 } sim_t;
 
 extern sim_t S;

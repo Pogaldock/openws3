@@ -8,7 +8,7 @@
 
 static uint16_t XD raw[NADC], filt[NADC];       /* raw: counts as converted; filt: the filtered counts (adc.h) */
 static uint16_t XD gain;                        /* cal_vcc_gain: 4096 * BG_NOM / bandgap (no initialiser: README build rule 1) */
-static uint16_t XD bg8;                         /* the bandgap count x 8, smoothed (1/8 per reading): the gain does not jitter */
+static uint16_t XD bg8;                         /* the bandgap count x 8 (cal_vcc_gain's unit), from the latest reading */
 
 static uint8_t  XD slow_div;
 
@@ -27,8 +27,7 @@ static void conv(uint8_t ch, uint8_t sh)
     for (k = 0; k < (uint8_t)(1u << sh); k++) s += hal_adc(ch);
     raw[ch] = s >> sh;
     if (ch == ADC_BANDGAP && raw[ch]) {
-        if (!bg8) bg8 = raw[ch] << 3;                         /* first reading: start there */
-        else bg8 = bg8 - (bg8 >> 3) + raw[ch];
+        bg8 = raw[ch] << 3;                                   /* no smoothing: a lagging gain lets the rail regulator chase a VCC step */
         gain = cal_vcc_gain(bg8);
     }
     filt[ch] = (filt[ch] + adc_now(ch) + 1) >> 1;
@@ -36,12 +35,13 @@ static void conv(uint8_t ch, uint8_t sh)
 
 void adc_scan_slow_now(void)
 {
-    conv(ADC_VIN, 2); conv(ADC_BANDGAP, 2); conv(ADC_IIN, 2);
+    conv(ADC_VIN, 2); conv(ADC_IIN, 2);
 }
 
 void adc_scan(void)
 {
     uint8_t k;
+    conv(ADC_BANDGAP, 1);                            /* every pass and first: the VCC correction of the readings below follows VCC at once */
     for (k = 0; k < NPORTS; k++) { conv(port_v_ch(k), 1); conv(port_i_ch(k), 1); }
     conv(ADC_RAIL, 1);
     if (++slow_div >= SLOW_EVERY) { slow_div = 0; adc_scan_slow_now(); }

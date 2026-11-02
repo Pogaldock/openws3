@@ -222,7 +222,15 @@ static uint8_t st_full(void)
         return PS_FULL;
     }
     if (++W.t_full >= T_FULL_OUT) {
-        return W.v < IN->tgt ? to_probe() : to_bleed();
+        if (W.v < IN->tgt) {
+            /* a top-up of the same cell: the time already spent charging it stays, so a cell that keeps sagging (a damaged one
+               leaking inside) reaches the limit across its top-ups.  Only removing it or stopping the run starts the count again */
+            uint16_t s = W.t_chg_s;
+            uint8_t st = to_probe();
+            W.t_chg_s = s;
+            return st;
+        }
+        return to_bleed();
     }
     return PS_FULL;
 }

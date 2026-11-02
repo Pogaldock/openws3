@@ -76,7 +76,7 @@ static void plant_tick(void)
         }
         if (S.sw[p]) a -= term_v(p) / R_BLEED;
         S.amps[p] += (a - S.amps[p]) * 0.5;                 /* ~1 ms lag */
-        c->q += S.amps[p] * DT;
+        c->q += (S.amps[p] - c->leak) * DT;
         c->vp += (S.amps[p] * c->r2 - c->vp) * DT / c->tau;
         if (S.amps[p] > 0) total += S.amps[p];
         if (sim_cell_v(p) > S.max_cell_v[p]) S.max_cell_v[p] = sim_cell_v(p);
@@ -175,4 +175,4 @@ uint8_t usb_tx[USB_REPORT], usb_tx2[USB_REPORT];
 void usb_init(void) {}
 void usb_isr(void) {}
 uint8_t usb_configured(void) { return 0; }
-uint8_t usb_cmd_get(uint8_t *cmd) { (void)cmd; return 0; }
+uint8_t usb_cmd_get(uint8_t *cmd) { int i; if (!S.usb_pending) return 0; for (i = 0; i < USB_CMD; i++) cmd[i] = S.usb_cmd[i]; S.usb_pending = 0; return 1; }
