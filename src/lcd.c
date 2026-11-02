@@ -192,12 +192,13 @@ void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint1
     uint8_t col[5], c, r, i, j, k, rows = FONT_H_PX * sy, cols = FONT_W * sx;
     uint8_t fh = fg >> 8, fl = fg & 0xFF, bh = bg >> 8, bl = bg & 0xFF;
     uint8_t poke = th_get() == TH_ROT && sx > 1 && sy > 1, rr;
+    const __code uint8_t *font = th_get() == TH_ROT ? font_rot : font5x7;
 
     for (; *s; s++, x += cols) {
         c = (uint8_t)*s;
         if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
         if (c < FONT_FIRST || c > FONT_LAST) c = ' ';
-        for (i = 0; i < 5; i++) col[i] = font5x7[(uint8_t)(c - FONT_FIRST) * 5 + i];
+        for (i = 0; i < 5; i++) col[i] = font[(uint8_t)(c - FONT_FIRST) * 5 + i];
         window(x, y, cols, rows);
         for (r = 0; r < rows; r++) {
             k = r / sy; rr = r - k * sy;
@@ -230,5 +231,19 @@ void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const CODE uint8_t *
         for (i = 0; i < w; i++) {
             if (bits[i >> 3] & (0x80 >> (i & 7))) { tx(fh); tx(fl); } else { tx(bh); tx(bl); }
         }
+    CS = 1;
+}
+
+void lcd_noise_row(uint8_t y, uint16_t seed, const CODE uint8_t *bits, uint8_t bx, uint8_t bw, uint8_t keep, uint16_t fg)
+{
+    uint8_t i;
+    uint16_t s = seed ? seed : 1, c;
+    window(0, y, LCD_PX_W, 1);
+    for (i = 0; i < LCD_PX_W; i++) {
+        s = LCD_LFSR(s);
+        c = LCD_STATIC(s);
+        if (bits && i >= bx && (uint8_t)(i - bx) < bw && LCD_SURFACE(bits, (uint8_t)(i - bx), s, keep)) c = fg;
+        tx(c >> 8); tx(c & 0xFF);
+    }
     CS = 1;
 }

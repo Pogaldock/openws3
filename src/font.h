@@ -7,8 +7,8 @@
 #define FONT_W     6
 #define FONT_H_PX  8
 #ifdef __SDCC
-extern const __code uint8_t font5x7[];
+extern const __code uint8_t font5x7[], font_rot[];      /* font_rot: the ROT theme (tools/font_rot.txt) */
 #else
-extern const uint8_t font5x7[];
+extern const uint8_t font5x7[], font_rot[];
 #endif
 #endif

@@ -37,7 +37,7 @@ void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint1
         for (r = 0; r < FONT_H_PX * sy; r++)
             for (i = 0; i < FONT_W * sx; i++) {
                 uint8_t col = i / sx, k = r / sy;
-                int on = col < 5 && k < 7 && ((font5x7[(c - FONT_FIRST) * 5 + col] >> k) & 1);
+                int on = col < 5 && k < 7 && (((th_get() == TH_ROT ? font_rot : font5x7)[(c - FONT_FIRST) * 5 + col] >> k) & 1);
                 if (on && th_get() == TH_ROT && sx > 1 && sy > 1 && !LCD_POKE(r % sy, i % sx)) on = 0;
                 if (x + i < LCD_PX_W && y + r < LCD_PX_H) fb[y + r][x + i] = on ? fg : bg;
             }
@@ -58,6 +58,18 @@ void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const uint8_t *bits,
     for (j = 0; j < h; j++)
         for (i = 0; i < w; i++)
             if (x + i < LCD_PX_W && y + j < LCD_PX_H) fb[y + j][x + i] = (bits[j * stride + i / 8] & (0x80 >> (i % 8))) ? fg : bg;
+}
+
+void lcd_noise_row(uint8_t y, uint16_t seed, const uint8_t *bits, uint8_t bx, uint8_t bw, uint8_t keep, uint16_t fg)
+{
+    unsigned i;
+    uint16_t s = seed ? seed : 1, c;
+    for (i = 0; i < LCD_PX_W; i++) {
+        s = LCD_LFSR(s);
+        c = LCD_STATIC(s);
+        if (bits && i >= bx && i - bx < bw && LCD_SURFACE(bits, i - bx, s, keep)) c = fg;
+        if (y < LCD_PX_H) fb[y][i] = c;
+    }
 }
 
 static const char *outdir;
@@ -222,8 +234,20 @@ static void rot_screens(void)
                 if (k == 14) { a.state[5] = PS_FULL; a.v[5] = a.v[3]; a.i[5] = 0; }      /* port 6 finishes: static burst */
                 if (k == 30) { a.state[1] = PS_FAULT; }                                  /* port 2 faults: blood cell, blinking skull */
                 a.blink = (k / 3) & 1;
-                for (i = 0; i < 64; i++) ui_main_step(&a);
+                for (i = 0; i < 64; i++) {
+                    if (i == 40 && (k % 3) == 0) { a.v[0] += 10; a.v[4 + (k & 1)] += 0; a.v[5] += k < 14 ? 10 : 0; }   /* rising cells pulse */
+                    ui_main_step(&a);
+                }
                 snprintf(nm, sizeof nm, "anim_main_%02u", k); save(nm);
+            }
+            a = idle_state();                              /* nothing plugged in: the screensaver after about 3 minutes */
+            for (k = 0; k < NPORTS; k++) { a.v[k] = 0; a.state[k] = PS_IDLE; }
+            draw_main(&a);
+            for (k = 0; k < 40000u; k++) ui_main_step(&a);
+            for (k = 0; k < 64; k++) {
+                unsigned i;
+                for (i = 0; i < 64; i++) ui_main_step(&a);
+                snprintf(nm, sizeof nm, "anim_saver_%02u", k); save(nm);
             }
         }
     }

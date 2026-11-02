@@ -25,7 +25,15 @@ static uint8_t XD next_el;
 static uint16_t XD anim;
 static uint8_t XD last_st[NPORTS];               /* ROT: each port's state at its last visit, 0xFF = not known yet */
 static uint8_t XD burst[NPORTS];                 /* ROT: visits of static left on a cell that just went full */
-#define BURST_VISITS 8                           /* one visit per port per 21 control passes: about 0.75 s */                        /* counts main-screen steps (one per control pass): the ROT eye animation clock */
+#define BURST_VISITS 8                           /* one visit per port per 21 control passes: about 0.75 s */
+static uint16_t XD last_cv[NPORTS];              /* ROT: the voltage last shown on a charging port, centivolts */
+static uint8_t XD pulse[NPORTS];                 /* ROT: visits left with that voltage in green, after it rose */
+
+/* ROT screensaver: no battery anywhere, nothing running, no key changing anything for SAVER_AFTER control passes (about 3 min) */
+#define SAVER_AFTER  40000u
+#define SAVER_EMPTY  910                         /* below 1.0 V (vu) a port counts as empty */
+static uint16_t XD quiet_n;
+static uint8_t XD saver, saver_row, saver_iset, saver_volt;                        /* counts main-screen steps (one per control pass): the ROT eye animation clock */
 
 static uint8_t box_x(uint8_t i)  { return UI_BOX_X0 + i * UI_BOX_PITCH; }
 static uint8_t cell_y(uint8_t p) { return UI_CELL_Y0 + (p / 3) * UI_CELL_PITCH_Y; }
@@ -233,7 +241,8 @@ void ui_main_init(void)
     uint8_t b;
     lcd_fill(0, 0, LCD_PX_W, LCD_PX_H, th(R_BG));
     for (b = 0; b < NBOX; b++) box_draw(b, th(R_BOX));
-    for (b = 0; b < NPORTS; b++) { last_st[b] = 0xFF; burst[b] = 0; }
+    for (b = 0; b < NPORTS; b++) { last_st[b] = 0xFF; burst[b] = 0; last_cv[b] = 0; pulse[b] = 0; }
+    quiet_n = 0; saver = 0;
     next_el = 0;
 }
 
@@ -336,6 +345,12 @@ static void element(const ui_state_t *s, uint8_t e) REENT
     } else if (part == 0) {
         fmt_v2(t, cal_port_mv(s->v[p]));
         fg = off ? th(R_DIM) : full ? th(R_FULLTX) : th(R_VOLT);
+        if (ROT && !off && st == PS_CHARGE) {         /* a charging voltage that rises flashes green for a moment */
+            uint16_t cv = cal_port_mv(s->v[p]) / 10;
+            if (last_cv[p] && cv > last_cv[p]) pulse[p] = 2;
+            last_cv[p] = cv;
+            if (pulse[p]) { pulse[p]--; fg = UI_C_NEON; }
+        } else last_cv[p] = 0;
     } else if (part == 1) {
         /* charging: the measured current, 1 s in 4 the target; idle: the target; an OFF port says so; else the state */
         static const CODE char *const NAME[] = { "", "TEST", "", "REST", "FULL", "BLEED", "ERR" };   /* by PS_* */
@@ -385,10 +400,45 @@ void ui_text_row(uint8_t row, const char *text, uint16_t color)
 #define REFRESH_EVERY 64         /* must not share a factor with NELEM (21 = 3 x 7), or only some elements would ever be refreshed */
 static uint8_t XD refresh_div;
 
+static uint8_t quiet(const ui_state_t *s)
+{
+    uint8_t p;
+    if (s->run || s->ps || s->alarm || s->iset != saver_iset || s->volt != saver_volt) return 0;
+    for (p = 0; p < NPORTS; p++) if (s->v[p] >= SAVER_EMPTY) return 0;
+    return 1;
+}
+
+/* Four rows of the screensaver: static crawling down the screen, the green wordmark surfacing through it and sinking back
+ * (a triangle wave of about 18 s).  Drawn one control pass in eight, about 7 ms each. */
+static void saver_strip(void)
+{
+    uint8_t r, y, lx = (uint8_t)((LCD_PX_W - LOGO_W) / 2), ly = (uint8_t)((LCD_PX_H - LOGO_H) / 2), ph = (uint8_t)(anim >> 4);
+    uint16_t tri = ph < 128 ? ph * 2u : (255u - ph) * 2u, keep = tri * 3u / 2u;
+    if (keep > 255) keep = 255;
+    for (r = 0; r < 4; r++) {
+        y = (uint8_t)(saver_row * 4 + r);
+        lcd_noise_row(y, (uint16_t)(anim * 13u + y * 101u),
+                      y >= ly && y < ly + LOGO_H ? logo_bits + (y - ly) * LOGO_STRIDE : 0, lx, LOGO_W, (uint8_t)keep, UI_C_NEON);
+    }
+    if (++saver_row == LCD_PX_H / 4) saver_row = 0;
+}
+
 void ui_main_step(const ui_state_t *s)
 {
     uint8_t e = next_el;
     anim++;
+    if (ROT) {
+        if (quiet(s)) { if (quiet_n < SAVER_AFTER) quiet_n++; }
+        else {
+            quiet_n = 0; saver_iset = s->iset; saver_volt = s->volt;
+            if (saver) ui_main_init();                /* back to the charger screen, all of it repainted */
+        }
+        if (quiet_n >= SAVER_AFTER) {
+            saver = 1;
+            if ((anim & 7) == 0) saver_strip();
+            return;
+        }
+    }
     if (++next_el == NELEM) next_el = 0;
     if (++refresh_div >= REFRESH_EVERY) {
         refresh_div = 0;
