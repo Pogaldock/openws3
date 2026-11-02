@@ -8,11 +8,10 @@
  *               vu  4.5 V / 4096 = 1.0986 mV   port voltage and rail channels
  *               iu  1/68.25 A    = 14.65 mA    port current channels
  *             and cal.h for VIN.  The control works on these.
- * The input voltage is corrected for VCC: VCC follows the input down on a weak supply, and a count is relative to it, so a lower VCC would
- * read the input high and the minimum-input limit would not trip.  It is scaled by BG_NOM / bandgap, the bandgap count the scale was made
- * at: a fixed reference, so it holds from the first reading.  The reference differs from chip to chip by a percent or so, so the other
- * channels are plain counts; a VCC below the supply floor is an undervoltage (sup.h) and stops the run.  The thermistor (ADC0) divider
- * sits on VCC.
+ * Every channel except the bandgap and ADC0 is corrected for VCC (cal.h, cal_vcc_gain): a count is relative to VCC, which follows the
+ * supply, and an uncorrected port reading would make the charge voltage follow it too (up to 10 % high below the 5.0 V VCC limit).
+ * The correction leaves the bandgap's chip-to-chip spread, about 1 %.  The thermistor (ADC0) divider sits on VCC, so it stays a plain
+ * count.  adc_raw() and adc_saturated() are always the plain counts.
  *   adc_now() is the latest value, adc_get() a light filter on it: (old + new) / 2 per scan of that channel.
  */
 #ifndef ADC_H

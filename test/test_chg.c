@@ -446,8 +446,52 @@ static void t_bleed_series(void)
     }
 }
 
+/* a cell resting below 2.50 V is refused: fault, output off, cleared only by removing it */
+static void t_refuse(void)
+{
+    bench_t b;
+    bench_init(&b, 0, 21); b.ovr_v[0] = (int)(2.30 / VPC); run(&b, 20);
+    CHECK(b.out.state[0] == PS_FAULT && b.out.duty[0] == 0 && b.out.sw[0] == 0);
+    run(&b, 2000);
+    CHECK(b.out.state[0] == PS_FAULT && b.out.duty[0] == 0);                /* stays off */
+    b.ovr_v[0] = 0; run(&b, 20);
+    CHECK(b.out.state[0] == PS_IDLE);                                       /* removed: cleared */
+    bench_init(&b, 0, 21); b.ovr_v[0] = (int)(2.60 / VPC); run(&b, 20);
+    CHECK(b.out.state[0] == PS_CHARGE);                                     /* 2.60 V: charged (gently, below) */
+}
+
+/* below 3.00 V a cell charges at 0.1 A however high the setting; above it, the setting, reached through the soft ramp */
+static void t_precharge(void)
+{
+    bench_t b;
+    int n, max_low = 0, rose = 0;
+    bench_init(&b, 0, 91); attach(&b, 0, 2.70, 400, 0.1);                  /* setting 1.3 A, cell at 2.70 V */
+    for (n = 0; n < 200000 && !rose; n++) {
+        step(&b);
+        if (b.out.v[0] < V_PRE - 15 && b.out.state[0] == PS_CHARGE) { int i = b.out.i[0]; if (i > max_low) max_low = i; }
+        if (b.out.v[0] > V_PRE + 50 && b.amps[0] > 1.0) rose = 1;
+    }
+    CHECK(max_low > 0 && max_low <= I_PRE + 2);                             /* gentle below 3.0 V (0.1 A + a reading's noise) */
+    CHECK(rose);                                                            /* full current once above it */
+    CHECK(b.out.state[0] == PS_CHARGE);
+}
+
+/* a cell that never tapers (it keeps drawing more than the tail current) faults after 3 h of charging, not before */
+static void t_time_limit(void)
+{
+    bench_t b;
+    long n, limit = (long)T_CHG_MAX_S * PASSES_PER_S;
+    bench_init(&b, 0, 21); attach(&b, 0, 4.15, 100000, 0.1);               /* a huge cell: it never fills */
+    b.ovr_i[0] = 18;                                                        /* and always draws ~0.26 A: no tail */
+    for (n = 0; n < limit - 5 * PASSES_PER_S; n++) step(&b);
+    CHECK(b.out.state[0] == PS_CHARGE);                                     /* 5 s before the limit: still charging */
+    for (n = 0; n < 30 * PASSES_PER_S; n++) step(&b);
+    CHECK(b.out.state[0] == PS_FAULT && b.out.duty[0] == 0);                /* past it: fault, output off */
+}
+
 int main(void)
 {
+    t_refuse(); t_precharge(); t_time_limit();
     t_sup(); t_idle_and_probe(); t_cc(); t_classify(); t_full_charge(); t_faults(); t_cut(); t_independent(); t_gate(); t_pulled(); t_per_port(); t_storage(); t_full_hold(); t_bleed(); t_bleed_series();
     return check_report("chg");
 }

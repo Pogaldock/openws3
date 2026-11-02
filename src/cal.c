@@ -37,3 +37,15 @@ uint8_t cal_ma_step_up(uint8_t units)
     if (units < CUR_MIN || n > CUR_MAX) return CUR_MIN;   /* wraps; also repairs an erased/garbage setting */
     return (uint8_t)n;
 }
+
+uint16_t cal_vcc_gain(uint16_t bg8)
+{
+    if (bg8 < BG8_MIN) bg8 = BG8_MIN;
+    if (bg8 > BG8_MAX) bg8 = BG8_MAX;
+    return (uint16_t)((((uint32_t)BG_NOM << 15) + bg8 / 2) / bg8);
+}
+
+uint16_t cal_vcc_fix(uint16_t raw, uint16_t gain)
+{
+    return (uint16_t)(((uint32_t)raw * gain + 2048) >> 12);
+}

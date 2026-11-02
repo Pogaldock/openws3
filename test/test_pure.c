@@ -335,8 +335,29 @@ static void t_theme(void)
     CHECK(cfg_valid_theme(TH_COUNT - 1) == TH_COUNT - 1 && cfg_valid_theme(TH_COUNT) == TH_ROT && cfg_valid_theme(0xFF) == TH_ROT);
 }
 
+/* VCC correction: a 4.20 V cell must read 4.20 V whatever VCC is, within the counts' rounding */
+static void t_vcc(void)
+{
+    static const double ratio[] = { 4.40 / 4.55, 1.0, 4.65 / 4.55, 4.80 / 4.55, 4.99 / 4.55 };   /* VCC over the VCC of the scales */
+    unsigned k;
+    CHECK(cal_vcc_gain(BG_NOM * 8) == 4096);                          /* at the calibration point nothing changes */
+    CHECK(cal_vcc_fix(3822, 4096) == 3822);
+    for (k = 0; k < sizeof ratio / sizeof ratio[0]; k++) {
+        uint16_t bg8 = (uint16_t)(BG_NOM * 8 / ratio[k] + 0.5);     /* a higher VCC reads the fixed reference lower */
+        uint16_t raw = (uint16_t)(3822 / ratio[k] + 0.5);           /* ... and the cell lower */
+        int fixed = cal_vcc_fix(raw, cal_vcc_gain(bg8));
+        CHECK(fixed >= 3822 - 3 && fixed <= 3822 + 3);                /* 3 vu = 3.3 mV */
+    }
+    /* the uncorrected reading at VCC 4.99 V would be 9 % low: the charger would push the cell to about 4.6 V */
+    CHECK((uint16_t)(3822 / (4.99 / 4.55) + 0.5) < 3822 - 300);
+    /* absurd bandgap readings are clamped, and nothing overflows */
+    CHECK(cal_vcc_gain(0) == cal_vcc_gain(BG8_MIN) && cal_vcc_gain(0xFFFF) == cal_vcc_gain(BG8_MAX));
+    CHECK(cal_vcc_fix(4095, cal_vcc_gain(0)) > 4095 && cal_vcc_fix(4095, cal_vcc_gain(0)) < 6000);
+}
+
 int main(void)
 {
+    t_vcc();
     t_cal(); t_clamp(); t_port(); t_rail(); t_fmt(); t_input(); t_cfg(); t_buzz(); t_dbg(); t_theme();
     return check_report("pure");
 }
