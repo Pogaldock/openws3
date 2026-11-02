@@ -53,6 +53,17 @@ The Advanced view adds the raw inputs, the limiter, setpoints, an event log and 
 - **Gentle start:** below 3.00 V a cell charges at 0.1 A whatever the setting, then goes up to its setting through the soft ramp.
 - **Charge time limit:** a port that has charged for 3 hours in one fill (time held by the input limits does not count) faults.
 
+## Whole-firmware simulation
+
+`make sim` builds the real firmware (`app.c` and every module it calls) for the PC against a simulated board (`test/sim`): supply,
+an inverted rail with sag, six ports, cells with a polarisation model, an ADC referenced to VCC with optional noise, gain errors and
+bandgap spread, and the display's bus time.  It drives the buttons like a person and checks what the board does in 18 scenarios:
+full charges at VCC 4.45 to 4.95 V, bandgap +-1 %, ADC noise, user stop, input loss, cell removal, a 2.3 V cell, a 2.7 V cell, a
+stuck rail, a short, storage, a power cycle mid-charge and a cell that never fills.  The original firmware fails five of them (cells
+to 4.57 V at VCC 4.95 V, a 2.3 V cell charged, no gentle start, no time limit); breaking the stop paths in `app.c` on purpose fails
+the matching scenarios.  What it cannot check: the board's real voltage scale, the bandgap of your chip, heat, and anything about the
+hardware the model leaves out.
+
 ## Menu
 
 Press **B1 and B2 together** (within about 0.2 s of each other) and release. Holding both for 0.8 s (a beep) closes the menu and saves it.

@@ -55,6 +55,15 @@ TESTS   = $(patsubst test/%.c,$(BUILD)/%,$(wildcard test/test_*.c))
 test: $(TESTS)
 	@for t in $(TESTS); do ./$$t || exit 1; done
 
+# the whole firmware (app.c and everything it calls) against a simulated board: test/sim
+APP_SRC = src/app.c src/adc.c src/cfg.c src/ui.c src/font.c src/font_rot.c src/sprites.c src/logo.c src/dev.c src/tele.c $(PURE)
+$(BUILD)/sim_app: test/sim/sim_app.c test/sim/sim_hal.c test/sim/sim.h $(APP_SRC) $(wildcard src/*.h) $(BUILD)/version_build.h
+	@mkdir -p $(BUILD)
+	$(HOSTCC) -std=gnu99 -O2 -Wall -Wextra -Isrc -I$(BUILD) -Itest/sim -D__code= -o $@ test/sim/sim_app.c test/sim/sim_hal.c $(APP_SRC) -lm
+
+sim: $(BUILD)/sim_app
+	./$(BUILD)/sim_app
+
 $(BUILD)/render_screens: tools/render_screens.c src/ui.c src/font.c src/font_rot.c src/sprites.c src/logo.c $(PURE) $(wildcard src/*.h) $(BUILD)/version_build.h
 	@mkdir -p $(BUILD)
 	$(HOSTCC) -std=c99 -Wall -Wextra -Werror -Isrc -I$(BUILD) -D__code= -o $@ tools/render_screens.c src/ui.c src/font.c src/font_rot.c src/sprites.c src/logo.c $(PURE) -lm
@@ -64,5 +73,5 @@ screens: $(BUILD)/render_screens
 
 clean:
 	rm -rf build
-.PHONY: all test screens clean FORCE
+.PHONY: all test screens clean sim FORCE
 FORCE:

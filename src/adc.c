@@ -9,7 +9,7 @@
 static uint16_t XD raw[NADC], filt[NADC];       /* raw: counts as converted; filt: the filtered counts (adc.h) */
 static uint16_t XD gain;                        /* cal_vcc_gain: 4096 * BG_NOM / bandgap (no initialiser: README build rule 1) */
 static uint16_t XD bg8;                         /* the bandgap count x 8, smoothed (1/8 per reading): the gain does not jitter */
-static uint32_t XD tmp;                         /* the 32-bit products of adc_now and conv: external RAM, not direct */
+
 static uint8_t  XD slow_div;
 
 uint16_t adc_now(uint8_t ch)

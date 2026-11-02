@@ -1,0 +1,52 @@
+/* A simulated WhoopStor V3 board for running the real firmware (app.c and everything it calls) on a PC.
+ * Only the hardware layer is replaced: hal.h, lcd.h and usb.h are implemented here against a model of the board.  Time is virtual,
+ * in 0.5 ms ticks; it advances when the firmware waits (hal_ticks, hal_delay_ms) and while it draws (the panel's bus rate). */
+#ifndef SIM_H
+#define SIM_H
+#include <stdint.h>
+#include "board.h"
+
+typedef struct {
+    double q, cap_c;            /* charge (coulombs) and capacity */
+    double r, r2, tau, vp;      /* series ohms; polarisation: ohms, time constant (s), its voltage now */
+    int present;
+} sim_cell_t;
+
+typedef struct {
+    /* ---- the world, set by a scenario ---- */
+    double vin;                 /* input voltage at the connector */
+    double vcc;                 /* the chip's VCC (the ADC reference) */
+    double bg_err;              /* bandgap off its nominal, as a fraction (chip to chip spread) */
+    double adc_scale[16];       /* per-channel gain error (1.0 = exact) */
+    double adc_noise;           /* counts, uniform +- */
+    double rail_stuck;          /* > 0: the rail ignores its PWM and sits at this voltage (a broken buck) */
+    double short_amps[NPORTS];  /* > 0: the port draws this much whatever the duty (a shorted cell or output) */
+    int btn1, btn2;             /* buttons held */
+    sim_cell_t cell[NPORTS];
+
+    /* ---- the board's outputs, as the firmware set them ---- */
+    uint16_t pwm[NPORTS], rail_duty;
+    uint8_t sw[NPORTS], global, power, profile, fan;
+
+    /* ---- the plant's state ---- */
+    double rail;                /* true rail voltage */
+    double amps[NPORTS];        /* true current into each cell (charge positive, bleed negative) */
+    uint64_t ticks;             /* 0.5 ms */
+    double lcd_us;              /* display time not yet turned into ticks */
+
+    /* ---- what the scenario checks ---- */
+    double max_cell_v[NPORTS];  /* the highest cell voltage (open circuit + polarisation, what a meter reads after a short rest) */
+    double max_rail_after_boot;
+    double max_rail_driven;     /* the highest rail while a port is driven (P5.2 on and a PWM above 0) */
+    int booted;
+    int reboot_isp;
+} sim_t;
+
+extern sim_t S;
+
+void   sim_reset(void);
+void   sim_advance(uint32_t ticks);
+double sim_cell_v(int p);                     /* the cell's own voltage (open circuit + polarisation) */
+void   sim_attach(int p, double v0, double cap_mah);
+double sim_ocv_of(double frac);
+#endif

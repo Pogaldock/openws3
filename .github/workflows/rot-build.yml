@@ -21,6 +21,8 @@ jobs:
           echo "$RUNNER_TEMP/sdcc-4.6.0/bin" >> "$GITHUB_PATH"
       - name: Unit tests (charge logic, limits, menu, themes)
         run: make test
+      - name: Whole-firmware safety scenarios on a simulated board (no installer is published if one fails)
+        run: make sim
       - name: Firmware and installer
         run: make
       - name: Flash use
