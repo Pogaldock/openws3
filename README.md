@@ -46,6 +46,13 @@ The Advanced view adds the raw inputs, the limiter, setpoints, an event log and 
 `make` also writes `build/openws3.html`, the same page with `build/fw.bin` inside: that is the one to hand out.
 
 
+## Safety additions in this fork
+
+- **VCC correction:** every ADC count is relative to VCC, which follows the supply. Port voltages, currents and the rail are now corrected with the internal bandgap (before, only the input voltage was), so the charge voltage no longer rises with VCC (up to about 4.6 V at the 5.0 V VCC limit). What is left is the bandgap's chip-to-chip spread, about 1 %: check a finished cell with a multimeter (4.17 to 4.22 V for a 4.20 V target).
+- **Over-discharged cells:** a cell resting below 2.50 V is not charged: the port faults until the cell is removed.
+- **Gentle start:** below 3.00 V a cell charges at 0.1 A whatever the setting, then goes up to its setting through the soft ramp.
+- **Charge time limit:** a port that has charged for 3 hours in one fill (time held by the input limits does not count) faults.
+
 ## Menu
 
 Press **B1 and B2 together** (within about 0.2 s of each other) and release. Holding both for 0.8 s (a beep) closes the menu and saves it.
