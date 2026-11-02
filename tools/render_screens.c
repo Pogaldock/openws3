@@ -219,6 +219,9 @@ static void rot_screens(void)
             draw_main(&a);
             for (k = 0; k < 48; k++) {                 /* 64 control passes (~0.3 s) per frame */
                 unsigned i;
+                if (k == 14) { a.state[5] = PS_FULL; a.v[5] = a.v[3]; a.i[5] = 0; }      /* port 6 finishes: static burst */
+                if (k == 30) { a.state[1] = PS_FAULT; }                                  /* port 2 faults: blood cell, blinking skull */
+                a.blink = (k / 3) & 1;
                 for (i = 0; i < 64; i++) ui_main_step(&a);
                 snprintf(nm, sizeof nm, "anim_main_%02u", k); save(nm);
             }

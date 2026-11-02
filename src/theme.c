@@ -20,12 +20,12 @@ static const CODE palette_t PAL[TH_COUNT] = {
     { { 0x0000, 0x3186, 0xFFFF, 0xFFE0, 0xFFFF, 0xBDF7, 0xD800, 0xFE40, 0x07E0, 0xF800, 0x07FF, 0x07E0, 0x0000, 0xFFE0 },
       { 0xF800, 0x07E0, 0x033F, 0xFFE0, 0xF81F, 0x07FF },
       { 0x3186, 0xFFE0, 0xF800, 0xFE40, 0x0000, 0x033F, 0xF81F } },
-    /* ROT: ink on black, SYMBIOZE.  White does the talking, red only for trouble; running inverts the header, a full cell is
+    /* ROT: ink on black, SYMBIOZE.  White does the talking, neon green is alive (charging eyes), red only for trouble; running inverts the header, a full cell is
      * stamped white.  The UI also draws this theme differently: thorned borders, eye / skull icons for the port states, poked
      * (dotted) big text and a static splash (ui.c, lcd.c).  Every state icon has its own grey so a change of icon is a change of colour. */
     { { 0x0000, 0x10A2, 0xFFFF, 0xFFFF, 0xFFFF, 0x5AEB, 0xFFFF, 0xC618, 0xFFFF, 0xF800, 0xA514, 0xFFFF, 0x0000, 0xFFFF },
       { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF },
-      { 0x7BEF, 0x8410, 0xFFFF, 0xA534, 0x0000, 0x9CD3, 0xF800 } }
+      { 0x7BEF, 0x8410, 0x3FE2, 0xA534, 0x0000, 0x9CD3, 0xF800 } }
 };
 
 static const char *const NAME[TH_COUNT] = { "CLASSIC", "CALM", "AMBER", "HIGH CONTRAST", "ROT" };

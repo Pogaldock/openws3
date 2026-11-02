@@ -22,7 +22,10 @@ static char    XD shown[NELEM][8];
 static uint16_t XD shown_fg[NELEM];
 static uint16_t XD box_bg[NBOX];
 static uint8_t XD next_el;
-static uint16_t XD anim;                        /* counts main-screen steps (one per control pass): the ROT eye animation clock */
+static uint16_t XD anim;
+static uint8_t XD last_st[NPORTS];               /* ROT: each port's state at its last visit, 0xFF = not known yet */
+static uint8_t XD burst[NPORTS];                 /* ROT: visits of static left on a cell that just went full */
+#define BURST_VISITS 8                           /* one visit per port per 21 control passes: about 0.75 s */                        /* counts main-screen steps (one per control pass): the ROT eye animation clock */
 
 static uint8_t box_x(uint8_t i)  { return UI_BOX_X0 + i * UI_BOX_PITCH; }
 static uint8_t cell_y(uint8_t p) { return UI_CELL_Y0 + (p / 3) * UI_CELL_PITCH_Y; }
@@ -120,9 +123,16 @@ void ui_splash_frame(uint8_t n)
         if (n < 4 && (s & 0x300) == 0) continue;                       /* and some missing while the signal is weak */
         lcd_bitmap((uint8_t)(lx + off), (uint8_t)(12 + j), LOGO_W, 1, logo_bits + j * LOGO_STRIDE, UI_C_NEON, th(R_BG));
     }
-    if (n == 6) {
-        lcd_bitmap((uint8_t)((lx - sw) / 2), (uint8_t)(34 - sh / 2), sw, sh, SPR_BITS(SPR_SKULL), th(R_TEXT), th(R_BG));
-        lcd_bitmap((uint8_t)(lx + LOGO_W + (LCD_PX_W - lx - LOGO_W - sw) / 2), (uint8_t)(34 - sh / 2), sw, sh, SPR_BITS(SPR_SKULL), th(R_TEXT), th(R_BG));
+    if (n == 6 || n == 8) {
+        uint8_t k, sx[2], sy = (uint8_t)(34 - sh / 2);
+        sx[0] = (uint8_t)((lx - sw) / 2); sx[1] = (uint8_t)(lx + LOGO_W + (LCD_PX_W - lx - LOGO_W - sw) / 2);
+        for (k = 0; k < 2; k++) {
+            if (n == 6) lcd_bitmap(sx[k], sy, sw, sh, SPR_BITS(SPR_SKULL), th(R_TEXT), th(R_BG));
+            else {                                    /* the pupils (sprite row 8, columns 4 and 12) light up as green crosses */
+                lcd_fill((uint8_t)(sx[k] + 3), (uint8_t)(sy + 8), 3, 1, UI_C_NEON); lcd_fill((uint8_t)(sx[k] + 4), (uint8_t)(sy + 7), 1, 3, UI_C_NEON);
+                lcd_fill((uint8_t)(sx[k] + 11), (uint8_t)(sy + 8), 3, 1, UI_C_NEON); lcd_fill((uint8_t)(sx[k] + 12), (uint8_t)(sy + 7), 1, 3, UI_C_NEON);
+            }
+        }
     }
 }
 
@@ -212,7 +222,7 @@ static void box_draw(uint8_t b, uint16_t bg)
     lcd_fill(x + UI_BADGE_X, y + 2, UI_BADGE_W, UI_CELL_H - 4, th(R_BADGE0 + p));
     d[0] = (char)('1' + p); d[1] = 0;
     lcd_text(x + UI_BADGE_X + 2, y + 6, d, 1, 2, th(R_BG), th(R_BADGE0 + p));
-    if (ROT) border(x, y, UI_BOX_W, UI_CELL_H, th(R_DIM));
+    if (ROT) border(x, y, UI_BOX_W, UI_CELL_H, bg == UI_C_BLOOD ? th(R_BAD) : th(R_DIM));
     for (k = 0; k < 3; k++) shown[3 + p * 3 + k][0] = 0;
 }
 
@@ -223,6 +233,7 @@ void ui_main_init(void)
     uint8_t b;
     lcd_fill(0, 0, LCD_PX_W, LCD_PX_H, th(R_BG));
     for (b = 0; b < NBOX; b++) box_draw(b, th(R_BOX));
+    for (b = 0; b < NPORTS; b++) { last_st[b] = 0xFF; burst[b] = 0; }
     next_el = 0;
 }
 
@@ -291,7 +302,19 @@ static void element(const ui_state_t *s, uint8_t e) REENT
     x = box_x(p % 3); y = cell_y(p);
     st = s->state[p]; off = s->set[p] == PV_OFF;
     full = !s->ps && st == PS_FULL;                  /* a full port's cell is tinted, so it shows from across the room */
-    bg = full ? th(R_FULL) : th(R_BOX);
+    bg = full ? th(R_FULL) : (ROT && !s->ps && st == PS_FAULT) ? UI_C_BLOOD : th(R_BOX);
+    if (ROT && !s->ps) {
+        /* a port that has just gone full dissolves into static for a moment, then is stamped white (the box is repainted) */
+        if (part == 0) {
+            if (st == PS_FULL && last_st[p] != 0xFF && last_st[p] != PS_FULL) burst[p] = BURST_VISITS;
+            last_st[p] = st;
+            if (burst[p]) {
+                lcd_noise((uint8_t)(x + 1), (uint8_t)(y + 2), UI_BOX_W - 2, UI_CELL_H - 4, (uint16_t)(anim * 7u + p));
+                if (--burst[p] == 0) box_draw(3 + p, bg);
+                return;
+            }
+        } else if (burst[p]) return;
+    }
     box(3 + p, bg);
     if (s->ps) {                                     /* port settings: the value big, what kind of value small, a frame round the selection */
         uint8_t edit = s->ps == 2 && p == s->sel;
