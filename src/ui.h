@@ -23,6 +23,11 @@ typedef struct {
 } ui_state_t;
 
 void ui_splash(void);
+/* The splash animation (ROT theme only; other themes draw nothing): call ui_splash, then frames 0..UI_SPLASH_FRAMES-1, one every
+ * UI_SPLASH_MS.  Drawing a frame takes about 75 ms on the panel. */
+#define UI_SPLASH_FRAMES 10
+#define UI_SPLASH_MS     60
+void ui_splash_frame(uint8_t n);
 /* full-screen message: the title (1x2, in the colour of role), a line under it (1x1) and up to two more lines (big 2x2, small 1x1); 0 = none */
 void ui_message(uint8_t role, const char *title, const char *line2, const char *big, const char *small);
 void ui_message_big(const char *big);     /* only the big line of the message on the screen, again (a number that changes) */

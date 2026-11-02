@@ -22,6 +22,7 @@ static char    XD shown[NELEM][8];
 static uint16_t XD shown_fg[NELEM];
 static uint16_t XD box_bg[NBOX];
 static uint8_t XD next_el;
+static uint16_t XD anim;                        /* counts main-screen steps (one per control pass): the ROT eye animation clock */
 
 static uint8_t box_x(uint8_t i)  { return UI_BOX_X0 + i * UI_BOX_PITCH; }
 static uint8_t cell_y(uint8_t p) { return UI_CELL_Y0 + (p / 3) * UI_CELL_PITCH_Y; }
@@ -95,10 +96,34 @@ static void rot_splash(void)
     lcd_fill(0, 9, LCD_PX_W, 50, th(R_BG));
     thorns(0, 9, LCD_PX_W, -1, 2, 6, th(R_DIM));
     thorns(0, 58, LCD_PX_W, 1, 2, 6, th(R_DIM));
-    lcd_bitmap(lx, 12, LOGO_W, LOGO_H, logo_bits, th(R_TEXT), th(R_BG));
-    lcd_bitmap((uint8_t)((lx - sw) / 2), (uint8_t)(34 - sh / 2), sw, sh, SPR_BITS(SPR_SKULL), th(R_TEXT), th(R_BG));
-    lcd_bitmap((uint8_t)(lx + LOGO_W + (LCD_PX_W - lx - LOGO_W - sw) / 2), (uint8_t)(34 - sh / 2), sw, sh, SPR_BITS(SPR_SKULL), th(R_TEXT), th(R_BG));
+    (void)lx; (void)sw; (void)sh;
     lcd_fill(0, 68, LCD_PX_W, 10, th(R_BG));
+}
+
+/* One frame of the ROT boot: the static strips crawl; frames 0-1 the band is empty (no signal), 2-5 the wordmark comes in torn
+ * (rows shifted sideways, early rows dropping out), from 6 it is clean and the skulls are there. */
+void ui_splash_frame(uint8_t n)
+{
+    uint8_t j, lx = (uint8_t)((LCD_PX_W - LOGO_W) / 2), sw = spr_w[SPR_SKULL], sh = spr_h[SPR_SKULL];
+    int8_t off;
+    uint16_t s;
+    if (!ROT) return;
+    lcd_noise(0, 0, LCD_PX_W, 7, (uint16_t)(0x1234 + n * 977u));
+    lcd_noise(0, 61, LCD_PX_W, 7, (uint16_t)(0x4321 + n * 613u));
+    if (n < 2) return;
+    lcd_fill((uint8_t)(lx - 4), 12, LOGO_W + 8, LOGO_H, th(R_BG));
+    s = (uint16_t)(0xACE1 + n * 31u);
+    for (j = 0; j < LOGO_H; j++) {
+        s = LCD_LFSR(s);
+        off = 0;
+        if (n < 6 && (s & 3) == 0) off = (int8_t)((s >> 4) & 7) - 3;     /* a quarter of the rows torn by up to 3 pixels */
+        if (n < 4 && (s & 0x300) == 0) continue;                       /* and some missing while the signal is weak */
+        lcd_bitmap((uint8_t)(lx + off), (uint8_t)(12 + j), LOGO_W, 1, logo_bits + j * LOGO_STRIDE, UI_C_NEON, th(R_BG));
+    }
+    if (n == 6) {
+        lcd_bitmap((uint8_t)((lx - sw) / 2), (uint8_t)(34 - sh / 2), sw, sh, SPR_BITS(SPR_SKULL), th(R_TEXT), th(R_BG));
+        lcd_bitmap((uint8_t)(lx + LOGO_W + (LCD_PX_W - lx - LOGO_W - sw) / 2), (uint8_t)(34 - sh / 2), sw, sh, SPR_BITS(SPR_SKULL), th(R_TEXT), th(R_BG));
+    }
 }
 
 void ui_splash(void)
@@ -302,10 +327,15 @@ static void element(const ui_state_t *s, uint8_t e) REENT
         st &= 7;
         fg = th(R_DOT0 + st);
         if (st == PS_FAULT && !s->blink) fg = bg;              /* errors blink */
-        if (changed(e, fg)) {
-            if (ROT) lcd_bitmap(x + UI_DOT_X, y + UI_DOT_Y - 1, spr_w[st], spr_h[st], SPR_BITS(st), fg, bg);   /* sprites 0..6 = PS_* */
-            else lcd_fill(x + UI_DOT_X, y + UI_DOT_Y, UI_DOT_S, UI_DOT_S, fg);
-        }
+        if (ROT) {
+            /* sprites 0..6 are the PS_* icons; a charging eye looks around and blinks, each port out of step with the others */
+            static const CODE uint8_t GAZE[8] = { SPR_EYE_OPEN, SPR_EYE_OPEN, SPR_EYE_LEFT, SPR_EYE_OPEN, SPR_EYE_OPEN, SPR_EYE_RIGHT, SPR_EYE_OPEN, SPR_EYE_HALF };
+            uint8_t spr = st == PS_CHARGE ? GAZE[(uint8_t)((anim >> 8) + p * 3) & 7] : st;
+            if (changed(e, fg) | (shown[e][1] != (char)(spr + 1))) {
+                shown[e][1] = (char)(spr + 1);
+                lcd_bitmap(x + UI_DOT_X, y + UI_DOT_Y - 1, spr_w[spr], spr_h[spr], SPR_BITS(spr), fg, bg);
+            }
+        } else if (changed(e, fg)) lcd_fill(x + UI_DOT_X, y + UI_DOT_Y, UI_DOT_S, UI_DOT_S, fg);
         return;
     }
     put(e, x + FLD[part].dx, y + FLD[part].dy, FLD[part].sy, fg, bg, t);
@@ -335,6 +365,7 @@ static uint8_t XD refresh_div;
 void ui_main_step(const ui_state_t *s)
 {
     uint8_t e = next_el;
+    anim++;
     if (++next_el == NELEM) next_el = 0;
     if (++refresh_div >= REFRESH_EVERY) {
         refresh_div = 0;

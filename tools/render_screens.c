@@ -3,6 +3,7 @@
  *   build/render_screens OUTDIR */
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "ui.h"
 #include "lcd.h"
 #include "font.h"
@@ -202,7 +203,27 @@ static void rot_screens(void)
 {
     ui_state_t s;
     th_set(TH_ROT);
-    ui_splash(); save("rot_splash");
+    {
+        uint8_t n;
+        char nm[32];
+        int anim = getenv("ROT_ANIM") != 0;
+        ui_splash();
+        for (n = 0; n < UI_SPLASH_FRAMES; n++) {
+            ui_splash_frame(n);
+            if (anim) { snprintf(nm, sizeof nm, "anim_splash_%02u", n); save(nm); }
+        }
+        save("rot_splash");
+        if (anim) {
+            unsigned k;
+            ui_state_t a = charging_state();
+            draw_main(&a);
+            for (k = 0; k < 48; k++) {                 /* 64 control passes (~0.3 s) per frame */
+                unsigned i;
+                for (i = 0; i < 64; i++) ui_main_step(&a);
+                snprintf(nm, sizeof nm, "anim_main_%02u", k); save(nm);
+            }
+        }
+    }
     ui_message(R_WAIT, "INPUT LOW", "CHECK THE SUPPLY", "4.52V", 0); save("rot_input_low");
     s = idle_state(); draw_main(&s); save("rot_idle");
     s = charging_state(); draw_main(&s); save("rot_charging");

@@ -183,7 +183,8 @@ void app_boot(void)
     lcd_init();
     ui_splash();
     buzz_play(PAT_BOOT);
-    hal_delay_ms(1000);
+    if (th_get() == TH_ROT) { for (n = 0; n < UI_SPLASH_FRAMES; n++) { ui_splash_frame(n); hal_delay_ms(UI_SPLASH_MS); } }
+    else hal_delay_ms(1000);
 
     sup_reset();
 
