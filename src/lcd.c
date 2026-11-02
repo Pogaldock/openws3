@@ -187,26 +187,48 @@ void lcd_fill(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t color)
     CS = 1;
 }
 
-void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint16_t fg, uint16_t bg)
+/* lcd_text for the ROT theme: its font, and 2x2 text inked as a checkerboard (LCD_POKE).  Kept apart from lcd_text so the stock path
+ * is unchanged; reentrant so its temporaries go on the stack, not in the full direct RAM. */
+static void lcd_text_rot(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint16_t fg, uint16_t bg) REENT
 {
-    uint8_t col[5], c, r, i, j, k, rows = FONT_H_PX * sy, cols = FONT_W * sx;
-    uint8_t fh = fg >> 8, fl = fg & 0xFF, bh = bg >> 8, bl = bg & 0xFF;
-    uint8_t poke = th_get() == TH_ROT && sx > 1 && sy > 1, rr;
-    const __code uint8_t *font = th_get() == TH_ROT ? font_rot : font5x7;
-
+    uint8_t col[5], c, r, i, j, k, rr, rows = FONT_H_PX * sy, cols = FONT_W * sx, poke = sx > 1 && sy > 1;
     for (; *s; s++, x += cols) {
         c = (uint8_t)*s;
         if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
         if (c < FONT_FIRST || c > FONT_LAST) c = ' ';
-        for (i = 0; i < 5; i++) col[i] = font[(uint8_t)(c - FONT_FIRST) * 5 + i];
+        for (i = 0; i < 5; i++) col[i] = font_rot[(uint8_t)(c - FONT_FIRST) * 5 + i];
         window(x, y, cols, rows);
         for (r = 0; r < rows; r++) {
             k = r / sy; rr = r - k * sy;
             for (i = 0; i < 5; i++) {
                 uint8_t on = k < 7 && ((col[i] >> k) & 1);
                 for (j = 0; j < sx; j++) {
-                    if (on && (!poke || LCD_POKE(rr, j))) { tx(fh); tx(fl); } else { tx(bh); tx(bl); }
+                    if (on && (!poke || LCD_POKE(rr, j))) { tx(fg >> 8); tx(fg & 0xFF); } else { tx(bg >> 8); tx(bg & 0xFF); }
                 }
+            }
+            for (j = 0; j < sx; j++) { tx(bg >> 8); tx(bg & 0xFF); }
+        }
+        CS = 1;
+    }
+}
+
+void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint16_t fg, uint16_t bg)
+{
+    if (th_get() == TH_ROT) { lcd_text_rot(x, y, s, sx, sy, fg, bg); return; }
+    uint8_t col[5], c, r, i, j, k, rows = FONT_H_PX * sy, cols = FONT_W * sx;
+    uint8_t fh = fg >> 8, fl = fg & 0xFF, bh = bg >> 8, bl = bg & 0xFF;
+
+    for (; *s; s++, x += cols) {
+        c = (uint8_t)*s;
+        if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
+        if (c < FONT_FIRST || c > FONT_LAST) c = ' ';
+        for (i = 0; i < 5; i++) col[i] = font5x7[(uint8_t)(c - FONT_FIRST) * 5 + i];
+        window(x, y, cols, rows);
+        for (r = 0; r < rows; r++) {
+            k = r / sy;
+            for (i = 0; i < 5; i++) {
+                uint8_t on = k < 7 && ((col[i] >> k) & 1);
+                for (j = 0; j < sx; j++) { if (on) { tx(fh); tx(fl); } else { tx(bh); tx(bl); } }
             }
             for (j = 0; j < sx; j++) { tx(bh); tx(bl); }         /* spacing column */
         }
@@ -214,7 +236,7 @@ void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint1
     }
 }
 
-void lcd_noise(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t seed)
+void lcd_noise(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t seed) REENT
 {
     uint16_t n = (uint16_t)w * h, s = seed ? seed : 1, c;
     window(x, y, w, h);
@@ -222,7 +244,7 @@ void lcd_noise(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t seed)
     CS = 1;
 }
 
-void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const CODE uint8_t *bits, uint16_t fg, uint16_t bg)
+void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const CODE uint8_t *bits, uint16_t fg, uint16_t bg) REENT
 {
     uint8_t i, j, stride = (w + 7) >> 3;
     uint8_t fh = fg >> 8, fl = fg & 0xFF, bh = bg >> 8, bl = bg & 0xFF;
@@ -234,7 +256,7 @@ void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const CODE uint8_t *
     CS = 1;
 }
 
-void lcd_noise_row(uint8_t y, uint16_t seed, const CODE uint8_t *bits, uint8_t bx, uint8_t bw, uint8_t keep, uint16_t fg)
+void lcd_noise_row(uint8_t y, uint16_t seed, const CODE uint8_t *bits, uint8_t bx, uint8_t bw, uint8_t keep, uint16_t fg) REENT
 {
     uint8_t i;
     uint16_t s = seed ? seed : 1, c;

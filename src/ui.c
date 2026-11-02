@@ -82,7 +82,7 @@ static void centered(uint8_t y, const char *text, uint8_t sx, uint8_t sy, uint16
 #define ROT (th_get() == TH_ROT)
 
 /* ROT: a thorned line.  A 1-pixel line with a barb of `len` pixels every `step` pixels, pointing down (dir 1) or up (dir -1). */
-static void thorns(uint8_t x, uint8_t y, uint8_t w, int8_t dir, uint8_t len, uint8_t step, uint16_t c)
+static void thorns(uint8_t x, uint8_t y, uint8_t w, int8_t dir, uint8_t len, uint8_t step, uint16_t c) REENT
 {
     uint8_t i, k;
     lcd_fill(x, y, w, 1, c);
@@ -91,7 +91,7 @@ static void thorns(uint8_t x, uint8_t y, uint8_t w, int8_t dir, uint8_t len, uin
 }
 
 /* ROT: the border of a box, thorns pointing inward on the top and bottom edges */
-static void border(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t c)
+static void border(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t c) REENT
 {
     thorns(x, y, w, 1, 1, 5, c);
     thorns(x, (uint8_t)(y + h - 1), w, -1, 1, 5, c);
@@ -100,7 +100,7 @@ static void border(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t c)
 }
 
 /* ROT splash: static, a black band with barbed edges, the wordmark between two skulls, the version on its own strip */
-static void rot_splash(void)
+static void rot_splash(void) REENT
 {
     uint8_t lx = (uint8_t)((LCD_PX_W - LOGO_W) / 2), sw = spr_w[SPR_SKULL], sh = spr_h[SPR_SKULL];
     lcd_noise(0, 0, LCD_PX_W, LCD_PX_H, 0x5EED);
@@ -113,7 +113,7 @@ static void rot_splash(void)
 
 /* One frame of the ROT boot: the static strips crawl; frames 0-1 the band is empty (no signal), 2-5 the wordmark comes in torn
  * (rows shifted sideways, early rows dropping out), from 6 it is clean and the skulls are there. */
-void ui_splash_frame(uint8_t n)
+void ui_splash_frame(uint8_t n) REENT
 {
     uint8_t j, lx = (uint8_t)((LCD_PX_W - LOGO_W) / 2), sw = spr_w[SPR_SKULL], sh = spr_h[SPR_SKULL];
     int8_t off;
@@ -213,6 +213,14 @@ static uint8_t changed(uint8_t e, uint16_t c)
     return 1;
 }
 
+/* ROT: the thorned border of box b (red round a fault cell), on its own so box_draw keeps no extra temporaries in direct RAM */
+static void box_thorns(uint8_t b, uint16_t bg) REENT
+{
+    if (!ROT) return;
+    if (b < 3) border(box_x(b), UI_HDR_Y, UI_BOX_W, UI_HDR_H, th(R_DIM));
+    else border(box_x((b - 3) % 3), cell_y(b - 3), UI_BOX_W, UI_CELL_H, bg == UI_C_BLOOD ? th(R_BAD) : th(R_DIM));
+}
+
 /* box b (a header box, or port b - 3) painted in bg, its elements marked as wiped */
 static void box_draw(uint8_t b, uint16_t bg)
 {
@@ -221,7 +229,6 @@ static void box_draw(uint8_t b, uint16_t bg)
     box_bg[b] = bg;
     if (b < 3) {
         lcd_fill(box_x(b), UI_HDR_Y, UI_BOX_W, UI_HDR_H, bg);
-        if (ROT) border(box_x(b), UI_HDR_Y, UI_BOX_W, UI_HDR_H, th(R_DIM));
         shown[b][0] = 0;
         return;
     }
@@ -230,17 +237,16 @@ static void box_draw(uint8_t b, uint16_t bg)
     lcd_fill(x + UI_BADGE_X, y + 2, UI_BADGE_W, UI_CELL_H - 4, th(R_BADGE0 + p));
     d[0] = (char)('1' + p); d[1] = 0;
     lcd_text(x + UI_BADGE_X + 2, y + 6, d, 1, 2, th(R_BG), th(R_BADGE0 + p));
-    if (ROT) border(x, y, UI_BOX_W, UI_CELL_H, bg == UI_C_BLOOD ? th(R_BAD) : th(R_DIM));
     for (k = 0; k < 3; k++) shown[3 + p * 3 + k][0] = 0;
 }
 
-static void box(uint8_t b, uint16_t bg) { if (box_bg[b] != bg) box_draw(b, bg); }
+static void box(uint8_t b, uint16_t bg) { if (box_bg[b] != bg) { box_draw(b, bg); box_thorns(b, bg); } }
 
 void ui_main_init(void)
 {
     uint8_t b;
     lcd_fill(0, 0, LCD_PX_W, LCD_PX_H, th(R_BG));
-    for (b = 0; b < NBOX; b++) box_draw(b, th(R_BOX));
+    for (b = 0; b < NBOX; b++) { box_draw(b, th(R_BOX)); box_thorns(b, th(R_BOX)); }
     for (b = 0; b < NPORTS; b++) { last_st[b] = 0xFF; burst[b] = 0; last_cv[b] = 0; pulse[b] = 0; }
     quiet_n = 0; saver = 0;
     next_el = 0;
@@ -295,7 +301,7 @@ static void header(const ui_state_t *s, uint8_t e, char XD *t) REENT
 
 /* ROT: the icon in each header box's left margin (current: a bolt that crackles while charging, input: a skull, red on an alarm,
  * target: a spike, green once every battery is full), drawn on every visit: 35 pixels. */
-static void header_icon(const ui_state_t *s, uint8_t e, uint16_t bg)
+static void header_icon(const ui_state_t *s, uint8_t e, uint16_t bg) REENT
 {
     uint8_t spr, p, cells = 0, full = 0;
     uint16_t c = bg == th(R_TEXT) ? th(R_BG) : th(R_DIM);           /* ink on the white running header, grey on the dark one */
@@ -314,7 +320,7 @@ static void header_icon(const ui_state_t *s, uint8_t e, uint16_t bg)
  * running along it, grey when stopped.  Redrawn on each visit of the target box, about 3 ms. */
 #define BAR_Y     20
 #define BAR_SPAN  900                            /* mV from the target that counts as an empty cell */
-static void charge_bar(const ui_state_t *s)
+static void charge_bar(const ui_state_t *s) REENT
 {
     uint8_t p, n = 0, w, k;
     uint16_t tgt = cal_port_mv(s->tgt), v, d;
@@ -349,11 +355,7 @@ static void element(const ui_state_t *s, uint8_t e) REENT
     static char XD t[10];                      /* external RAM: direct RAM is full */
     uint8_t k, p, part, x, y, st, off, full;
     uint16_t fg, bg;
-    if (e < 3) {
-        header(s, e, t);
-        if (ROT && !s->ps) { header_icon(s, e, box_bg[e]); if (e == 2) charge_bar(s); }
-        return;
-    }
+    if (e < 3) { header(s, e, t); return; }
     k = e - 3; p = k / 3; part = k % 3;
     x = box_x(p % 3); y = cell_y(p);
     st = s->state[p]; off = s->set[p] == PV_OFF;
@@ -366,7 +368,7 @@ static void element(const ui_state_t *s, uint8_t e) REENT
             last_st[p] = st;
             if (burst[p]) {
                 lcd_noise((uint8_t)(x + 1), (uint8_t)(y + 2), UI_BOX_W - 2, UI_CELL_H - 4, (uint16_t)(anim * 7u + p));
-                if (--burst[p] == 0) box_draw(3 + p, bg);
+                if (--burst[p] == 0) { box_draw(3 + p, bg); box_thorns(3 + p, bg); }
                 return;
             }
         } else if (burst[p]) return;
@@ -447,7 +449,7 @@ void ui_text_row(uint8_t row, const char *text, uint16_t color)
 #define REFRESH_EVERY 64         /* must not share a factor with NELEM (21 = 3 x 7), or only some elements would ever be refreshed */
 static uint8_t XD refresh_div;
 
-static uint8_t quiet(const ui_state_t *s)
+static uint8_t quiet(const ui_state_t *s) REENT
 {
     uint8_t p;
     if (s->run || s->ps || s->alarm || s->iset != saver_iset || s->volt != saver_volt) return 0;
@@ -457,7 +459,7 @@ static uint8_t quiet(const ui_state_t *s)
 
 /* Four rows of the screensaver: static crawling down the screen, the green wordmark surfacing through it and sinking back
  * (a triangle wave of about 18 s).  Drawn one control pass in eight, about 7 ms each. */
-static void saver_strip(void)
+static void saver_strip(void) REENT
 {
     uint8_t r, y, lx = (uint8_t)((LCD_PX_W - LOGO_W) / 2), ly = (uint8_t)((LCD_PX_H - LOGO_H) / 2), ph = (uint8_t)(anim >> 4);
     uint16_t tri = ph < 128 ? ph * 2u : (255u - ph) * 2u, keep = tri * 3u / 2u;
@@ -492,4 +494,5 @@ void ui_main_step(const ui_state_t *s)
         shown[e][0] = 0;
     }
     element(s, e);
+    if (ROT && e < 3 && !s->ps) { header_icon(s, e, box_bg[e]); if (e == 2) charge_bar(s); }   /* after element: less stack */
 }
