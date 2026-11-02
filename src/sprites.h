@@ -2,7 +2,7 @@
 #ifndef SPRITES_H
 #define SPRITES_H
 #include "compat.h"
-enum { SPR_EYE_SHUT, SPR_EYE_HALF, SPR_EYE_OPEN, SPR_EYE_REST, SPR_SPIKE, SPR_DROP, SPR_SKULL_S, SPR_SKULL, SPR_EYE_LEFT, SPR_EYE_RIGHT, SPR_COUNT };
+enum { SPR_EYE_SHUT, SPR_EYE_HALF, SPR_EYE_OPEN, SPR_EYE_REST, SPR_SPIKE, SPR_DROP, SPR_SKULL_S, SPR_SKULL, SPR_EYE_LEFT, SPR_EYE_RIGHT, SPR_BOLT, SPR_BOLT_SPARK, SPR_SKULL5, SPR_SPIKE5, SPR_COUNT };
 extern const CODE uint8_t spr_w[], spr_h[], spr_bits[];
 extern const CODE uint16_t spr_off[];
 #define SPR_BITS(n) (spr_bits + spr_off[n])

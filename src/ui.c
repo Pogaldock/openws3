@@ -293,6 +293,49 @@ static void header(const ui_state_t *s, uint8_t e, char XD *t) REENT
     put(e, box_x(e) + UI_HDR_TX, UI_HDR_Y + UI_HDR_TY, 2, col, bg, t);
 }
 
+/* ROT: the icon in each header box's left margin (current: a bolt that crackles while charging, input: a skull, red on an alarm,
+ * target: a spike, green once every battery is full), drawn on every visit: 35 pixels. */
+static void header_icon(const ui_state_t *s, uint8_t e, uint16_t bg)
+{
+    uint8_t spr, p, cells = 0, full = 0;
+    uint16_t c = bg == th(R_TEXT) ? th(R_BG) : th(R_DIM);           /* ink on the white running header, grey on the dark one */
+    if (e == 0) spr = s->run && ((anim >> 6) & 1) ? SPR_BOLT_SPARK : SPR_BOLT;
+    else if (e == 1) { spr = SPR_SKULL5; if (s->alarm) c = th(R_BAD); }
+    else {
+        spr = SPR_SPIKE5;
+        for (p = 0; p < NPORTS; p++) if (s->state[p] != PS_IDLE) { cells++; if (s->state[p] == PS_FULL) full++; }
+        if (cells && full == cells) c = bg == th(R_TEXT) ? th(R_BG) : UI_C_NEON;
+    }
+    lcd_bitmap((uint8_t)(box_x(e) + 2), UI_HDR_Y + 7, spr_w[spr], spr_h[spr], SPR_BITS(spr), c, bg);
+}
+
+/* ROT: the 2-pixel strip between the header and the cells (y 20-21) is a charge bar for the whole charger: how close the cells are
+ * to the target on average (a full cell counts as there; 0.9 V away counts as nothing), green while running with a white spark
+ * running along it, grey when stopped.  Redrawn on each visit of the target box, about 3 ms. */
+#define BAR_Y     20
+#define BAR_SPAN  900                            /* mV from the target that counts as an empty cell */
+static void charge_bar(const ui_state_t *s)
+{
+    uint8_t p, n = 0, w, k;
+    uint16_t tgt = cal_port_mv(s->tgt), v, d;
+    uint32_t sum = 0;
+    for (p = 0; p < NPORTS; p++) {
+        if (s->state[p] == PS_IDLE || s->set[p] == PV_OFF) continue;
+        n++;
+        if (s->state[p] == PS_FULL) { sum += BAR_SPAN; continue; }
+        v = cal_port_mv(s->v[p]);
+        d = v > tgt ? v - tgt : tgt - v;
+        sum += d >= BAR_SPAN ? 0 : BAR_SPAN - d;
+    }
+    w = n ? (uint8_t)(sum * (LCD_PX_W - 2) / ((uint32_t)n * BAR_SPAN)) : 0;
+    lcd_fill(1, BAR_Y, w, 2, s->run ? UI_C_NEON : th(R_DIM));
+    lcd_fill((uint8_t)(1 + w), BAR_Y, (uint8_t)(LCD_PX_W - 2 - w), 2, th(R_BOX));
+    if (s->run && w > 4) {
+        k = (uint8_t)((anim >> 2) % (w - 3));
+        lcd_fill((uint8_t)(1 + k), BAR_Y, 3, 2, th(R_TEXT));
+    }
+}
+
 /* "0.5A", the current a port charges at */
 static void amps1(char XD *t, uint8_t iu) { fmt_a1(t, cal_set_to_ma(iu)); }
 
@@ -306,7 +349,11 @@ static void element(const ui_state_t *s, uint8_t e) REENT
     static char XD t[10];                      /* external RAM: direct RAM is full */
     uint8_t k, p, part, x, y, st, off, full;
     uint16_t fg, bg;
-    if (e < 3) { header(s, e, t); return; }
+    if (e < 3) {
+        header(s, e, t);
+        if (ROT && !s->ps) { header_icon(s, e, box_bg[e]); if (e == 2) charge_bar(s); }
+        return;
+    }
     k = e - 3; p = k / 3; part = k % 3;
     x = box_x(p % 3); y = cell_y(p);
     st = s->state[p]; off = s->set[p] == PV_OFF;
