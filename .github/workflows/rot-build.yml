@@ -1,0 +1,39 @@
+# Builds the firmware on every push to the rot-theme branch and publishes the installer as the "rot-latest" release:
+# open openws3.html from that release in Chrome or Edge to flash the charger.  The job summary shows how much of the 64 KB flash is used.
+name: ROT build
+on:
+  push:
+    branches: [rot-theme]
+  workflow_dispatch:
+permissions: { contents: write }
+concurrency: { group: rot-build, cancel-in-progress: true }
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }      # the build id comes from git
+      - name: SDCC 4.6.0     # the release the firmware is built and tested with (same as pages.yml)
+        run: |
+          curl -fsSL -o sdcc.tar.bz2 https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.6.0/sdcc-4.6.0-amd64-unknown-linux2.5.tar.bz2/download
+          echo "f6b929c62ed3082a26087885e0f1f9bf41878602ef1f57e40b11b4a01bf4f366  sdcc.tar.bz2" | sha256sum -c -
+          tar xjf sdcc.tar.bz2 -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/sdcc-4.6.0/bin" >> "$GITHUB_PATH"
+      - name: Unit tests (charge logic, limits, menu, themes)
+        run: make test
+      - name: Firmware and installer
+        run: make
+      - name: Flash use
+        run: |
+          python3 - <<'EOF' | tee -a "$GITHUB_STEP_SUMMARY"
+          data = open('build/fw.bin', 'rb').read()
+          used = len(data.rstrip(b'\xff'))
+          print(f"Flash used: {used} of 65536 bytes ({used * 100 // 65536} %), {65536 - used} free")
+          EOF
+      - name: Publish the installer
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          gh release delete rot-latest --yes --cleanup-tag || true
+          gh release create rot-latest build/openws3.html build/fw.bin --target "$GITHUB_SHA" --prerelease \
+            --title "ROT theme, latest build" \
+            --notes "Built from $(git rev-parse --short=8 HEAD). Download openws3.html, open it in Chrome or Edge, press Connect, follow the install steps. Unproven firmware: supervise charging."
