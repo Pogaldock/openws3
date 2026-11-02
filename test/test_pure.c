@@ -230,7 +230,7 @@ static void t_cfg(void)
     CHECK(cfg_valid_buzzer(0) == 0); CHECK(cfg_valid_buzzer(1) == 1);
     CHECK(cfg_valid_usb_off(1) == 1 && cfg_valid_usb_off(0) == 0 && cfg_valid_usb_off(0xFF) == 0);
     memset(&settings, 0xFF, sizeof settings); cfg_validate();                     /* erased page: the defaults */
-    CHECK(settings.cur == 21 && settings.volt == 0 && settings.sound == 1 && settings.theme == TH_CLASSIC);
+    CHECK(settings.cur == 21 && settings.volt == 0 && settings.sound == 1 && settings.theme == TH_ROT);
     CHECK(settings.ilim == 0 && settings.vmin == 98 && settings.vcut == 0 && settings.lmode == LM_BY_CH);
     CHECK(settings.ch_cur[0] == 0 && settings.ch_cur[NPORTS - 1] == 0 && settings.ch_off == 0 && settings.usb_off == 0);
 }
@@ -332,7 +332,7 @@ static void t_theme(void)
         CHECK(th_name(t)[0] != 0);
     }
     th_set(99); CHECK(th_get() == TH_CLASSIC);
-    CHECK(cfg_valid_theme(TH_COUNT - 1) == TH_COUNT - 1 && cfg_valid_theme(TH_COUNT) == TH_CLASSIC && cfg_valid_theme(0xFF) == TH_CLASSIC);
+    CHECK(cfg_valid_theme(TH_COUNT - 1) == TH_COUNT - 1 && cfg_valid_theme(TH_COUNT) == TH_ROT && cfg_valid_theme(0xFF) == TH_ROT);
 }
 
 int main(void)

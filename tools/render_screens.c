@@ -269,6 +269,7 @@ int main(int argc, char **argv)
 
     memset(&settings, 0xFF, sizeof settings);                       /* a unit with nothing saved: the defaults */
     cfg_validate();
+    settings.theme = TH_CLASSIC;                                    /* the guide's pictures are the stock look; ROT has its own below */
     th_set(settings.theme);
 
     ui_splash(); save("splash");
