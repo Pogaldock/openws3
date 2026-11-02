@@ -11,11 +11,14 @@ static const CODE seg_t p_rail[]  = { {125, 125}, {125, 125}, {125, 360}, {0, 0}
 
 static const CODE seg_t *pat;
 static uint8_t  repeat, seg, in_off, enabled, tone_lvl;
+/* Running flag kept apart from pat: SDCC 4.6 assumes a __code pointer is never null and folds "pat != 0" to true,
+ * which made buzz_busy() always 1 on the charger (found by the 8051 tests). */
+static uint8_t  active;
 static uint16_t left;
 
-void buzz_reset(void) { pat = 0; repeat = 0; seg = 0; in_off = 0; left = 0; tone_lvl = 0; enabled = 1; }
+void buzz_reset(void) { pat = 0; active = 0; repeat = 0; seg = 0; in_off = 0; left = 0; tone_lvl = 0; enabled = 1; }
 void buzz_enable(uint8_t on) { enabled = on ? 1 : 0; }
-uint8_t buzz_busy(void) { return pat != 0; }
+uint8_t buzz_busy(void) { return active; }
 
 void buzz_play(uint8_t id)
 {
@@ -25,14 +28,14 @@ void buzz_play(uint8_t id)
     case PAT_DONE:  pat = p_done;  repeat = 0; break;
     case PAT_ERROR: pat = p_error; repeat = 0; break;
     case PAT_RAIL_ALARM: pat = p_rail; repeat = 1; break;
-    default: pat = 0; return;
+    default: pat = 0; active = 0; return;
     }
-    seg = 0; in_off = 0; left = pat[0].on;
+    active = 1; seg = 0; in_off = 0; left = pat[0].on;
 }
 
 uint8_t buzz_tick(void)
 {
-    if (!pat) { tone_lvl = 0; return 0; }
+    if (!active) { tone_lvl = 0; return 0; }
     if (!in_off) {
         if (left) left--;
         if (!left) {
@@ -45,7 +48,7 @@ uint8_t buzz_tick(void)
             seg++;
         next:
             if (!pat[seg].on) {
-                if (repeat) seg = 0; else { pat = 0; tone_lvl = 0; return 0; }
+                if (repeat) seg = 0; else { pat = 0; active = 0; tone_lvl = 0; return 0; }
             }
             in_off = 0; left = pat[seg].on;
         }
