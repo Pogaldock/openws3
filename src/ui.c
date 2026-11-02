@@ -81,22 +81,29 @@ static void centered(uint8_t y, const char *text, uint8_t sx, uint8_t sy, uint16
 
 #define ROT (th_get() == TH_ROT)
 
-/* ROT: a thorned line.  A 1-pixel line with a barb of `len` pixels every `step` pixels, pointing down (dir 1) or up (dir -1). */
-static void thorns(uint8_t x, uint8_t y, uint8_t w, int8_t dir, uint8_t len, uint8_t step, uint16_t c) REENT
+/* ROT borders.  Their arguments are shared variables in external RAM, not parameters: these run deep in the screen code (inside a cell
+ * repaint), where every byte of stack counts, and plain functions with no parameters keep both the stack and the direct RAM free. */
+static uint8_t XD tn_x, tn_y, tn_w, tn_h, tn_len, tn_step, tn_i, tn_k;
+static int8_t  XD tn_dir;
+static uint16_t XD tn_c;
+
+/* a thorned line at tn_x, tn_y, tn_w long: a 1-pixel line with a barb of tn_len pixels every tn_step pixels, down (tn_dir 1) or up (-1) */
+static void thorns(void)
 {
-    uint8_t i, k;
-    lcd_fill(x, y, w, 1, c);
-    for (i = 2; i + 2 < w; i += step)
-        for (k = 1; k <= len; k++) lcd_fill((uint8_t)(x + i), (uint8_t)(y + dir * (int8_t)k), 1, 1, c);
+    lcd_fill(tn_x, tn_y, tn_w, 1, tn_c);
+    for (tn_i = 2; tn_i + 2 < tn_w; tn_i += tn_step)
+        for (tn_k = 1; tn_k <= tn_len; tn_k++) lcd_fill((uint8_t)(tn_x + tn_i), (uint8_t)(tn_y + tn_dir * (int8_t)tn_k), 1, 1, tn_c);
 }
 
-/* ROT: the border of a box, thorns pointing inward on the top and bottom edges */
-static void border(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t c) REENT
+/* the border of the box at tn_x, tn_y, tn_w x tn_h in tn_c: thorns pointing inward on the top and bottom edges */
+static void border(void)
 {
-    thorns(x, y, w, 1, 1, 5, c);
-    thorns(x, (uint8_t)(y + h - 1), w, -1, 1, 5, c);
-    lcd_fill(x, y, 1, h, c);
-    lcd_fill((uint8_t)(x + w - 1), y, 1, h, c);
+    uint8_t y0 = tn_y;
+    tn_len = 1; tn_step = 5;
+    tn_dir = 1; thorns();
+    tn_y = (uint8_t)(y0 + tn_h - 1); tn_dir = -1; thorns();
+    lcd_fill(tn_x, y0, 1, tn_h, tn_c);
+    lcd_fill((uint8_t)(tn_x + tn_w - 1), y0, 1, tn_h, tn_c);
 }
 
 /* ROT splash: static, a black band with barbed edges, the wordmark between two skulls, the version on its own strip */
@@ -105,8 +112,9 @@ static void rot_splash(void) REENT
     uint8_t lx = (uint8_t)((LCD_PX_W - LOGO_W) / 2), sw = spr_w[SPR_SKULL], sh = spr_h[SPR_SKULL];
     lcd_noise(0, 0, LCD_PX_W, LCD_PX_H, 0x5EED);
     lcd_fill(0, 9, LCD_PX_W, 50, th(R_BG));
-    thorns(0, 9, LCD_PX_W, -1, 2, 6, th(R_DIM));
-    thorns(0, 58, LCD_PX_W, 1, 2, 6, th(R_DIM));
+    tn_x = 0; tn_w = LCD_PX_W; tn_len = 2; tn_step = 6; tn_c = th(R_DIM);
+    tn_y = 9; tn_dir = -1; thorns();
+    tn_y = 58; tn_dir = 1; thorns();
     (void)lx; (void)sw; (void)sh;
     lcd_fill(0, 68, LCD_PX_W, 10, th(R_BG));
 }
@@ -214,11 +222,13 @@ static uint8_t changed(uint8_t e, uint16_t c)
 }
 
 /* ROT: the thorned border of box b (red round a fault cell), on its own so box_draw keeps no extra temporaries in direct RAM */
-static void box_thorns(uint8_t b, uint16_t bg) REENT
+static void box_thorns(uint8_t b, uint16_t bg)
 {
     if (!ROT) return;
-    if (b < 3) border(box_x(b), UI_HDR_Y, UI_BOX_W, UI_HDR_H, th(R_DIM));
-    else border(box_x((b - 3) % 3), cell_y(b - 3), UI_BOX_W, UI_CELL_H, bg == UI_C_BLOOD ? th(R_BAD) : th(R_DIM));
+    tn_w = UI_BOX_W; tn_c = th(R_DIM);
+    if (b < 3) { tn_x = box_x(b); tn_y = UI_HDR_Y; tn_h = UI_HDR_H; }
+    else { tn_x = box_x((b - 3) % 3); tn_y = cell_y(b - 3); tn_h = UI_CELL_H; if (bg == UI_C_BLOOD) tn_c = th(R_BAD); }
+    border();
 }
 
 /* box b (a header box, or port b - 3) painted in bg, its elements marked as wiped */
@@ -261,7 +271,7 @@ static void frame(uint8_t x, uint8_t y, uint16_t c)
     lcd_fill(x, (uint8_t)(y + UI_CELL_H - UI_FRAME), UI_BOX_W, UI_FRAME, c);
     lcd_fill(x, y, UI_FRAME, UI_CELL_H, c);
     lcd_fill((uint8_t)(x + UI_BOX_W - UI_FRAME), y, UI_FRAME, UI_CELL_H, c);
-    if (ROT && c == th(R_BOX)) border(x, y, UI_BOX_W, UI_CELL_H, th(R_DIM));     /* taking the frame off puts the thorns back */
+    if (ROT && c == th(R_BOX)) { tn_x = x; tn_y = y; tn_w = UI_BOX_W; tn_h = UI_CELL_H; tn_c = th(R_DIM); border(); }   /* the thorns come back */
 }
 
 static uint16_t status_color(uint8_t state)
@@ -274,6 +284,9 @@ static uint16_t status_color(uint8_t state)
     default:        return th(R_WARN);
     }
 }
+
+/* text colour col on a background bg: when they are the same (ROT's white running header), the text is inked in the background colour */
+static uint16_t ink(uint16_t col, uint16_t bg) { return col == bg ? th(R_BG) : col; }
 
 static void header(const ui_state_t *s, uint8_t e, char XD *t) REENT
 {
@@ -293,7 +306,7 @@ static void header(const ui_state_t *s, uint8_t e, char XD *t) REENT
         else if (s->usb_off && s->tphase) { scopy(t, "USB OFF"); col = th(R_GOOD); }   /* 1 s in 4, like the targets in the port cells */
         else { fmt_vin(t, cal_vin_mv(s->vin)); col = s->usb_off ? th(R_GOOD) : th(R_VIN); }
     } else fmt_v2(t, cal_port_mv(s->tgt));
-    if (col == bg) col = th(R_BG);                   /* a theme whose running header is the text colour (ROT): ink the text */
+    col = ink(col, bg);                              /* a theme whose running header is the text colour (ROT): ink the text */
     pad(t, 7);
     box(e, bg);
     put(e, box_x(e) + UI_HDR_TX, UI_HDR_Y + UI_HDR_TY, 2, col, bg, t);
@@ -395,7 +408,8 @@ static void element(const ui_state_t *s, uint8_t e) REENT
         fmt_v2(t, cal_port_mv(s->v[p]));
         fg = off ? th(R_DIM) : full ? th(R_FULLTX) : th(R_VOLT);
         if (ROT && !off && st == PS_CHARGE) {         /* a charging voltage that rises flashes green for a moment */
-            uint16_t cv = cal_port_mv(s->v[p]) / 10;
+            static uint16_t XD cv;                    /* external RAM: element's stack frame stays at its stock size */
+            cv = cal_port_mv(s->v[p]) / 10;
             if (last_cv[p] && cv > last_cv[p]) pulse[p] = 2;
             last_cv[p] = cv;
             if (pulse[p]) { pulse[p]--; fg = UI_C_NEON; }
@@ -417,7 +431,8 @@ static void element(const ui_state_t *s, uint8_t e) REENT
         if (ROT) {
             /* sprites 0..6 are the PS_* icons; a charging eye looks around and blinks, each port out of step with the others */
             static const CODE uint8_t GAZE[8] = { SPR_EYE_OPEN, SPR_EYE_OPEN, SPR_EYE_LEFT, SPR_EYE_OPEN, SPR_EYE_OPEN, SPR_EYE_RIGHT, SPR_EYE_OPEN, SPR_EYE_HALF };
-            uint8_t spr = st == PS_CHARGE ? GAZE[(uint8_t)((anim >> 8) + p * 3) & 7] : st;
+            static uint8_t XD spr;                    /* external RAM: element's stack frame stays at its stock size */
+            spr = st == PS_CHARGE ? GAZE[(uint8_t)((anim >> 8) + p * 3) & 7] : st;
             if (changed(e, fg) | (shown[e][1] != (char)(spr + 1))) {
                 shown[e][1] = (char)(spr + 1);
                 lcd_bitmap(x + UI_DOT_X, y + UI_DOT_Y - 1, spr_w[spr], spr_h[spr], SPR_BITS(spr), fg, bg);

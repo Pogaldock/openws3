@@ -187,48 +187,33 @@ void lcd_fill(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t color)
     CS = 1;
 }
 
-/* lcd_text for the ROT theme: its font, and 2x2 text inked as a checkerboard (LCD_POKE).  Kept apart from lcd_text so the stock path
- * is unchanged; reentrant so its temporaries go on the stack, not in the full direct RAM. */
-static void lcd_text_rot(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint16_t fg, uint16_t bg) REENT
-{
-    uint8_t col[5], c, r, i, j, k, rr, rows = FONT_H_PX * sy, cols = FONT_W * sx, poke = sx > 1 && sy > 1;
-    for (; *s; s++, x += cols) {
-        c = (uint8_t)*s;
-        if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
-        if (c < FONT_FIRST || c > FONT_LAST) c = ' ';
-        for (i = 0; i < 5; i++) col[i] = font_rot[(uint8_t)(c - FONT_FIRST) * 5 + i];
-        window(x, y, cols, rows);
-        for (r = 0; r < rows; r++) {
-            k = r / sy; rr = r - k * sy;
-            for (i = 0; i < 5; i++) {
-                uint8_t on = k < 7 && ((col[i] >> k) & 1);
-                for (j = 0; j < sx; j++) {
-                    if (on && (!poke || LCD_POKE(rr, j))) { tx(fg >> 8); tx(fg & 0xFF); } else { tx(bg >> 8); tx(bg & 0xFF); }
-                }
-            }
-            for (j = 0; j < sx; j++) { tx(bg >> 8); tx(bg & 0xFF); }
-        }
-        CS = 1;
-    }
-}
+/* The font and the poke pattern of the text being drawn: set on entry from the theme (ROT: its font, and 2x2 text inked as a checkerboard,
+ * LCD_POKE).  Globals in external RAM, not locals: the stock routine keeps its stack and direct-RAM use, ROT included. */
+static const __code uint8_t * XD lcd_font;
+static uint8_t XD lcd_poke, lcd_mask, lcd_par;   /* a pixel of a stretch is inked when (column & lcd_mask) == lcd_par */
 
 void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint16_t fg, uint16_t bg)
 {
-    if (th_get() == TH_ROT) { lcd_text_rot(x, y, s, sx, sy, fg, bg); return; }
     uint8_t col[5], c, r, i, j, k, rows = FONT_H_PX * sy, cols = FONT_W * sx;
     uint8_t fh = fg >> 8, fl = fg & 0xFF, bh = bg >> 8, bl = bg & 0xFF;
 
+    lcd_font = font5x7; lcd_poke = 0;
+    if (th_get() == TH_ROT) { lcd_font = font_rot; if (sx > 1 && sy > 1) lcd_poke = 1; }
     for (; *s; s++, x += cols) {
         c = (uint8_t)*s;
         if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
         if (c < FONT_FIRST || c > FONT_LAST) c = ' ';
-        for (i = 0; i < 5; i++) col[i] = font5x7[(uint8_t)(c - FONT_FIRST) * 5 + i];
+        for (i = 0; i < 5; i++) col[i] = lcd_font[(uint8_t)(c - FONT_FIRST) * 5 + i];
         window(x, y, cols, rows);
         for (r = 0; r < rows; r++) {
             k = r / sy;
+            lcd_mask = lcd_poke;                             /* poked: the inked columns alternate row by row (checkerboard) */
+            lcd_par = lcd_poke & (uint8_t)(r - k * sy);
             for (i = 0; i < 5; i++) {
                 uint8_t on = k < 7 && ((col[i] >> k) & 1);
-                for (j = 0; j < sx; j++) { if (on) { tx(fh); tx(fl); } else { tx(bh); tx(bl); } }
+                for (j = 0; j < sx; j++) {
+                    if (on && (j & lcd_mask) == lcd_par) { tx(fh); tx(fl); } else { tx(bh); tx(bl); }
+                }
             }
             for (j = 0; j < sx; j++) { tx(bh); tx(bl); }         /* spacing column */
         }
