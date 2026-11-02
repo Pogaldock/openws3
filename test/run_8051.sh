@@ -6,7 +6,11 @@
 # Usage: test/run_8051.sh   (SDCC and s51 on the PATH; build/version_build.h made by make)
 set -e
 cd "$(dirname "$0")/.."
-command -v s51 >/dev/null || { echo "run_8051: s51 (ucsim) not found, nothing run"; exit 0; }
+if ! command -v s51 >/dev/null; then
+    echo "run_8051: s51 (ucsim) not found, nothing run"
+    [ -n "$CI" ] && exit 1                  # in CI a missing simulator is a failure, not a pass
+    exit 0
+fi
 W=build/s51; mkdir -p $W
 CF="-mmcs51 --model-large -Isrc -Ibuild -Itest"
 LINK="--xram-size 65536 --code-size 65536"
