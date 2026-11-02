@@ -23,6 +23,8 @@ jobs:
         run: make test
       - name: Whole-firmware safety scenarios on a simulated board (no installer is published if one fails)
         run: make sim
+      - name: Unit tests and the charge-logic trace on a simulated 8051 (16-bit int, as on the charger)
+        run: make check-8051
       - name: Firmware and installer
         run: make
       - name: Flash use

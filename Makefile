@@ -64,6 +64,10 @@ $(BUILD)/sim_app: test/sim/sim_app.c test/sim/sim_hal.c test/sim/sim.h $(APP_SRC
 sim: $(BUILD)/sim_app
 	./$(BUILD)/sim_app
 
+# unit tests and a charge-logic trace on a simulated 8051 (16-bit int), needs SDCC's s51
+check-8051: $(BUILD)/version_build.h
+	test/run_8051.sh
+
 $(BUILD)/render_screens: tools/render_screens.c src/ui.c src/font.c src/font_rot.c src/sprites.c src/logo.c $(PURE) $(wildcard src/*.h) $(BUILD)/version_build.h
 	@mkdir -p $(BUILD)
 	$(HOSTCC) -std=c99 -Wall -Wextra -Werror -Isrc -I$(BUILD) -D__code= -o $@ tools/render_screens.c src/ui.c src/font.c src/font_rot.c src/sprites.c src/logo.c $(PURE) -lm
@@ -73,5 +77,5 @@ screens: $(BUILD)/render_screens
 
 clean:
 	rm -rf build
-.PHONY: all test screens clean sim FORCE
+.PHONY: all test screens clean sim check-8051 FORCE
 FORCE:
