@@ -349,8 +349,9 @@ static void s_dev_mode(void)
     sim_attach(0, 4.10, 120); sim_attach(1, 4.10, 120);
     boot();
     dev_drive(137, 600);                                            /* 10 min of a host holding port 1 on, rail about 4.45 V */
-    printf("  developer mode, port driven flat out, rail ~%.2f V: cell held at %.3f V, PWM %u (developer mode only cuts at 4.40 V)\n", S.rail, S.max_cell_v[0], S.pwm[0]);
-    CHECK(S.max_cell_v[0] < 4.41);                                  /* all developer mode promises: the 4.40 V port guard */
+    printf("  developer mode, port driven flat out, rail ~%.2f V: cell peak %.3f V, PWM now %u (cut at the 4.20 V target + 50 mV: %s)\n", S.rail, S.max_cell_v[0], S.pwm[0], S.pwm[0] ? "NO" : "yes");
+    CHECK(S.pwm[0] == 0);                                           /* the guard cut it ... */
+    CHECK(S.max_cell_v[0] < 4.25);                                  /* ... before the cell went past target + 50 mV */
     set[18] = 9;
     usb(set, 19); run_for(0.2);
     CHECK(S.pwm[1] > 0);
@@ -379,7 +380,12 @@ int main(int argc, char **argv)
         if (argc > 1 && strcmp(argv[1], SC[k].name)) continue;
         fflush(stdout);
         pid = fork();
-        if (pid == 0) { srand(1234 + k); sim_reset(); SC[k].fn(); fflush(stdout); exit(fails ? (check_report(SC[k].name), 1) : 0); }
+        if (pid == 0) {
+            srand(1234 + k); sim_reset(); SC[k].fn();
+            if (S.wdt_bites) printf("  ** the watchdog would have reset the chip %d times\n", S.wdt_bites);
+            CHECK(S.wdt_bites == 0);                                /* normal operation, faults included, always feeds it in time */
+            fflush(stdout); exit(fails ? (check_report(SC[k].name), 1) : 0);
+        }
         waitpid(pid, &st, 0);
         if (!WIFEXITED(st) || WEXITSTATUS(st)) { failed++; printf("  ** %s FAILED\n", SC[k].name); }
     }

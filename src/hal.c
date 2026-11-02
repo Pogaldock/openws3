@@ -13,6 +13,9 @@ __sfr __at (0xBA) P_SW2;
 __sfr __at (0x88) TCON; __sfr __at (0x89) TMOD; __sfr __at (0x8A) TL0; __sfr __at (0x8C) TH0;
 __sfr __at (0xF4) USBCON;
 __sfr __at (0x8E) AUXR; __sfr __at (0xA8) IE;
+__sfr __at (0xC1) WDT_CONTR;   /* STC8H manual 6.3.1: watchdog */
+__sfr __at (0xFF) RSTCFG;      /* STC8H manual 6.3.3: reset configuration (low-voltage reset) */
+__sfr __at (0x8B) TL1; __sfr __at (0x8D) TH1;   /* Timer 1 is not used: its registers carry the RAM copy of the reference (below) */
 __sfr __at (0xC2) IAP_DATA; __sfr __at (0xC3) IAP_ADDRH; __sfr __at (0xC4) IAP_ADDRL;
 __sfr __at (0xC5) IAP_CMD;  __sfr __at (0xC6) IAP_TRIG;  __sfr __at (0xC7) IAP_CONTR; __sfr __at (0xF5) IAP_TPS;
 __sfr __at (0xBC) ADC_CONTR; __sfr __at (0xBD) ADC_RES; __sfr __at (0xBE) ADC_RESL; __sfr __at (0xDE) ADCCFG;
@@ -48,14 +51,30 @@ static volatile uint32_t __xdata g_ticks;       /* 0.5 ms ticks since boot */
  * (a strong 0 even before the port mode registers are written).  */
 static uint8_t XD profile_ok;  /* 1 once the settings are loaded (hal_profile_allow): until then the input bypass cannot be turned on */
 
+static void pin_modes(void)
+{
+    P0M1 = 0x7F; P0M0 = 0x80;  P1M1 = 0xFF; P1M0 = 0x00;
+    P2M1 = 0x00; P2M0 = 0xFF;  P3M1 = 0xB3; P3M0 = 0xA8;
+    P4M1 = 0x02; P4M0 = 0xFE;  P5M1 = 0x13; P5M0 = 0x0F;
+}
+
 unsigned char __sdcc_external_startup(void)
 {
+    /* The STC8H's loader leaves the chip's measured internal reference (mV, high byte first) at idata EFH-F0H (manual 7.3, 7.5.3).  The
+       C start-up clears the internal RAM after this function, so the two bytes are parked in Timer 1's registers (Timer 1 is not used)
+       for hal_ram_bgv().  Read only, before anything else touches that RAM. */
+    TH1 = *(__idata uint8_t *)0xEF;
+    TL1 = *(__idata uint8_t *)0xF0;
     profile_ok = 0;            /* not left to whatever the RAM holds */
     P2 = 0x00;                 /* PWM pins + two enables low */
     P4 = 0x02;                 /* enables, beep, power low; LCD CS (P4.1) idle high */
     P5 = 0x03;                 /* P5.2/P5.3 low; LCD RST/DC idle high */
     P0 = 0x00;                 /* P0.7 low (P0.0-6 are analog inputs) */
     P3 &= ~0x08;               /* P3.3 rail actuator low */
+    /* The STC8H's pins are high-impedance after power-on (manual 2.5.1, 9: "All I/O ports except for P3.0 and P3.1 are in high-impedance
+       input state after power-on"), so the latches above drive nothing until the port modes are set.  Set them here, the first thing
+       the program does, so the power-path pins float for as short a time as the chip allows (hal_init sets the same values again). */
+    pin_modes();
     return 0;
 }
 
@@ -98,10 +117,7 @@ uint8_t hal_stack_free(void)
 
 void hal_init(void)
 {
-    /* pin modes */
-    P0M1 = 0x7F; P0M0 = 0x80;  P1M1 = 0xFF; P1M0 = 0x00;
-    P2M1 = 0x00; P2M0 = 0xFF;  P3M1 = 0xB3; P3M0 = 0xA8;
-    P4M1 = 0x02; P4M0 = 0xFE;  P5M1 = 0x13; P5M0 = 0x0F;
+    pin_modes();
 
     pwm_init();
     hal_all_off();
@@ -117,7 +133,20 @@ void hal_init(void)
     TH0 = (65536UL - F_SYS / TICK_HZ) >> 8;
     TCON |= 0x10;              /* TR0 */
     IE |= 0x02;                /* ET0 */
+
+    /* Low-voltage reset (manual 6.3.3, RSTCFG): ENLVR (bit 6) = reset, not just an interrupt; LVDS = 11 (3.0 V).  Its reset value is
+       off at 2.0 V: a sagging supply would leave the chip running out of spec instead of resetting.  P54RST (bit 4) stays 0. */
+    RSTCFG = 0x43;
+    hal_wdt_feed();            /* the watchdog runs from here on (hal.h) */
 }
+
+/* Watchdog (manual 6.3.1, WDT_CONTR): EN_WDT (bit 5), CLR_WDT (bit 4), WDT_PS = 111 (divide by 256).  Overflow time
+   12 x 32768 x 2^(WDT_PS + 1) / SYSclk (the manual's table: 65.5 ms at 12 MHz for WDT_PS = 000) = 2.5 s at 40 MHz.  Once on, only a
+   reset stops it; a software reset (into the ISP loader) returns every register but the clock ones to its initial value, so the
+   loader runs without it.  A watchdog reset starts the chip through the ISP loader, then this firmware boots afresh: nothing charges. */
+void hal_wdt_feed(void) { WDT_CONTR = 0x37; }
+
+uint16_t hal_ram_bgv(void) { return ((uint16_t)TH1 << 8) | TL1; }
 
 void hal_irq_on(void) { IE |= 0x80; }
 
@@ -194,7 +223,10 @@ uint16_t hal_adc(uint8_t ch)
         nop
         nop
     __endasm;
-    while (!(ADC_CONTR & 0x20));
+    {
+        uint16_t n = 0;                /* a conversion takes a few us; one that never ends (a hardware fault) must not hang the firmware */
+        while (!(ADC_CONTR & 0x20)) if (++n == 0) return 4095;   /* full scale: the rail reads saturated, the supervision locks out */
+    }
     ADC_CONTR &= ~0x20;
     return ((uint16_t)ADC_RES << 8) | ADC_RESL;
 }

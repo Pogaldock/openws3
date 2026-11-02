@@ -27,6 +27,7 @@ typedef struct {
     uint8_t  stack;                                          /* bytes of stack never used since boot */
     uint8_t  chip_id;                                        /* the CHIPID block is there (STC8H8K64U version B) */
     uint16_t chip_bgv;                                       /* its factory-measured internal reference, mV */
+    uint16_t chip_ram_bgv;                                   /* the copy the loader left in RAM (version A's only source), mV */
     uint8_t  chip_date[3];                                   /* its test date, BCD: year, month, day */
 } dbg_view_t;   /* the settings, limits and targets are read where they live: settings, lim_cfg, lim_out, sup_target() */
 

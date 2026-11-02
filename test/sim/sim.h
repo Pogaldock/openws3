@@ -41,6 +41,8 @@ typedef struct {
     double max_rail_driven;     /* the highest rail while a port is driven (P5.2 on and a PWM above 0) */
     int booted;
     int reboot_isp;
+    int wdt_on, wdt_bites;      /* the watchdog was started; times it would have reset the chip */
+    uint64_t wdt_last;
     uint8_t usb_cmd[24];        /* a command from a host on USB, delivered once when usb_pending is set */
     int usb_pending;
 } sim_t;

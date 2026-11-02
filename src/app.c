@@ -156,6 +156,7 @@ void app_boot(void)
     cfg_load();                                      /* flash reads are safe before anything is powered */
     dbg_view.chip_id = hal_chip_byte(31) == 0x5A && hal_chip_byte(25) == 0x00;     /* the CHIPID block (hal.h), for page 1 */
     dbg_view.chip_bgv = ((uint16_t)hal_chip_byte(7) << 8) | hal_chip_byte(8);
+    dbg_view.chip_ram_bgv = hal_ram_bgv();           /* version A: the loader's copy in RAM (hal.h), shown only */
     dbg_view.chip_date[0] = hal_chip_byte(27); dbg_view.chip_date[1] = hal_chip_byte(28); dbg_view.chip_date[2] = hal_chip_byte(29);
     th_set(settings.theme); apply_limits();
     input_reset(); buzz_reset(); buzz_enable(settings.sound);
@@ -178,16 +179,20 @@ void app_boot(void)
         tele_pass(PH_RAIL_WAIT);
         hal_delay_ms(2);
     }
+    hal_wdt_feed();                                  /* the watchdog (hal.h): between the steps of the boot, each well under its 2.5 s */
     lcd_init();                                      /* may be lost, see the logo */
+    hal_wdt_feed();
 
     /* the logo waits until the rail has settled: an init made while the rail is being brought up
        can leave the panel black (cold starts), one made after it always worked */
     tele_pass(PH_SPLASH);
     lcd_init();
+    hal_wdt_feed();
     ui_splash();
     buzz_play(PAT_BOOT);
-    if (th_get() == TH_ROT) { for (n = 0; n < UI_SPLASH_FRAMES; n++) { ui_splash_frame(n); hal_delay_ms(UI_SPLASH_MS); } }
+    if (th_get() == TH_ROT) { for (n = 0; n < UI_SPLASH_FRAMES; n++) { hal_wdt_feed(); ui_splash_frame(n); hal_delay_ms(UI_SPLASH_MS); } }
     else hal_delay_ms(1000);
+    hal_wdt_feed();
 
     sup_reset();
 
@@ -377,6 +382,7 @@ void app_pass(void)
     uint8_t k;
 
     while ((int32_t)(hal_ticks() - t_next) < 0) ;
+    hal_wdt_feed();                                  /* every pass: a firmware that stops passing is reset within 2.5 s (hal.h) */
     t_next += PASS_TICKS;
     if ((int32_t)(hal_ticks() - t_next) > 4 * PASS_TICKS) t_next = hal_ticks();       /* fell behind: do not burst */
 

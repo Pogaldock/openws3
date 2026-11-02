@@ -95,6 +95,7 @@ void sim_advance(uint32_t n)
 {
     while (n--) {
         S.ticks++;
+        if (S.wdt_on && S.ticks - S.wdt_last > 5000) { S.wdt_bites++; S.wdt_last = S.ticks; }   /* 2.5 s without a feed: the real chip resets */
         plant_tick();
         input_tick((uint8_t)S.btn1, (uint8_t)S.btn2);      /* what the 0.5 ms interrupt does */
         (void)buzz_tick();
@@ -159,6 +160,8 @@ uint32_t hal_ms(void) { return (uint32_t)(S.ticks / 2); }
 uint32_t hal_ticks(void) { sim_advance(1); return (uint32_t)S.ticks; }     /* a busy wait on the tick moves time on */
 void hal_delay_ms(uint16_t ms) { sim_advance((uint32_t)ms * 2); }
 void hal_tick(void) {}
+void hal_wdt_feed(void) { S.wdt_last = S.ticks; S.wdt_on = 1; }
+uint16_t hal_ram_bgv(void) { return 0; }
 void hal_tone(uint8_t level) { (void)level; }
 void hal_fan(uint8_t on) { S.fan = on; }
 uint8_t hal_btn(uint8_t n) { return n == 1 ? (uint8_t)S.btn1 : (uint8_t)S.btn2; }

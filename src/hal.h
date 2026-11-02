@@ -26,6 +26,11 @@ uint16_t hal_adc(uint8_t ch);                    /* one 12-bit conversion */
  * version B, not A): byte 31 = 5AH and byte 25 = 00H when it is there.  Bytes 7..8 = the factory-measured internal reference (mV, high
  * byte first), 27..29 = the chip's test date (BCD year, month, day).  Read only, for the diagnostics. */
 uint8_t  hal_chip_byte(uint8_t n);
+/* The chip's measured internal reference as its loader left it in RAM (idata EFH-F0H, mV), read at the first instruction of start-up:
+ * the way a chip without the CHIPID block (version A) gives it.  Not validated: shown on the diagnostics, not used for any decision. */
+uint16_t hal_ram_bgv(void);
+/* Watchdog: started at the end of hal_init (2.5 s); feed it at least that often: every control pass, and between the steps of the boot */
+void     hal_wdt_feed(void);
 
 /* Settings flash (IAP): one page, see cfg.h. */
 uint8_t  hal_ee_read(uint16_t addr);

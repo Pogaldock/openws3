@@ -41,6 +41,7 @@ const char *dbg_text(uint8_t page, uint8_t row)
         case 6: rb_str("THERM "); rb_num(dbg_view.adc[0], 4); rb_str("  FAN "); rb_str(dbg_view.fan ? "ON" : "off"); break;
         case 7:                                          /* which chip: version B carries its own measured reference */
             if (dbg_view.chip_id) { rb_str("CHIP B  REF "); rb_num(dbg_view.chip_bgv, 4); rb_str("mV"); }
+            else if (dbg_view.chip_ram_bgv >= 1100 && dbg_view.chip_ram_bgv <= 1280) { rb_str("CHIP A  RAM REF "); rb_num(dbg_view.chip_ram_bgv, 4); rb_str("mV"); }
             else rb_str("CHIP A  NO STORED REF");
             break;
         case 8: rb_str("STRAP "); rb_num(dbg_view.strap, 0); rb_str("  STACK FREE "); rb_num(dbg_view.stack, 0); break;

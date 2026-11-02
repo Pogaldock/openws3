@@ -5,6 +5,7 @@
 #include "ports.h"
 #include "ctl.h"
 #include "chg.h"
+#include "sup.h"
 #include "cal.h"
 #include "buzz.h"
 #include "tele.h"
@@ -12,6 +13,7 @@
 #define WATCHDOG_MS  500
 #define I_MAX        (2 * CUR_MAX + 7)      /* iu: the charger's over-current threshold at the highest setting (2.8 A) */
 #define S_MAX        3972                   /* the highest rail setpoint the charger itself uses (4.35 V) */
+#define V_MARGIN     46                     /* vu (50 mV): a port is cut this far above the selected target voltage (never above V_FAULT) */
 
 static uint16_t XD req_duty[NPORTS], req_rail, home;          /* what the host asked for; home: the setpoint at entry */
 static uint8_t  XD req_sw, req_flags;
@@ -19,6 +21,7 @@ static uint16_t XD out_duty[NPORTS];                           /* what is applie
 static uint8_t  XD out_sw, out_flags, trip, status, raw_now, session;
 static int16_t  XD rail_duty;
 static uint32_t XD last_cmd;
+static uint16_t XD vcut;
 
 void dev_reset(uint16_t setpoint, int16_t duty, uint8_t flags, uint8_t s)
 {
@@ -56,6 +59,9 @@ int16_t dev_pass(uint8_t supply_stop, uint8_t warm)
 {
     uint8_t k, raw, off, was_sw, lost = hal_ms() - last_cmd > WATCHDOG_MS;
     status = (uint8_t)(lost | (supply_stop << 1));
+    /* the voltage a port is cut at: the selected target + 50 mV, so a host cannot push a cell past what the charger itself would */
+    vcut = sup_target(settings.volt) + V_MARGIN;
+    if (vcut > V_FAULT) vcut = V_FAULT;
     off = lost || supply_stop;
 
     /* rail: the host's raw duty, or the PI loop on its setpoint (back on the entry setpoint when the host is gone) */
@@ -66,7 +72,7 @@ int16_t dev_pass(uint8_t supply_stop, uint8_t warm)
 
     was_sw = out_sw; out_sw = 0;
     for (k = 0; k < NPORTS; k++) {
-        if ((out_duty[k] || (was_sw & (1u << k))) && (adc_get(port_v_ch(k)) >= V_FAULT || adc_get(port_i_ch(k)) >= I_MAX)) trip |= (uint8_t)(1u << k);
+        if ((out_duty[k] || (was_sw & (1u << k))) && (adc_get(port_v_ch(k)) >= vcut || adc_get(port_i_ch(k)) >= I_MAX)) trip |= (uint8_t)(1u << k);
         out_duty[k] = off || (trip & (1u << k)) ? 0 : req_duty[k];
         if (!off && !(trip & (1u << k)) && (req_sw & (1u << k))) out_sw |= (uint8_t)(1u << k);
         hal_pwm(k, out_duty[k]);
