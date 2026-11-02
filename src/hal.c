@@ -199,6 +199,12 @@ uint16_t hal_adc(uint8_t ch)
     return ((uint16_t)ADC_RES << 8) | ADC_RESL;
 }
 
+uint8_t hal_chip_byte(uint8_t n)
+{
+    P_SW2 |= EAXFR;                    /* the CHIPID block is an extended SFR area (also set by pwm_init) */
+    return XB(0xFDE0 + (n & 0x1F));
+}
+
 void hal_reboot_isp(void)
 {
     static volatile uint16_t XD d;

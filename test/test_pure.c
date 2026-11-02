@@ -293,9 +293,14 @@ static void t_dbg(void)
     CHECK(!strncmp(dbg_text(1, 3), "VIN  766  5.042V", 16));                            /* raw count, corrected volts */
     CHECK(!strncmp(dbg_text(1, 4), "RAIL 3975  4.362V", 17));
     CHECK(!strncmp(dbg_text(1, 5), "RAIL PWM 187/400", 16));
-    CHECK(!strncmp(dbg_text(1, 6), "ADC0 (THERM) 2345", 17));
-    CHECK(!strncmp(dbg_text(1, 7), "FAN P0.7  ON", 12));
-    CHECK(!strncmp(dbg_text(1, 9), "UPTIME 123 s", 12));
+    CHECK(!strncmp(dbg_text(1, 6), "THERM 2345  FAN ON", 18));
+    dbg_view.chip_id = 0;                                                               /* version A: no CHIPID block */
+    CHECK(!strncmp(dbg_text(1, 7), "CHIP A  NO STORED REF", 21));
+    CHECK(!strncmp(dbg_text(1, 9), "UP 123s ", 8));
+    dbg_view.chip_id = 1; dbg_view.chip_bgv = 1187;                                     /* version B: its measured reference */
+    dbg_view.chip_date[0] = 0x23; dbg_view.chip_date[1] = 0x05; dbg_view.chip_date[2] = 0x14;
+    CHECK(!strncmp(dbg_text(1, 7), "CHIP B  REF 1187mV", 18));
+    CHECK(!strncmp(dbg_text(1, 9), "UP 123s  TEST 23-05-14", 22));
     CHECK(!strncmp(dbg_text(2, 4), "P4 3970 4.357", 13));
     CHECK(!strncmp(dbg_text(3, 4), "P4  22  308 D345 CHARGE", 23));
     CHECK(!strncmp(dbg_text(4, 1), "RUN 0  VOLT 1 4.35V", 19));

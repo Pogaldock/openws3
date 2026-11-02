@@ -25,6 +25,9 @@ typedef struct {
     uint8_t  run, stop, alarm, strap, rail_hold, fan, usb;
     uint8_t  held[NPORTS];                                   /* chg_out_t.held */
     uint8_t  stack;                                          /* bytes of stack never used since boot */
+    uint8_t  chip_id;                                        /* the CHIPID block is there (STC8H8K64U version B) */
+    uint16_t chip_bgv;                                       /* its factory-measured internal reference, mV */
+    uint8_t  chip_date[3];                                   /* its test date, BCD: year, month, day */
 } dbg_view_t;   /* the settings, limits and targets are read where they live: settings, lim_cfg, lim_out, sup_target() */
 
 /* VCC in mV from the bandgap count: the internal reference is nominally 1.19 V and the ADC is referenced to VCC */

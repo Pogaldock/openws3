@@ -22,6 +22,10 @@ void     hal_reboot_isp(void);                   /* outputs off, then a software
 void     hal_all_off(void);                      /* every enable low, every duty 0, P5.2 low */
 
 uint16_t hal_adc(uint8_t ch);                    /* one 12-bit conversion */
+/* One byte of the chip's read-only CHIPID block (STC8H manual 7.4: FDE0H + n, n = 0..31).  Only some chips have it (STC8H8K64U
+ * version B, not A): byte 31 = 5AH and byte 25 = 00H when it is there.  Bytes 7..8 = the factory-measured internal reference (mV, high
+ * byte first), 27..29 = the chip's test date (BCD year, month, day).  Read only, for the diagnostics. */
+uint8_t  hal_chip_byte(uint8_t n);
 
 /* Settings flash (IAP): one page, see cfg.h. */
 uint8_t  hal_ee_read(uint16_t addr);

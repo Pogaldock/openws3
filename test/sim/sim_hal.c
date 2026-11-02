@@ -138,6 +138,19 @@ uint16_t hal_adc(uint8_t ch)
     return 0;
 }
 
+uint8_t hal_chip_byte(uint8_t n)
+{
+    uint16_t bgv = (uint16_t)(1190.0 * (1 + S.bg_err) + 0.5);
+    switch (n & 31) {
+    case 7: return (uint8_t)(bgv >> 8);
+    case 8: return (uint8_t)bgv;
+    case 25: return 0x00;
+    case 27: return 0x23; case 28: return 0x05; case 29: return 0x14;
+    case 31: return 0x5A;
+    default: return 0x11;
+    }
+}
+
 static uint8_t ee[1024];
 uint8_t hal_ee_read(uint16_t a) { return ee[a & 1023]; }
 void hal_ee_erase(uint16_t a) { memset(ee + (a & 1023 & ~511), 0xFF, 512); }

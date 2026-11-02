@@ -154,6 +154,9 @@ void app_boot(void)
     uint8_t n;
 
     cfg_load();                                      /* flash reads are safe before anything is powered */
+    dbg_view.chip_id = hal_chip_byte(31) == 0x5A && hal_chip_byte(25) == 0x00;     /* the CHIPID block (hal.h), for page 1 */
+    dbg_view.chip_bgv = ((uint16_t)hal_chip_byte(7) << 8) | hal_chip_byte(8);
+    dbg_view.chip_date[0] = hal_chip_byte(27); dbg_view.chip_date[1] = hal_chip_byte(28); dbg_view.chip_date[2] = hal_chip_byte(29);
     th_set(settings.theme); apply_limits();
     input_reset(); buzz_reset(); buzz_enable(settings.sound);
 

@@ -38,10 +38,19 @@ const char *dbg_text(uint8_t page, uint8_t row)
         case 3: rb_str("VIN "); rb_num(dbg_view.adc[ADC_VIN], 4); rb_str("  "); rb_v3(cal_vin_mv(dbg_view.vin)); rb_str("V"); break;
         case 4: rb_str("RAIL "); rb_num(dbg_view.adc[ADC_RAIL], 4); rb_str("  "); rb_v3(cal_port_mv(dbg_view.rail)); rb_str("V"); break;
         case 5: rb_str("RAIL PWM "); rb_num(dbg_view.rail_duty, 3); rb_str("/400"); break;
-        case 6: rb_str("ADC0 (THERM) "); rb_num(dbg_view.adc[0], 4); break;
-        case 7: rb_str("FAN P0.7  "); rb_str(dbg_view.fan ? "ON" : "off"); break;
+        case 6: rb_str("THERM "); rb_num(dbg_view.adc[0], 4); rb_str("  FAN "); rb_str(dbg_view.fan ? "ON" : "off"); break;
+        case 7:                                          /* which chip: version B carries its own measured reference */
+            if (dbg_view.chip_id) { rb_str("CHIP B  REF "); rb_num(dbg_view.chip_bgv, 4); rb_str("mV"); }
+            else rb_str("CHIP A  NO STORED REF");
+            break;
         case 8: rb_str("STRAP "); rb_num(dbg_view.strap, 0); rb_str("  STACK FREE "); rb_num(dbg_view.stack, 0); break;
-        case 9: rb_str("UPTIME "); rb_num(dbg_view.ms / 1000, 0); rb_str(" s"); break;
+        case 9:
+            rb_str("UP "); rb_num(dbg_view.ms / 1000, 0); rb_str("s");
+            if (dbg_view.chip_id) {                      /* the chip's factory test date, YY-MM-DD */
+                rb_str("  TEST ");
+                for (k = 0; k < 3; k++) { if (k) rb_ch('-'); rb_ch((char)('0' + (dbg_view.chip_date[k] >> 4))); rb_ch((char)('0' + (dbg_view.chip_date[k] & 15))); }
+            }
+            break;
         }
         break;
     case 2:
