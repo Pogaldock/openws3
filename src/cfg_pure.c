@@ -11,7 +11,7 @@ uint8_t cfg_valid_current(uint8_t raw)
 
 uint8_t cfg_valid_volt(uint8_t raw) { return raw < NVOLTS ? raw : 0; }
 
-uint8_t cfg_valid_buzzer(uint8_t raw) { return raw != 0; }
+uint8_t cfg_valid_buzzer(uint8_t raw) { return raw == 2 ? 2 : raw != 0; }   /* 0 off, 1 on, 2 on with a heartbeat while charging */
 uint8_t cfg_valid_ilim(uint8_t raw) { return (raw >= ILIM_MIN && raw <= ILIM_MAX) ? raw : ILIM_OFF; }
 uint8_t cfg_valid_vmin(uint8_t raw) { return (raw == VMIN_OFF || (raw >= VMIN_MIN && raw <= VMIN_MAX)) ? raw : VMIN_DEFAULT; }
 uint8_t cfg_valid_lmode(uint8_t raw) { return raw < LM_NMODES ? raw : LM_BY_CH; }

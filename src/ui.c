@@ -11,6 +11,7 @@
 #include "version_build.h"
 #include "sprites.h"
 #include "logo.h"
+#include "stats.h"
 
 #define NELEM (3 + NPORTS * 3)           /* 3 header boxes, then per port: voltage, status text, dot */
 #define NBOX  (3 + NPORTS)               /* the 3 header boxes, then the port cells */
@@ -28,6 +29,7 @@ static uint8_t XD burst[NPORTS];                 /* ROT: visits of static left o
 #define BURST_VISITS 8                           /* one visit per port per 21 control passes: about 0.75 s */
 static uint16_t XD last_cv[NPORTS];              /* ROT: the voltage last shown on a charging port, centivolts */
 static uint8_t XD pulse[NPORTS];                 /* ROT: visits left with that voltage in green, after it rose */
+static uint8_t XD look_p, look_n;                /* ROT: the port that just finished or faulted, and visits left that the eyes look at it */
 
 /* ROT screensaver: no battery anywhere, nothing running, no key changing anything for SAVER_AFTER control passes (about 3 min) */
 #define SAVER_AFTER  40000u
@@ -130,21 +132,30 @@ void ui_splash_frame(uint8_t n) REENT
     lcd_noise(0, 0, LCD_PX_W, 7, (uint16_t)(0x1234 + n * 977u));
     lcd_noise(0, 61, LCD_PX_W, 7, (uint16_t)(0x4321 + n * 613u));
     if (n < 2) return;
-    lcd_fill((uint8_t)(lx - 4), 12, LOGO_W + 8, LOGO_H, th(R_BG));
+    if (n >= 20) {                                    /* a neon flash, then the clean wordmark */
+        lcd_bitmap(lx, 12, LOGO_W, LOGO_H, logo_bits, n == 20 ? th(R_BG) : UI_C_NEON, n == 20 ? UI_C_NEON : th(R_BG));
+        return;
+    }
+    if (n < 10) lcd_fill((uint8_t)(lx - 4), 12, LOGO_W + 8, LOGO_H, th(R_BG));
     s = (uint16_t)(0xACE1 + n * 31u);
-    for (j = 0; j < LOGO_H; j++) {
+    for (j = 0; n < 10 && j < LOGO_H; j++) {
         s = LCD_LFSR(s);
         off = 0;
         if (n < 6 && (s & 3) == 0) off = (int8_t)((s >> 4) & 7) - 3;     /* a quarter of the rows torn by up to 3 pixels */
         if (n < 4 && (s & 0x300) == 0) continue;                       /* and some missing while the signal is weak */
         lcd_bitmap((uint8_t)(lx + off), (uint8_t)(12 + j), LOGO_W, 1, logo_bits + j * LOGO_STRIDE, UI_C_NEON, th(R_BG));
     }
-    if (n == 6 || n == 8) {
+    if (n >= 10 && n <= 14) {                         /* a scan line sweeps the wordmark (44 rows): 11 rows lit white, then neon again */
+        j = (uint8_t)((n - 10) * 11);
+        if (n < 14) lcd_bitmap(lx, (uint8_t)(12 + j), LOGO_W, 11, logo_bits + j * LOGO_STRIDE, th(R_TEXT), th(R_BG));
+        if (j) { j -= 11; lcd_bitmap(lx, (uint8_t)(12 + j), LOGO_W, 11, logo_bits + j * LOGO_STRIDE, UI_C_NEON, th(R_BG)); }
+    }
+    if (n == 6 || n == 16 || n == 18) {
         uint8_t k, sx[2], sy = (uint8_t)(34 - sh / 2);
         sx[0] = (uint8_t)((lx - sw) / 2); sx[1] = (uint8_t)(lx + LOGO_W + (LCD_PX_W - lx - LOGO_W - sw) / 2);
         for (k = 0; k < 2; k++) {
             if (n == 6) lcd_bitmap(sx[k], sy, sw, sh, SPR_BITS(SPR_SKULL), th(R_TEXT), th(R_BG));
-            else {                                    /* the pupils (sprite row 8, columns 4 and 12) light up as green crosses */
+            else if ((n == 16) == (k == 0)) {         /* the eyes open one by one: the pupils (sprite row 8, columns 4 and 12) light green */
                 lcd_fill((uint8_t)(sx[k] + 3), (uint8_t)(sy + 8), 3, 1, UI_C_NEON); lcd_fill((uint8_t)(sx[k] + 4), (uint8_t)(sy + 7), 1, 3, UI_C_NEON);
                 lcd_fill((uint8_t)(sx[k] + 11), (uint8_t)(sy + 8), 3, 1, UI_C_NEON); lcd_fill((uint8_t)(sx[k] + 12), (uint8_t)(sy + 7), 1, 3, UI_C_NEON);
             }
@@ -167,16 +178,47 @@ void ui_splash(void)
     centered(54, "V" STR(FW_MAJOR) "." STR(FW_MINOR) FW_STAGE " " FW_BUILD_STR, 1, 1, th(R_DIM), th(R_BG));
 }
 
+/* ROT: the end of a run.  Static floods the screen, the wordmark burns through it in neon, then green flashes; the summary is
+ * drawn over the last frame by the app. */
+void ui_finale_frame(uint8_t n)
+{
+    static uint8_t XD lx, y;
+    lx = (uint8_t)((LCD_PX_W - LOGO_W) / 2);
+    if (n < 8) { lcd_noise(0, (uint8_t)(n * 10), LCD_PX_W, 10, (uint16_t)(0x51CA + n * 733u)); return; }   /* static floods down */
+    y = (uint8_t)((n - 8) * 6);                                       /* then the wordmark burns through, 6 rows a frame */
+    if (y >= LOGO_H) return;
+    lcd_fill(0, (uint8_t)(18 + y), LCD_PX_W, 6, th(R_BG));
+    lcd_bitmap(lx, (uint8_t)(18 + y), LOGO_W, (uint8_t)(LOGO_H - y < 6 ? LOGO_H - y : 6), logo_bits + y * LOGO_STRIDE, UI_C_NEON, th(R_BG));
+}
+
 static char XD mbig[8];                              /* the big line of the message on the screen */
 
+/* A message screen in parts: 0-3 clear the screen in four strips of 20 rows, 4 the title, 5 the line under it, 6 the big line, 7 the
+ * small one.  Each part is under 40 ms on the panel, so a screen drawn one part per control pass never stalls the control loop
+ * (ui_message, which draws them all at once, is for screens shown while nothing is charging). */
+uint8_t XD ui_msg_later;
+static uint8_t XD m_role;                             /* the message being drawn (ui_message_set): external RAM, no parameters */
+static const char *XD m_title, *XD m_line2, *XD m_big, *XD m_small;
+
+void ui_message_part(uint8_t part)
+{
+    if (part < 4) {
+        lcd_fill(0, (uint8_t)(part * 20), LCD_PX_W, 20, th(R_BG));
+        if (ROT && part == 0) lcd_noise(0, 0, LCD_PX_W, 4, 0xB0B0);
+        if (ROT && part == 3) lcd_noise(0, 76, LCD_PX_W, 4, 0x0666);
+    } else if (part == 4) centered(6, m_title, 1, 2, th(m_role), th(R_BG));
+    else if (part == 5) centered(28, m_line2, 1, 1, th(R_TEXT), th(R_BG));
+    else if (part == 6) { if (m_big) { centered(42, m_big, 2, 2, th(R_WARN), th(R_BG)); scopy(mbig, m_big); } else mbig[0] = 0; }
+    else if (m_small) centered(60, m_small, 1, 1, th(R_DIM), th(R_BG));
+}
+
+/* store the message, then draw all its parts at once (a screen shown while nothing charges) */
 void ui_message(uint8_t role, const char *title, const char *line2, const char *big, const char *small)
 {
-    lcd_fill(0, 0, LCD_PX_W, LCD_PX_H, th(R_BG));
-    if (ROT) { lcd_noise(0, 0, LCD_PX_W, 4, 0xB0B0); lcd_noise(0, 76, LCD_PX_W, 4, 0x0666); }
-    centered(6, title, 1, 2, th(role), th(R_BG));
-    centered(28, line2, 1, 1, th(R_TEXT), th(R_BG));
-    if (big) { centered(42, big, 2, 2, th(R_WARN), th(R_BG)); scopy(mbig, big); } else mbig[0] = 0;
-    if (small) centered(60, small, 1, 1, th(R_DIM), th(R_BG));
+    static uint8_t XD part;
+    m_role = role; m_title = title; m_line2 = line2; m_big = big; m_small = small;
+    if (ui_msg_later) return;                        /* the caller draws the parts one per pass */
+    for (part = 0; part < UI_MSG_PARTS; part++) ui_message_part(part);
 }
 
 /* The big line is drawn again in place, only the characters that changed: clearing it first would flash it. */
@@ -302,7 +344,9 @@ static void header(const ui_state_t *s, uint8_t e, char XD *t) REENT
         fmt_a1(t, cal_set_to_ma(s->iset));
         if (s->mixed) { uint8_t n = slen(t); t[n] = '*'; t[n + 1] = 0; }
     } else if (e == 1) {
+        static const CODE char *const VIEW[] = { "CURRENT", "MAH IN", "TO FULL", "HEALTH" };   /* by UV_* */
         if (s->alarm) { scopy(t, ALARM[s->alarm]); col = th(R_WARN); }
+        else if (s->view_lbl) { scopy(t, VIEW[s->view]); col = th(R_INFO); }
         else if (s->usb_off && s->tphase) { scopy(t, "USB OFF"); col = th(R_GOOD); }   /* 1 s in 4, like the targets in the port cells */
         else { fmt_vin(t, cal_vin_mv(s->vin)); col = s->usb_off ? th(R_GOOD) : th(R_VIN); }
     } else fmt_v2(t, cal_port_mv(s->tgt));
@@ -358,6 +402,54 @@ static void charge_bar(const ui_state_t *s) REENT
 /* "0.5A", the current a port charges at */
 static void amps1(char XD *t, uint8_t iu) { fmt_a1(t, cal_set_to_ma(iu)); }
 
+/* ROT: a port's eye.  Charging, it looks around (faster the more current flows), and for a while after a port finishes or faults
+ * every eye looks at that port; it fills with green from the bottom as the cell nears the target (0.9 V below it = empty).
+ * One plain step per statement, all in external RAM: element(), which calls this, is the deepest stack frame of the firmware. */
+#define EYE_H 7                                    /* the eye sprites are 7 x 7, one byte a row (sprites.txt) */
+static uint8_t XD eye_spr, eye_lvl;
+static void eye(const ui_state_t *s, uint8_t p, uint8_t st)
+{
+    static const CODE uint8_t GAZE[8] = { SPR_EYE_OPEN, SPR_EYE_OPEN, SPR_EYE_LEFT, SPR_EYE_OPEN, SPR_EYE_OPEN, SPR_EYE_RIGHT, SPR_EYE_OPEN, SPR_EYE_HALF };
+    static uint16_t XD q, t;
+    static uint8_t XD c, lc;
+    eye_spr = st; eye_lvl = 0;
+    if (st != PS_CHARGE) return;
+    q = s->i[p]; q /= 16u; q += 1u; q *= anim; q >>= 8; q += p * 3u;
+    eye_spr = GAZE[(uint8_t)q & 7];
+    if (look_n) {
+        c = p % 3; lc = look_p % 3;
+        eye_spr = lc < c ? SPR_EYE_LEFT : lc > c ? SPR_EYE_RIGHT : SPR_EYE_OPEN;
+    }
+    t = cal_port_mv(s->tgt); q = cal_port_mv(s->v[p]);
+    q = t > q ? t - q : 0;
+    if (q >= 900u) return;
+    q = 900u - q; q *= EYE_H; q /= 900u;
+    eye_lvl = (uint8_t)q;
+}
+
+/* the lower line of a cell in the views other than the current: 6 characters; 0 = nothing to say yet (the current is shown) */
+static uint8_t view_text(const ui_state_t *s, uint8_t p, char XD *t) REENT
+{
+    static uint16_t XD q;
+    static uint8_t XD n;
+    if (s->view == UV_MAH) { n = fmt_u(t, stats.mah[p]); scopy(t + n, "MAH"); return 1; }
+    if (s->view == UV_ETA) {
+        q = stats.eta_s[p];
+        if (!q) { scopy(t, "DONE"); return 1; }
+        if (q == ETA_UNKNOWN) { scopy(t, "@?MIN"); return 1; }
+        q = (uint16_t)((q + 59u) / 60u);                                   /* minutes, rounded up: "~12MIN", from 100 on "~123M" */
+        t[0] = '@';                                                   /* drawn as a tilde: an estimate */
+        n = (uint8_t)(1 + fmt_u(t + 1, q));
+        scopy(t + n, q < 100 ? "MIN" : "M");
+        return 1;
+    }
+    q = stats.r_mohm[p];                                                   /* UV_HEALTH: the grade, 1 s in 4 the number */
+    if (!q) { scopy(t, "--"); return 1; }
+    if (s->tphase) { n = fmt_u(t, q); scopy(t + n, "MR"); return 1; }
+    { static const CODE char *const G[] = { "", "GOOD", "TIRED", "RETIRE" }; scopy(t, G[stats_grade(q)]); }
+    return 1;
+}
+
 /* where the two text fields of a port cell sit, by part: the voltage (1x2), the line under it (1x1) */
 static const CODE struct { uint8_t dx, dy, sy; } FLD[2] = { { UI_CELL_VX, UI_CELL_VY, 2 }, { UI_CELL_IX, UI_CELL_IY, 1 } };
 
@@ -377,7 +469,7 @@ static void element(const ui_state_t *s, uint8_t e) REENT
     if (ROT && !s->ps) {
         /* a port that has just gone full dissolves into static for a moment, then is stamped white (the box is repainted) */
         if (part == 0) {
-            if (st == PS_FULL && last_st[p] != 0xFF && last_st[p] != PS_FULL) burst[p] = BURST_VISITS;
+            if ((st == PS_FULL || st == PS_FAULT) && last_st[p] != 0xFF && last_st[p] != st) { burst[p] = BURST_VISITS; look_p = p; look_n = 40; }
             last_st[p] = st;
             if (burst[p]) {
                 lcd_noise((uint8_t)(x + 1), (uint8_t)(y + 2), UI_BOX_W - 2, UI_CELL_H - 4, (uint16_t)(anim * 7u + p));
@@ -419,23 +511,26 @@ static void element(const ui_state_t *s, uint8_t e) REENT
         static const CODE char *const NAME[] = { "", "TEST", "", "REST", "FULL", "BLEED", "ERR" };   /* by PS_* */
         fg = status_color(st);
         if (st == PS_IDLE && off) { scopy(t, "OFF"); fg = th(R_DIM); }
-        else if ((st == PS_CHARGE && s->tphase) || st == PS_IDLE) { t[0] = '>'; amps1(t + 1, s->want[p]); fg = th(R_INFO); }
+        else if ((st == PS_CHARGE && s->tphase && !s->view) || st == PS_IDLE) { t[0] = '>'; amps1(t + 1, s->want[p]); fg = th(R_INFO); }
         else if (st == PS_CHARGE && s->parked[p]) { scopy(t, "LIMIT"); fg = th(R_WARN); }      /* waiting for room under a user limit */
+        else if (s->view && (st == PS_CHARGE || st == PS_FULL) && view_text(s, p, t)) fg = full ? fg : th(R_INFO);   /* a full cell keeps its own colours */
         else if (st == PS_CHARGE) fmt_a2(t, cal_port_ma(s->i[p]));
         else scopy(t, NAME[st]);
-        pad(t, 5);
+        pad(t, 6);
     } else {
         st &= 7;
         fg = th(R_DOT0 + st);
         if (st == PS_FAULT && !s->blink) fg = bg;              /* errors blink */
         if (ROT) {
             /* sprites 0..6 are the PS_* icons; a charging eye looks around and blinks, each port out of step with the others */
-            static const CODE uint8_t GAZE[8] = { SPR_EYE_OPEN, SPR_EYE_OPEN, SPR_EYE_LEFT, SPR_EYE_OPEN, SPR_EYE_OPEN, SPR_EYE_RIGHT, SPR_EYE_OPEN, SPR_EYE_HALF };
-            static uint8_t XD spr;                    /* external RAM: element's stack frame stays at its stock size */
-            spr = st == PS_CHARGE ? GAZE[(uint8_t)((anim >> 8) + p * 3) & 7] : st;
-            if (changed(e, fg) | (shown[e][1] != (char)(spr + 1))) {
-                shown[e][1] = (char)(spr + 1);
+            static uint8_t XD spr, lvl, h;            /* external RAM: element's stack frame stays at its stock size */
+            eye(s, p, st);                            /* eye_spr, eye_lvl, eye_h: worked out outside this deep frame */
+            spr = eye_spr; lvl = eye_lvl;
+            h = (uint8_t)((spr << 4) + lvl + 1);      /* what is drawn: the sprite and its green level, in one byte */
+            if (changed(e, fg) | (shown[e][1] != (char)h)) {
+                shown[e][1] = (char)h;
                 lcd_bitmap(x + UI_DOT_X, y + UI_DOT_Y - 1, spr_w[spr], spr_h[spr], SPR_BITS(spr), fg, bg);
+                if (lvl) lcd_bitmap(x + UI_DOT_X, (uint8_t)(y + UI_DOT_Y - 1 + EYE_H - lvl), EYE_H, lvl, SPR_BITS(spr) + EYE_H - lvl, UI_C_NEON, bg);
             }
         } else if (changed(e, fg)) lcd_fill(x + UI_DOT_X, y + UI_DOT_Y, UI_DOT_S, UI_DOT_S, fg);
         return;
@@ -485,12 +580,19 @@ static void saver_strip(void) REENT
                       y >= ly && y < ly + LOGO_H ? logo_bits + (y - ly) * LOGO_STRIDE : 0, lx, LOGO_W, (uint8_t)keep, UI_C_NEON);
     }
     if (++saver_row == LCD_PX_H / 4) saver_row = 0;
+    /* three small skulls drift across at their own speeds; static fills in behind them */
+    for (r = 0; r < 3; r++) {
+        y = (uint8_t)(((anim >> 3) * (r + 1u) + r * 53u) % (LCD_PX_W - 7));
+        if (y > r) lcd_noise((uint8_t)(y - r - 1), (uint8_t)(6 + r * 30), (uint8_t)(r + 1), 7, anim);   /* static over where it just was */
+        lcd_bitmap(y, (uint8_t)(6 + r * 30), 7, 7, SPR_BITS(SPR_SKULL_S), UI_C_NEON, th(R_BG));
+    }
 }
 
 void ui_main_step(const ui_state_t *s)
 {
     uint8_t e = next_el;
     anim++;
+    if (look_n && e == 0) look_n--;                   /* counted in rounds of the screen (21 passes): about 4 s */
     if (ROT) {
         if (quiet(s)) { if (quiet_n < SAVER_AFTER) quiet_n++; }
         else {

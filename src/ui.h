@@ -20,17 +20,26 @@ typedef struct {
     uint8_t  mixed;                       /* some port has its own value or is off: the current box gets a marker */
     uint8_t  ps;                          /* 0: main screen; port settings mode: 1 selecting, 2 editing */
     uint8_t  sel, locked;                 /* port settings: the selected port; charging, nothing can be edited */
+    uint8_t  view;                        /* charging, what a cell's lower line shows: UV_* (stats.h numbers) */
+    uint8_t  view_lbl;                    /* the view was just changed: its name is in the input box */
 } ui_state_t;
+
+enum { UV_CURRENT = 0, UV_MAH, UV_ETA, UV_HEALTH };
 
 void ui_splash(void);
 /* The splash animation (ROT theme only; other themes draw nothing): call ui_splash, then frames 0..UI_SPLASH_FRAMES-1, one every
  * UI_SPLASH_MS.  Drawing a frame takes about 75 ms on the panel. */
-#define UI_SPLASH_FRAMES 10
+#define UI_SPLASH_FRAMES 22
 #define UI_SPLASH_MS     60
 void ui_splash_frame(uint8_t n) REENT;
 /* full-screen message: the title (1x2, in the colour of role), a line under it (1x1) and up to two more lines (big 2x2, small 1x1); 0 = none */
 void ui_message(uint8_t role, const char *title, const char *line2, const char *big, const char *small);
-void ui_message_big(const char *big);     /* only the big line of the message on the screen, again (a number that changes) */
+void ui_message_big(const char *big);
+void ui_finale_frame(uint8_t n);       /* ROT: one frame (0 .. UI_FINALE_FRAMES-1) of the end-of-run animation, under 40 ms each */
+#define UI_FINALE_FRAMES 16
+extern uint8_t XD ui_msg_later;          /* set: ui_message only stores the message, then ui_message_part draws it a part at a time */
+void ui_message_part(uint8_t part);
+#define UI_MSG_PARTS 8                     /* ui_message in parts, one per control pass: see ui.c */     /* only the big line of the message on the screen, again (a number that changes) */
 void ui_main_init(void);                  /* draws the frame; elements fill in over the next calls (also when ps changes) */
 void ui_main_step(const ui_state_t *s);   /* refresh one element: the main screen, or with ps set the port settings mode on it */
 

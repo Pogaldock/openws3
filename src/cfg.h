@@ -12,7 +12,7 @@
 typedef struct {
     uint8_t cur;                      /* charge current, iu: 21..91 (0.3..1.3 A) */
     uint8_t volt;                     /* target voltage, sup.h VOLT_* */
-    uint8_t sound;                    /* 1 = beeps on */
+    uint8_t sound;                    /* 0 off, 1 on, 2 on with a heartbeat while charging */
     uint8_t theme;                    /* theme.h TH_* */
     uint8_t ilim, vmin, vcut, lmode;  /* input limits, limits.h lim_cfg_t */
     uint8_t ch_cur[NPORTS];           /* a current per port, 0 = the global one */
@@ -25,7 +25,7 @@ extern cfg_t XD settings;
 /* pure: turn a raw stored byte into a valid setting (erased flash = 0xFF -> default) */
 uint8_t cfg_valid_current(uint8_t raw);       /* 21, 28 ... 91, else 21 */
 uint8_t cfg_valid_volt(uint8_t raw);          /* 0..3 (4.20 / 4.35 / 3.80 / 3.85 V), else 0 */
-uint8_t cfg_valid_buzzer(uint8_t raw);        /* anything but 0 = on (erased 0xFF = on) */
+uint8_t cfg_valid_buzzer(uint8_t raw);        /* 0 off, 2 on with a heartbeat while charging, anything else on (erased 0xFF = on) */
 uint8_t cfg_valid_ilim(uint8_t raw);          /* 0 (off) or 5..100 (0.1 A), else 0 */
 uint8_t cfg_valid_vmin(uint8_t raw);          /* 0 (off) or 96..230 (limits.h VMIN_MV), else 4.90 V */
 uint8_t cfg_valid_lmode(uint8_t raw);         /* a limits.h LM_* regulation mode, else LM_BY_CH */

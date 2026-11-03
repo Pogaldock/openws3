@@ -19,9 +19,10 @@
 #include "layout.h"
 #include "menu.h"
 #include "limits.h"
-#include "dev.h"
 #include "portset.h"
 #include "tele.h"
+#include "stats.h"
+#include <string.h>
 
 #define BOOT_RAIL_PASSES 150      /* the rail is brought up under the regulator for this many 2 ms steps before the display starts */
 #define TEST_TRIES       3        /* the rail self-test: failed this many times with the rail up, it is fatal */
@@ -50,6 +51,18 @@ static ui_state_t XD ui;
 static sup_in_t  XD sin;
 static sup_out_t XD sout;
 static tele_ctx_t XD tctx;                    /* what the telemetry reads (tele.h): pointers into the state above */
+
+/* WS3 Unlocked: what the port cells show while charging (B2), the end of a run and the storage reminder */
+#define VIEW_LABEL_MS   1500                  /* the name of a new view stays in the input box this long */
+#define STORE_AFTER_S   7031u                 /* every cell full 2 h (in 1.024 s) at 4.20 / 4.35 V: offer the storage voltage ... */
+#define STORE_AGAIN_S   586u                  /* ... again 10 min later if nobody answered ... */
+#define STORE_ASKS      3                     /* ... this many times at most */
+#define FINALE_PASSES   12                    /* ROT: a frame of the end-of-run animation every this many passes (ui.h) */
+static uint8_t  XD view, done, store_asks, sum_mode, sum_frame, sum_div;   /* sum_mode: 0 run summary, 1 storage offer */
+static uint32_t XD now_ms;                    /* hal_ms() once a pass */
+static uint16_t XD last_lo, view_lo;          /* its low 16 bits: the previous pass; when the view's name goes */
+static uint16_t XD now_s, run_s, done_s, ask_s, el_s;    /* "seconds" of 1.024 s (hal_ms >> 10): 16 bits, plain compares */
+#define S_OF(ms) ((uint16_t)((ms) / 1024UL))
 
 /* ------------------------------------------------------------------------------------------------------------- */
 
@@ -161,7 +174,7 @@ void app_boot(void)
     dbg_view.chip_ram_bgv = hal_ram_bgv();           /* version A: the loader's copy in RAM (hal.h), shown only */
     dbg_view.chip_date[0] = hal_chip_byte(27); dbg_view.chip_date[1] = hal_chip_byte(28); dbg_view.chip_date[2] = hal_chip_byte(29);
     th_set(settings.theme); apply_limits();
-    input_reset(); buzz_reset(); buzz_enable(settings.sound);
+    input_reset(); buzz_reset(); buzz_enable(settings.sound); buzz_bank(settings.theme == TH_ROT);
 
     tctx.out = &cout; tctx.in = &cin; tctx.sup = &sout; tctx.rail_duty = &rail_duty;
     tctx.screen = &screen; tctx.run = &run; tctx.rail_hold = &rail_hold; tctx.strap = &strap;
@@ -193,7 +206,10 @@ void app_boot(void)
     hal_wdt_feed();
     ui_splash();
     buzz_play(PAT_BOOT);
-    if (th_get() == TH_ROT) { for (n = 0; n < UI_SPLASH_FRAMES; n++) { hal_wdt_feed(); ui_splash_frame(n); hal_delay_ms(UI_SPLASH_MS); } }
+    if (th_get() == TH_ROT) {                       /* about 3 s; any key skips the rest */
+        for (n = 0; n < UI_SPLASH_FRAMES && input_get() == EV_NONE; n++) { hal_wdt_feed(); ui_splash_frame(n); hal_delay_ms(UI_SPLASH_MS); }
+        while (input_get() != EV_NONE) ;
+    }
     else hal_delay_ms(1000);
     hal_wdt_feed();
 
@@ -220,35 +236,16 @@ static uint8_t start_run(void)
     if (save_at) save_main();
     if (run || sout.stop != STOP_NONE || fatal_code || !test_ok) return 0;
     run = 1; stop_reason = 0; chg_init(); lim_reset();
+    stats_start(); done = 0; store_asks = 0; run_s = now_s;
     return 1;
 }
 
-/* ---- screens: the menu, the diagnostics pages it leads to, developer mode ---- */
+/* ---- screens: the menu and the diagnostics pages it leads to.  (OpenWS3's developer mode, where a host drove the outputs by
+   hand, is removed in WS3 Unlocked: USB commands 7 to 9 are unknown.) ---- */
 static void show(uint8_t s)
 {
     screen = s; text_row = 0;
-    if (s == SCR_DEV) ui_message(R_BAD, "DEV MODE", "HOLD BOTH KEYS TO EXIT", 0, 0);
-    else ui_text_enter();
-}
-
-/* developer mode (dev.h): every output off first, the rail stays regulated where it is */
-static void dev_enter(uint8_t session)
-{
-    if (screen && screen != SCR_DEV) cfg_save();     /* the menu may have been open: its values are applied, keep them */
-    outputs_off();
-    dev_reset(sup_setpoint(settings.volt), rail_duty, strap || settings.usb_off ? 0 : DF_PROFILE, session);     /* the profile pin as at boot */
-    if (screen != SCR_DEV) show(SCR_DEV);
-}
-
-static void dev_leave(void)
-{
-    outputs_off();
-    hal_profile(!strap);
-    ctl_rail_reset(rail_duty);
-    chg_init(); lim_reset();
-    screen = 0;
-    ui_main_init();
-    buzz_play(PAT_KEY);
+    ui_text_enter();
 }
 
 /* host commands (USB.md): executed here, in the main loop, with the same rules as the buttons */
@@ -258,7 +255,7 @@ static void usb_service(void)
     if (!usb_cmd_get(c)) return;
     switch (c[0]) {
     case 1: if (run) stop_run(STOP_USER); break;                                       /* stop (always allowed) */
-    case 2: res = screen != SCR_DEV && start_run() ? 0 : 1; break;                    /* start (not in developer mode) */
+    case 2: res = start_run() ? 0 : 1; break;                                          /* start */
     case 3:                                                                            /* set current (units), not while running */
         if (run || !cal_cur_valid(c[1])) { res = 1; break; }
         settings.cur = c[1]; save_later();         /* written once the host stops changing it: flash wear */
@@ -269,12 +266,6 @@ static void usb_service(void)
         break;
     case 5: break;                                                                     /* ping */
     case 6: if (run) { res = 1; break; } hal_reboot_isp(); break;                      /* reboot into the USB ISP loader (not while charging) */
-    case 7:                                                                            /* developer mode, byte 1 = session (not while charging, */
-        if (run || fatal_code || !c[1] || (screen == SCR_DEV && dev_taken(c[1]))) { res = 1; break; }   /* nor while another host drives it; session 1..255) */
-        dev_enter(c[1]);
-        break;
-    case 8: if (screen != SCR_DEV || !dev_set(c)) res = 1; break;                     /* developer mode: the outputs (the owner only) */
-    case 9: if (screen == SCR_DEV && !dev_taken(c[1])) dev_leave(); else res = 1; break;   /* leave developer mode (its owner, byte 1 = session) */
     case 10:                                                                           /* one port's value (portset.h): byte 1 = port, */
         if (run || c[1] >= NPORTS || !portset_valid(c[3]) || (screen == SCR_PORTS && portset_editing())) { res = 1; break; }   /* byte 3 */
         portset_put(c[1], c[3]); save_later();
@@ -317,14 +308,64 @@ static void ports_leave(void) { cfg_save(); screen = 0; ui_main_init(); }
 
 static void ports_key(uint8_t ev) { mode_result(portset_event(ev), 0, ports_leave); }
 
+/* the end of a run (every cell full): its summary, or the offer to take the cells down to the storage voltage */
+static char XD sum_l2[22], sum_big[8], sum_small[24];
+static void summary_text(void)
+{
+    static uint8_t XD n;
+    n = fmt_u(sum_l2, stats.packs); strcpy(sum_l2 + n, stats.packs == 1 ? " PACK  " : " PACKS  ");
+    n = (uint8_t)strlen(sum_l2);
+    el_s = now_s; el_s -= run_s; el_s /= 59u;                        /* minutes (59 x 1.024 s) */
+    n += fmt_u(sum_l2 + n, el_s); strcpy(sum_l2 + n, " MIN");
+    n = fmt_u(sum_big, stats.total_mah); strcpy(sum_big + n, "MAH");
+    if (stats.weak < NPORTS) {
+        strcpy(sum_small, "WEAKEST P"); sum_small[9] = (char)('1' + stats.weak); sum_small[10] = ' ';
+        n = 11 + fmt_u(sum_small + 11, stats.r_mohm[stats.weak]); strcpy(sum_small + n, " MOHM");
+    } else strcpy(sum_small, "ANY KEY: BACK");
+}
+
+/* one part of the summary (or of the storage offer), one per control pass */
+static void summary_part(uint8_t part)
+{
+    if (!part) {
+        ui_msg_later = 1;
+        if (sum_mode) ui_message(R_WARN, "STORE THEM?", "FULL FOR 2 HOURS", settings.volt == VOLT_4_35 ? "3.85V" : "3.80V", "B2 STORAGE   B1 KEEP");
+        else ui_message(R_GOOD, "ALL FULL", sum_l2, sum_big, sum_small);
+        ui_msg_later = 0;
+    }
+    ui_message_part(part);
+}
+
+/* the finale frames (ROT, the run summary only), then the message parts, one step every few passes */
+static void summary_open(uint8_t mode)
+{
+    screen = SCR_SUMMARY; sum_mode = mode; sum_div = 0;
+    sum_frame = mode || th_get() != TH_ROT ? UI_FINALE_FRAMES : 0;
+    if (!mode) summary_text();
+}
+static void summary_close(void) { screen = 0; ui_main_init(); }
+
+static void summary_key(uint8_t ev)
+{
+    if (sum_mode && ev == EV_B2) {                   /* storage: the same run again at the storage voltage (bleed or charge to it) */
+        if (run) stop_run(STOP_USER);
+        settings.volt = settings.volt == VOLT_4_35 ? VOLT_3_85 : VOLT_3_80;
+        save_later();
+        start_run();
+        store_asks = STORE_ASKS;
+    } else if (sum_mode) store_asks = STORE_ASKS;    /* keep them full: not asked again in this run */
+    buzz_play(PAT_KEY);
+    summary_close();
+}
+
 static void handle_buttons(void)
 {
     uint8_t ev;
     input_style(screen ? IS_NAV : IS_MAIN);
     while ((ev = input_get()) != EV_NONE) {
-        if (screen == SCR_DEV) { if (ev == EV_BACK) dev_leave(); continue; }     /* the buttons are only watched (page 3) */
         if (screen == SCR_MENU) { menu_key(ev); continue; }
         if (screen == SCR_PORTS) { ports_key(ev); continue; }
+        if (screen == SCR_SUMMARY) { summary_key(ev); continue; }
         if (screen) {                                    /* diagnostics: right = next page, left = previous, BACK = the menu */
             if (ev == EV_B2) show((uint8_t)(screen % DBG_PAGES + 1));
             else if (ev == EV_B1) show((uint8_t)(screen == 1 ? DBG_PAGES : screen - 1));
@@ -350,7 +391,11 @@ static void handle_buttons(void)
         case EV_OK: menu_enter(); buzz_play(PAT_KEY); break;
         case EV_B2_LONG: ports_enter(); buzz_play(PAT_KEY); break;
         case EV_B2:
-            if (!run) {                                  /* no voltage change while charging */
+            if (run) {                                   /* charging: what the cells show (current, mAh, time to full, health) */
+                view = (uint8_t)((view + 1) & 3);
+                view_lo = (uint16_t)now_ms; view_lo += VIEW_LABEL_MS;
+                buzz_play(PAT_KEY);
+            } else {                                     /* no voltage change while charging */
                 settings.volt = (uint8_t)((settings.volt + 1) % NVOLTS);
                 buzz_play(PAT_KEY);
                 save_later();
@@ -380,6 +425,40 @@ static void fatal_pass(void)
     tele_pass(PH_FATAL);
 }
 
+/* After the charge control: the measurements (stats.h: they only read), the heartbeat, the end of the run and the storage reminder.
+   One plain step per statement with external-RAM values: the direct RAM is full. */
+static void end_of_run(void)
+{
+    static uint8_t XD k, busy_ports, full;
+    static uint16_t XD dt;
+    memcpy(&stats_in, &cout, sizeof cout);
+    dt = (uint16_t)now_ms; dt -= last_lo; last_lo = (uint16_t)now_ms;
+    stats_pass(cin.tgt, settings.volt, dt);
+    if (!run) return;
+    busy_ports = 0; full = 0;
+    for (k = 0; k < NPORTS; k++) {
+        if (cout.state[k] == PS_FULL) full++;
+        else if (cout.state[k] == PS_CHARGE) busy_ports |= 0x80;
+        if (cout.state[k] != PS_IDLE && cout.state[k] != PS_FAULT && cout.state[k] != PS_FULL) busy_ports++;
+    }
+    if (settings.sound == 2 && (busy_ports & 0x80) && !buzz_busy() && (now_ms & 0xFFF) < 8) buzz_play(PAT_HEART);   /* about every 4 s */
+    if (!full || (busy_ports & 0x7F)) { done = 0; return; }
+    if (!done) {                                     /* every cell is full: the finale and the summary */
+        done = 1; done_s = now_s; ask_s = now_s;
+        buzz_play(PAT_FINALE);
+        if (!screen && !cond) summary_open(0);
+        return;
+    }
+    if (settings.volt > VOLT_4_35 || store_asks >= STORE_ASKS) return;
+    el_s = now_s; el_s -= done_s;
+    if (el_s < STORE_AFTER_S) return;
+    el_s = now_s; el_s -= ask_s;
+    if (store_asks && el_s < STORE_AGAIN_S) return;
+    store_asks++; ask_s = now_s;                   /* full this long: offer the storage voltage */
+    buzz_play(PAT_STORE);
+    if (screen == SCR_SUMMARY || (!screen && !cond)) summary_open(1);
+}
+
 void app_pass(void)
 {
     uint8_t k;
@@ -390,6 +469,7 @@ void app_pass(void)
     if ((int32_t)(hal_ticks() - t_next) > 4 * PASS_TICKS) t_next = hal_ticks();       /* fell behind: do not burst */
 
     adc_scan();
+    now_ms = hal_ms(); now_s = S_OF(now_ms);
     if (!++stack_div) stack_free = hal_stack_free();
     if (fatal_code) { fatal_pass(); return; }
     handle_buttons();
@@ -398,22 +478,22 @@ void app_pass(void)
     if (screen == SCR_PORTS) {
         portset_context(run);
         if (portset_pass() == MA_EXIT) ports_leave();                       /* 10 s without a key */
-    } else if (screen && screen != SCR_DEV) {        /* menu values apply while they are edited; they are saved when the menu closes */
-        buzz_enable(settings.sound);
+    } else if (screen && screen != SCR_SUMMARY) {    /* menu values apply while they are edited; they are saved when the menu closes */
+        buzz_enable(settings.sound); buzz_bank(settings.theme == TH_ROT);
         if (settings.usb_off) hal_profile(0);        /* DISABLE USB POWER takes effect at once; turning it off again waits for the next start */
         if (settings.theme != th_get()) { th_set(settings.theme); show(screen); }   /* repaint the menu in the new colours */
         apply_limits();
         menu_context(run);
     }
-    if (screen != SCR_DEV) rail_step();              /* developer mode runs the rail itself */
+    rail_step();
 
     /* ---- supervision ---- */
     sin.vin = adc_get(ADC_VIN); sin.rail = adc_get(ADC_RAIL); sin.rail_sat = adc_saturated(ADC_RAIL); sin.bandgap = adc_get(ADC_BANDGAP); sin.adc0 = adc_get(0);
-    sin.setpoint = screen == SCR_DEV ? dev_setpoint() : sup_setpoint(settings.volt);
+    sin.setpoint = sup_setpoint(settings.volt);
     sup_pass(&sin, &sout);
     if (sout.fatal) { go_fatal(sout.fatal); return; }
     cond = sout.stop;                                /* STOP_VIN, STOP_VCC, STOP_RAIL: waiting, on the screen */
-    if (!test_ok && screen != SCR_DEV && !run && !cond && sout.rail_up && (int32_t)(hal_ms() - test_at) >= 0) test_step();
+    if (!test_ok && !run && !cond && sout.rail_up && (int32_t)(hal_ms() - test_at) >= 0) test_step();
     if (!cond && !test_ok && test_tries) cond = C_TESTING;
 
     /* display self-healing: re-send the panel settings about once a second; after a sudden VCC dip (bandgap count jumps off its
@@ -440,11 +520,6 @@ void app_pass(void)
     if (run && sout.stop != STOP_NONE && sout.stop != STOP_RAIL) stop_run(sout.stop);
     /* the rail out of band for long is a pause, not a stop: nothing is driven, charging resumes by itself with a fresh soft ramp */
     rail_hold = (uint8_t)(run && sout.stop == STOP_RAIL);
-    if (screen == SCR_DEV) {                         /* developer mode: the host drives the outputs, the guards in dev.c */
-        rail_duty = dev_pass(sout.stop == STOP_VIN || sout.stop == STOP_VCC, sout.fan);
-        tele_pass(PH_RUN);
-        return;
-    }
     hal_fan(sout.fan);
     if (sout.stop == STOP_RAIL && !buzz_busy()) buzz_play(PAT_RAIL_ALARM);
 
@@ -482,18 +557,23 @@ void app_pass(void)
         outputs_off();
     }
 
+    end_of_run();
+
     /* ---- display ---- */
     ui.run = run; ui.volt = settings.volt; ui.iset = settings.cur; ui.vin = sin.vin; ui.tgt = cin.tgt; ui.alarm = alarm_ui == STOP_VLIM ? STOP_VLIM : STOP_NONE;      /* the others are screens of their own */
     ui.blink = (uint8_t)((hal_ms() >> 9) & 1);
     ui.tphase = (uint8_t)(((hal_ms() >> 10) & 3) == 3);
     ui.usb_off = settings.usb_off;
+    ui.view = run ? view : 0;
+    el_s = view_lo; el_s -= (uint16_t)now_ms; ui.view_lbl = run && el_s <= VIEW_LABEL_MS;
     ui.ps = screen != SCR_PORTS ? 0 : portset_editing() ? 2 : 1; ui.sel = portset_port(); ui.locked = portset_locked(); ui.mixed = 0;
     for (k = 0; k < NPORTS; k++) {
         ui.state[k] = cout.state[k]; ui.v[k] = cout.v[k]; ui.i[k] = cout.i[k]; ui.parked[k] = (uint8_t)(cout.held[k] == 2);
         ui.set[k] = portset_get(k); ui.want[k] = cout.state[k] == PS_CHARGE ? cout.want[k] : ch_iset(k);
         if (ui.set[k] != PV_AUTO) ui.mixed = 1;
     }
-    if (screen && screen != SCR_MENU && screen != SCR_PORTS) {
+    if (screen == SCR_SUMMARY && cond) summary_close();         /* a supply condition takes the screen */
+    if (screen && screen != SCR_MENU && screen != SCR_PORTS && screen != SCR_SUMMARY) {
         uint8_t n;
         dbg_view.ms = hal_ms();
         for (n = 0; n < NADC; n++) dbg_view.adc[n] = adc_raw(n);
@@ -513,6 +593,14 @@ void app_pass(void)
         t = menu_text(text_row);
         ui_text_row(text_row, t, t[0] == '>' ? th(R_GOOD) : t[0] == '*' ? th(R_WARN) : text_row == 0 ? th(R_INFO) : text_row == MENU_ROWS - 1 ? th(R_DIM) : th(R_TEXT));
         if (++text_row == MENU_ROWS) text_row = 0;
+        msg_code = 0;
+    } else if (screen == SCR_SUMMARY) {
+        if (sum_frame < UI_FINALE_FRAMES + UI_MSG_PARTS && ++sum_div >= (sum_frame < UI_FINALE_FRAMES ? FINALE_PASSES : 2)) {
+            sum_div = 0;
+            if (sum_frame < UI_FINALE_FRAMES) ui_finale_frame(sum_frame);    /* ROT: the finale ... */
+            else summary_part((uint8_t)(sum_frame - UI_FINALE_FRAMES));      /* ... then the summary, a part per step */
+            sum_frame++;
+        }
         msg_code = 0;
     } else if (cond && screen == 0) {
         if (msg_code != cond) { cond_draw(cond); msg_code = cond; }     /* once: the screen of the condition replaces the main screen */

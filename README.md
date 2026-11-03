@@ -1,8 +1,9 @@
 # WS3 Unlocked
 
 Custom firmware for the VIFLY WhoopStor V3, a six-port 1S LiPo / LiHV charger (STC8H8K64U, 8051 core). It replaces the firmware the
-charger ships with: a new look (the ROT theme: neon green, skulls, eyes, static, thorns, an animated SYMBIOZE splash) and a set of
-safety changes on top of [OpenWS3](https://github.com/openws3/openws3), the open firmware it is built on.
+charger ships with: a new look (the ROT theme: neon green, skulls, eyes, static, thorns, an animated SYMBIOZE splash), melodies,
+charge statistics (mAh, time to full, cell resistance), a storage reminder, and a set of safety changes on top of
+[OpenWS3](https://github.com/openws3/openws3), the open firmware it is built on.
 
 **Using the charger?** [GUIDE.md](GUIDE.md). **Installing?** Read the next section first, then [Install](#install).
 
@@ -21,19 +22,21 @@ safety changes on top of [OpenWS3](https://github.com/openws3/openws3), the open
 ### What I did to make it as safe as I could
 - **Audited the charging code** before changing it, and found that OpenWS3's voltage readings drift with the charger's internal supply:
   in simulation, cells reached **4.57 V on a 4.20 V setting**. Fixed (every reading is now corrected with the chip's own reference).
+- **Removed OpenWS3's developer mode**, which let a USB program switch every output by hand. Its guards had real holes (two found by
+  review); without it, nothing outside the charge logic can drive a port.
 - **Added the protections a charger is expected to have** and OpenWS3 did not: refusing over-discharged cells, a gentle pre-charge
   with its own time limit, a 3 hour charge limit, a board over-temperature stop, a watchdog that resets a frozen chip, a clean reset
   on a collapsing supply.
 - **Protected what is plugged into the charger:** a guard so that a pack on the XT60 cannot be fed backwards into a laptop or phone
   charger on the USB-C port.
-- **Built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and ran the real firmware against it in 40
+- **Built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and ran the real firmware against it in 38
   scenarios: full charges, shorts, dead cells, cells that never fill, overheating, stuck hardware, supply faults, a hostile USB host.
 - **Ran the tests on a simulated copy of the chip**, with the same compiler, because the chip does arithmetic differently from a PC.
   That caught a real bug the PC tests could not: the rail-fault alarm never sounded (also present in OpenWS3).
 - **Had the code reviewed** by four separate AI review agents, one per area, each without my conclusions. They found real defects
   (a way for a USB program to push a cell to 4.45 V, a time limit that never fired, a hole in my own USB-C guard, and more). Every one
   was reproduced in the simulator, then fixed and given a test. These were AI reviewers, not people: a human expert has not reviewed it.
-- **Broke each safety check on purpose** (mutation testing) to prove the tests notice: 20 of 21 planted bugs are caught.
+- **Broke each safety check on purpose** (mutation testing) to prove the tests notice: 19 of 20 planted bugs are caught.
 - **Measured it on my charger**: supply, input reading, rail, stack, temperature sensor, the USB-C guard on a laptop port.
 - **Made the build checkable**: GitHub builds it only if every test passes, and publishes checksums and a signed build record.
 - Everything above, with numbers, is in [SAFETY.md](SAFETY.md).
@@ -64,7 +67,7 @@ project is missing. The "Still open" list in SAFETY.md is the place to start.
 WS3 Unlocked is a fork of **[OpenWS3](https://github.com/openws3/openws3)**, the open firmware for this charger written by
 **Paweł Sadowski and the OpenWS3 contributors**. Almost everything that makes this firmware work is theirs: working out the board
 (pins, ADC channels, the inverted rail, the ports, the USB loader), every driver, the charge state machine, the rail / input / VCC
-supervision, the input limits, the menu and the port settings, the USB monitor and developer mode, the browser installer and the ISP
+supervision, the input limits, the menu and the port settings, the USB monitor (and the developer mode this fork removed), the browser installer and the ISP
 flashing, the unit tests, and the documentation (`GUIDE.md`, `HARDWARE.md`, `USB.md` are theirs, with the edits noted below). Without
 that work this fork would not exist.
 
@@ -83,7 +86,19 @@ Everything not listed here is OpenWS3's, unchanged.
 - **ROT theme**, the default (`src/theme.c`, `src/ui.c`, `src/lcd.c`): neon green on black, skull and eye sprites that blink and look
   around while charging, static noise, thorn borders, a spiky digit font, a charge bar and status icons in the header, a screen saver.
   The other four themes are OpenWS3's and still in the menu.
-- **Animated SYMBIOZE splash** (`src/logo.c`, made by `tools/gen_logo.py` from `tools/symbioze_logo.png`).
+- **Animated SYMBIOZE boot** (`src/logo.c`, made by `tools/gen_logo.py` from `tools/symbioze_logo.png`): the logo tears out of
+  static, a scan line, the skulls' eyes open one by one, a neon flash; about 3 s, any key skips it.
+- **Reactive charging screen**: a charging eye fills with green as its cell fills and its gaze speeds up with the current; it shuts on
+  FULL; a cell that finishes or faults bursts into static and the other eyes glance at it.
+- **Charging views** (B2 while charging): per cell the current, the mAh put in, the time to full (an estimate, shown with `~`) or the
+  cell's health (GOOD / TIRED / RETIRE from its measured resistance).
+- **Finale and run summary**: when every cell is full, the logo burns in through static with a fanfare, then a summary (packs, minutes,
+  total mAh, the weakest cell).
+- **Storage reminder**: cells left full for 2 hours at 4.20 / 4.35 V: a beep and an offer to take them to storage voltage (B2), at most
+  three times, 10 minutes apart.
+- **Screen saver**: three skulls drifting over static, the wordmark surfacing and sinking.
+- **Melodies** (`src/buzz_pure.c`, `src/hal.c`): the buzzer plays any note (C5 to C8) from a hardware timer, so there are tunes: boot
+  jingle, pack full, error, finale; the ROT theme has its own glitchy set. SOUND `HEARTBEAT` adds a soft beat while charging.
 - **Sprites and font** as editable text files: `tools/sprites.txt`, `tools/font_rot.txt`, turned into C by `tools/gen_sprites.py` and
   `tools/gen_font.py` (`src/sprites.c`, `src/font_rot.c`).
 - The theme only draws: it reads the same values as the other themes and changes no charging behaviour. Its code was written to fit
@@ -101,14 +116,23 @@ Everything not listed here is OpenWS3's, unchanged.
 - **Watchdog, low-voltage reset, pin modes at the first instruction, no endless ADC wait** (`src/hal.c`).
 - **USB-C backfeed guard** (`src/adc.c`, `src/hal.c`): a pack plugged into the XT60 while USB-C powers the charger is no longer fed
   backwards into the laptop or charger on the USB-C side.
-- **Developer mode guards** *(upstream too)* (`src/dev.c`): a host can no longer push a cell past the cut by switching a port on and
-  off, nor drain a cell below 3.0 V.
+- **Developer mode removed** (`src/dev.c`, `tools/devtool.py` deleted): commands 7 to 9 are refused as unknown, the installer page
+  no longer offers it. Before removal it had been hardened *(upstream too)*: a host could push a cell past the cut by switching a
+  port on and off, and drain a cell below 3.0 V (SAFETY.md).
 - **Fatal stop leaves the rail at its lowest** *(upstream too)* (`src/hal.c`): it was driven to its highest.
 - **Settings check byte and flash wear limit** (`src/cfg.c`, `src/app.c`); **one interrupt priority** so their stack frames never
   stack up (`src/usb.c`); smaller fixes listed in SAFETY.md.
 
+### Charge statistics (`src/stats.c`, pure C, unit-tested and simulated)
+- **mAh per port**: the measured current integrated over time. It is the firmware's own reading, about as accurate as the current shown.
+- **Cell resistance**: the step between the cell's resting voltage (read while the port probes it) and its voltage at the working
+  current, once that current is stable. Includes the leads and connector: compare cells on the same lead.
+- **Time to full**: from the state of charge (a typical LiPo / LiHV open-circuit curve, corrected for the resistance) and the rate so
+  far, with a 25 % margin. It is an estimate and marked as one; it is not shown until the resistance is known.
+- These numbers only display; nothing in the charge logic reads them.
+
 ### Verification
-- **Whole-firmware simulation** (`test/sim`, `make sim`): the real firmware against a simulated board, cells and supplies, 40 scenarios.
+- **Whole-firmware simulation** (`test/sim`, `make sim`): the real firmware against a simulated board, cells and supplies, 38 scenarios.
 - **Tests on a simulated 8051** (`test/run_8051.sh`, `test/s51`, `test/chg_trace.c`, `make check-8051`): the unit tests and a
   charge-logic trace on the chip's own integer sizes, with the compiler the firmware is built with.
 - **New unit tests** in `test/test_pure.c` and `test/test_chg.c`.
@@ -122,8 +146,9 @@ Everything not listed here is OpenWS3's, unchanged.
   shows it in full, and refuses an image that would reach the settings area. USB name "WS3 Unlocked" (`src/usb.c`).
 - **Build and release** (`.github/workflows/rot-build.yml`): every test must pass before anything is published; the published files
   come with SHA256SUMS and a signed build-provenance attestation. OpenWS3's GitHub Pages workflow was removed from this fork.
-- **Documentation**: this README (rewritten top), [SAFETY.md](SAFETY.md) (new), and small edits to `GUIDE.md` (the ROT theme, the
-  alarm note) and `USB.md` (stop reason 6, developer-mode leave command, product name).
+- **Documentation**: this README (rewritten top), [SAFETY.md](SAFETY.md) (new), and edits to `GUIDE.md` (the ROT theme, the views,
+  summary, storage reminder and sounds, the alarm note) and `USB.md` (stop reason 6, developer mode removed, screen 12, product name).
+- **Build guard** (`Makefile`): an image that would reach the chip's settings area (`CODE_LIMIT`, 0xF400) fails the build.
 
 ## Install
 
@@ -145,7 +170,7 @@ Everything not listed here is OpenWS3's, unchanged.
 ```bash
 make                 # build/fw.bin and build/openws3.html (SDCC 4.6.0; the chip's internal RAM is full: older versions may not link)
 make test            # unit tests: charge logic, limits, menu, settings (plain C on the PC)
-make sim             # the whole firmware against a simulated board: 40 safety scenarios
+make sim             # the whole firmware against a simulated board: 38 safety scenarios
 make check-8051      # unit tests and a charge-logic trace on a simulated 8051 (needs s51 from sdcc-ucsim; about 16 minutes)
 ```
 
@@ -161,14 +186,12 @@ python3 tools/fwmon.py flash build/fw.bin            # a running unit, nothing c
 The firmware is also a USB HID device (`34bf:1004`, product "WS3 Unlocked"): `python3 tools/fwmon.py watch` shows boot phases, port states,
 voltages, currents, events and faults live; `start`/`stop`/`current`/`voltage` drive it. Details and report layout: `USB.md`.
 
-`python3 tools/devtool.py` is a terminal UI for bench work: it switches every output by hand (port PWMs and bleed switches,
-global enable, fan, input profile, the rail as a setpoint or a raw duty) and shows every input live (port and rail voltages,
-port currents, input, VCC, thermistor, buttons, strap). The firmware keeps guards underneath (a 0.5 s link watchdog, a cut 50 mV above the selected target voltage or at 2.8 A per
-port, checked whether the port is on or not, no bleeding below 3.0 V, at most 0.2 A into a cell below 3.0 V, the rail over-voltage stop); holding both buttons on the unit leaves the mode. Not while charging.
+OpenWS3's developer mode and its terminal tool (`devtool.py`) are not in WS3 Unlocked: a USB host can read everything, start and
+stop, and set the current and voltage, but it cannot drive an output itself.
 `tools/openws3.html` is the tool for users: open the file in Chrome or Edge (WebHID, no server, no driver) and press Connect. It opens
 in a simple view: start / stop, charge current and target voltage, each port's state, voltage and current with a 10 s plot, and a
 firmware installer for users (a guided "hold the left button while plugging in USB-C" flow for a charger that does not run this firmware yet; a running unit restarts into the loader by itself). Esc stops charging.
-The Advanced view adds the raw inputs, the limiter, setpoints, an event log and developer mode (the manual controls above).
+The Advanced view adds the raw inputs, the limiter, setpoints and an event log.
 `make` also writes `build/openws3.html`, the same page with `build/fw.bin` inside: that is the one to hand out.
 
 ## Menu
@@ -185,7 +208,7 @@ The menu has four categories; **OK** opens one and **BACK** returns to the list 
 | | MIN IN VOLTS | minimum input voltage: off, 4.80 to 5.00 V in 0.05 V steps, to 6.0 V in 0.1 V steps, then 0.5 V steps up to 25 V |
 | | BELOW MIN | what happens when the input is below that minimum: `LIMIT` reduces the charge current smoothly until the input recovers; `STOP RUN` stops charging after a second and shows `V LIMIT` |
 | | REGULATION | how the limits share the budget over the ports: `EQUAL`, `CH1 FIRST`, `HIGH V FIRST` (below) |
-| PREFERENCES | SOUND | on / off |
+| PREFERENCES | SOUND | `ON`, `OFF`, or `HEARTBEAT` (a soft beat about every 4 s while charging) |
 | | DISABLE USB POWER | `YES` keeps the USB-C input switched off for good (the XT60 powers the unit, USB is data only); `NO` (default) switches it on at start when the board straps it so |
 | | THEME | the look only, no behaviour change: `ROT` (WS3 Unlocked's, the default), `CLASSIC` (the OpenWS3 look), `CALM` (colour only where it means something), `AMBER` (one hue on black, red for trouble), `HIGH CONTRAST`. Applies at once |
 | DIAGNOSTICS | | the debug pages (below) |
@@ -270,13 +293,14 @@ src/chg.c          per-port charge state machine (pure)           src/sup.c   ra
 src/limits.c       input current / voltage limits (pure)          src/menu.c  settings menu (pure), rowbuf.c text rows
 src/ctl.c          rail PI, cal.c units, fmt.c text, input_pure.c buttons, buzz_pure.c patterns, cfg*.c settings
 src/usb.c          USB HID monitor (telemetry + commands)         src/ui.c    screens
-src/dev.c          developer mode: outputs set by the host, guards  src/portset.c  port settings mode (pure)
+src/portset.c      port settings mode (pure)
 src/app.c          boot sequence, 4.5 ms control pass             src/font.c  GENERATED from tools/font5x7.txt
-test/              host tests (C)                                 tools/      fwmon.py (USB monitor / flasher), devtool.py, openws3.html (web tool), bundle.py, isp.py, render_screens.* (the pictures in GUIDE.md)
+test/              host tests (C)                                 tools/      fwmon.py (USB monitor / flasher), openws3.html (web tool), bundle.py, isp.py, render_screens.* (the pictures in GUIDE.md)
 
 WS3 Unlocked additions:
 src/adc.c          also: VCC correction of every reading, the USB-C bypass guard
 src/theme.c, ui.c, lcd.c   the ROT theme             src/sprites.c, font_rot.c, logo.c   GENERATED (tools/gen_sprites.py, gen_font.py, gen_logo.py)
+src/stats.c        mAh, cell resistance, time to full, the run summary (pure)
 test/sim/          the whole firmware against a simulated board (make sim)
 test/run_8051.sh, test/s51/, test/chg_trace.c   tests on a simulated 8051 (make check-8051)
 ```

@@ -27,10 +27,11 @@ The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades,
   VCC. Simulated: OpenWS3 charges to **4.57 V** on a 4.20 V setting at VCC 4.95 V; WS3 Unlocked finishes at 4.200 to 4.203 V from
   VCC 4.45 to 4.95 V, and at 4.217 V after VCC steps mid-charge. Each pass now reads the internal reference first and corrects every
   port, current and rail reading with it (`src/adc.c`, `src/cal.c`).
-- **Developer mode (OpenWS3, fixed in WS3 Unlocked, upstream too):** a host program can drive the outputs directly. Its guards cut a
-  port 50 mV above the selected target. The cut was checked only on ports that had been on, and switching a port off released it, so
-  a host pulsing a port on and off pushed a cell to **4.45 V** (found by review, reproduced in simulation). Now checked every pass
-  whatever the port does: a host pulsing for 30 minutes leaves the cell at 4.248 V (`src/dev.c`).
+- **Developer mode removed (WS3 Unlocked):** OpenWS3 lets a host program drive the outputs directly. Its guards cut a port 50 mV
+  above the selected target, but the cut was checked only on ports that had been on, and switching a port off released it, so a
+  host pulsing a port on and off pushed a cell to **4.45 V** (found by review, reproduced in simulation; a held bleed switch also
+  drained a cell to 0 V in an hour). Both were fixed first *(upstream too)*; the mode was then removed altogether, to make room for
+  the statistics and because no user needs it. Commands 7 to 9 now get "unknown command" and drive nothing (simulated: `no_dev`).
 
 ### Too much current, or current into a damaged cell
 - **Per-port over-current fault and soft start (OpenWS3).** A 3 A short is cut in 10 ms and stays latched (simulated).
@@ -40,8 +41,6 @@ The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades,
   1.105 A above 3.0 V on a 1.0 A setting. The over-current fault uses the 0.1 A current there, not the full setting.
 - **Pre-charge time limit (WS3 Unlocked):** a cell that does not reach 3.0 V in 30 minutes is shorted inside: the port faults.
   Simulated with a 0.11 A internal leak: fed at 25 minutes, off at 35.
-- **Developer mode (WS3 Unlocked):** no bleeding below 3.0 V (before: a held bleed switch drained a cell to 0 V in an hour), at most
-  0.2 A into a cell below 3.0 V.
 
 ### A cell that never finishes
 - **Charge time limit (WS3 Unlocked):** 3 hours of charging per cell, top-ups of the same cell included. Time with the port held at
@@ -123,7 +122,7 @@ settings, display text and helpers (298). WS3 Unlocked added the refusal, pre-ch
 The real firmware (`src/app.c` and every module it calls; only the register layer is replaced) runs on the PC against a model of the
 board: the supply and its USB-C / XT60 paths, the inverted rail with sag, six ports, cells with an open-circuit curve, internal
 resistance, polarisation and optional leakage, an ADC referenced to VCC with noise, gain errors and reference spread, the display's bus
-time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 40 scenarios:
+time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 38 scenarios:
 - full charges at VCC 4.45 to 4.95 V, reference spread plus or minus 1 %, ADC noise, combined worst case
 - user stop, input lost, cell pulled mid-charge, short circuit and its latch, storage voltage, power cycle mid-charge
 - dead cell, deeply discharged cell, internally shorted cell, cell that never fills, leaking cell, never-full cells under MAX IN AMPS
@@ -131,8 +130,9 @@ time, the watchdog and the thermistor. It presses the buttons like a person and 
   VCC over 5.0 V (and the host told why), rail self-test failure, an overcharged 4.45 V cell put in on the storage setting
 - menu changes while charging, settings page damage
 - board over 60 C, thermistor unplugged
-- developer mode: rail at its top, port driven flat out, host gone quiet, a host pulsing a port, a held bleed switch, a start
-  command refused, a lost input turning the host's outputs off
+- a host asking for the removed developer mode: refused, no output ever driven
+- the statistics: mAh within 2 % of the model, resistance and time to full against the model's cell; the storage offer after 2 h
+  full, and B2 on it taking the cells down to 3.85 V
 - USB-C: XT60 alone, a pack plugged in on a laptop and on a PD charger, packs present at power-up, PD start and reset, PD back at 5 V
 - in every scenario: the watchdog is never starved
 
@@ -144,8 +144,8 @@ A test suite is only worth what it catches. Each safety check was broken on purp
 a fault removed, a guard bypassed), and the suites run against the broken firmware. The independent review did this first on the
 earlier code: 15 of 29 planted bugs survived at least one suite, among them a disabled charge over-voltage cut, a removed 4.40 V bleed
 fault and developer mode ignoring a lost input. The scenarios added since (the rail sensor reading low, the overcharged cell, developer
-mode rules, the soft ramp after pre-charge) were written to catch exactly those. The runner and its list of 21 planted bugs are in
-`test/mutants.py`. On the current code **20 of 21 are caught**. The one that survives is the fatal-stop rail value in `src/hal.c`:
+mode rules, the soft ramp after pre-charge) were written to catch exactly those. The runner and its list of planted bugs are in
+`test/mutants.py`, with the last result at its end. On the current code **19 of 20 are caught**. The one that survives is the fatal-stop rail value in `src/hal.c`:
 the simulator replaces that file with its model, so that line is checked by review and on the charger only (the same change made in
 the model is caught).
 
@@ -194,12 +194,24 @@ rail, the start-up hole in the USB-C guard, the interrupt nesting and the settin
   - The port current reading changes about five times faster per duty step in the model than HARDWARE.md measured; ramp and
     no-current timings in the model are therefore faster than on the charger.
   - The simulation runs with 32-bit `int`. On the 8051 (16-bit) only the charge logic, the menu, port settings and the pure helpers are
-    run; `app.c`, `adc.c`, `dev.c`, `sup.c` and `limits.c` are not.
+    run; `app.c`, `adc.c`, `sup.c` and `limits.c` are not.
+
+### The features added after the safety work (WS3 Unlocked)
+- **They only display.** The statistics (`src/stats.c`), the views, the summary, the animations and the melodies read the same values
+  the charge logic uses; nothing in the charge logic reads them. The one exception is the storage offer: B2 on it stops the run, sets
+  the storage voltage and starts again, exactly like doing it in the menu (simulated: `store`).
+- **Estimates are marked as such.** Time to full has a `~` and a 25 % margin; the resistance includes the leads; the grade thresholds
+  (GOOD under 90 mOhm, TIRED to 150, RETIRE above) are rules of thumb for whoop-size 1S cells, not a measurement of capacity.
+- **Timing.** The full-screen pictures (finale, summary) are drawn a strip at a time, so a control pass stays under 50 ms (simulated:
+  longest 41.5 ms).
+- **The tone timer is hardware only.** Melodies use Timer 3 and its interrupt, which the simulator does not have. A wrong register would
+  most likely show as no sound, or as an interrupt storm that starves the watchdog: a reset loop at first boot (below).
+- **Stack.** One byte more in the deepest screen-drawing frame; check STACK on page 1 while charging (below).
 
 ## Check your own charger
 
-- **First boot:** the splash plays once and the main screen comes up. A splash every few seconds means a reset loop: reinstall the
-  previous build (hold the left button while plugging in USB-C) and report it.
+- **First boot:** the splash plays once with its jingle and the main screen comes up. A splash every few seconds means a reset loop
+  (most likely the tone timer): reinstall the previous build (hold the left button while plugging in USB-C) and report it.
 - **Multimeter (the important one):** charge a cell to full, let it rest 5 minutes, measure it at the cell. 4.17 to 4.23 V for 4.20 V,
   4.32 to 4.38 V for 4.35 V. Outside that, stop and report it with a photo of diagnostics page 1.
 - **Diagnostics page 1** (menu, DIAGNOSTICS): VCC between 4.45 and 4.95 V (the range the correction was tested over); `STACK` after a
@@ -216,9 +228,9 @@ rail, the start-up hole in the USB-C guard, the interrupt nesting and the settin
 - Measure what the XT60 path does when USB-C is higher (does it conduct backwards into a pack?).
 - Measure the stack under every interrupt with USB telemetry running during a full six-port charge.
 - Run long soak tests: six ports, every supply, days.
-- Have a human who knows battery chargers review `src/chg.c`, `src/sup.c` and `src/dev.c` (all review so far was by AI agents).
+- Have a human who knows battery chargers review `src/chg.c`, `src/sup.c` and `src/adc.c` (all review so far was by AI agents).
 - Read the flash back after installing, in the installer.
-- Run `app.c`, `adc.c`, `dev.c`, `sup.c` and `limits.c` on the simulated 8051 too, not only on the PC.
+- Run `app.c`, `adc.c`, `sup.c` and `limits.c` on the simulated 8051 too, not only on the PC.
 - Offer the *(upstream too)* fixes back to OpenWS3.
 
 ## Reporting a problem

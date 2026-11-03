@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "ui.h"
+#include "stats.h"
 #include "lcd.h"
 #include "font.h"
 #include "theme.h"
@@ -250,6 +251,33 @@ static void rot_screens(void)
                 snprintf(nm, sizeof nm, "anim_saver_%02u", k); save(nm);
             }
         }
+    }
+    /* the charging views (B2 while charging): mAh in, time to full, cell health */
+    {
+        static const char *const VN[] = { "", "rot_view_mah", "rot_view_eta", "rot_view_health" };
+        uint8_t v, k;
+        for (k = 0; k < NPORTS; k++) {
+            stats.mah[k] = (uint16_t)(120 + 85 * k);
+            stats.eta_s[k] = (uint16_t)(300 + 410 * k);
+            stats.r_mohm[k] = (uint16_t)(55 + 22 * k);
+        }
+        stats.eta_s[3] = 0; stats.eta_s[5] = ETA_UNKNOWN;     /* port 4 is full, port 6 has no estimate yet */
+        for (v = UV_MAH; v <= UV_HEALTH; v++) {
+            s = charging_state(); s.view = v; s.view_lbl = 1;
+            draw_main(&s); save(VN[v]);
+        }
+        s = charging_state(); s.view = UV_HEALTH; s.tphase = 1; draw_main(&s); save("rot_view_health_mohm");
+        /* all full: the finale, then the run summary */
+        ui_text_enter();
+        for (v = 0; v < UI_FINALE_FRAMES; v++) {
+            ui_finale_frame(v);
+            if (getenv("ROT_ANIM")) { char nm[32]; snprintf(nm, sizeof nm, "anim_finale_%02u", v); save(nm); }
+        }
+        save("rot_finale");
+        ui_msg_later = 1; ui_message(R_GOOD, "ALL FULL", "4 PACKS  52 MIN", "1840MAH", "WEAKEST P3 99 MOHM"); ui_msg_later = 0;
+        for (v = 0; v < UI_MSG_PARTS; v++) ui_message_part(v);
+        save("rot_summary");
+        ui_message(R_WARN, "STORE THEM?", "FULL FOR 2 HOURS", "3.80V", "B2 STORAGE   B1 KEEP"); save("rot_storage");
     }
     ui_message(R_WAIT, "INPUT LOW", "CHECK THE SUPPLY", "4.52V", 0); save("rot_input_low");
     s = idle_state(); draw_main(&s); save("rot_idle");

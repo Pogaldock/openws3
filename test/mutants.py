@@ -16,12 +16,8 @@ M = [
  ("src/chg.c", "#define RAIL_MARGIN     30 ", "#define RAIL_MARGIN     300 ", "rail_sense_low"),
  ("src/chg.c", "    if (W.v >= V_FAULT) return go_fault();", "    ;", "bleed_over"),
  ("src/chg.c", "    else if (W.pre) { W.pre = 0; W.ramp = 1; W.ramp_div = 0; }", "    else if (W.pre) { W.pre = 0; }", "gentle"),
- ("src/app.c", "    case 2: res = screen != SCR_DEV && start_run() ? 0 : 1; break;", "    case 2: res = start_run() ? 0 : 1; break;", "dev_rules"),
- ("src/app.c", "        rail_duty = dev_pass(sout.stop == STOP_VIN || sout.stop == STOP_VCC, sout.fan);", "        rail_duty = dev_pass(0, sout.fan);", "dev_rules"),
  ("src/chg.c", "    if ((!W.t_held || W.i > I_OPEN) && ++W.t_chg_div >= PASSES_PER_S) {", "    if (!W.t_held && ++W.t_chg_div >= PASSES_PER_S) {", "held_never_full"),
  ("src/chg.c", "        if (W.pre && ++W.t_pre_s >= T_PRE_MAX_S) return go_fault();", "        ;", "pre_short"),
- ("src/dev.c", "        if (dv >= vcut || di >= I_MAX) trip |= (uint8_t)(1u << k);", "        if ((out_duty[k] || (was_sw & (1u << k))) && (dv >= vcut || di >= I_MAX)) trip |= (uint8_t)(1u << k);", "dev_pulse"),
- ("src/dev.c", "        if ((was_sw & (1u << k)) && dv < V_PRE) trip |= (uint8_t)(1u << k);", "        ;", "dev_bleed"),
  ("src/hal.c", "    hal_rail(PWM_PERIOD);", "    hal_rail(0);", "vcc_fatal"),
  ("test/sim/sim_hal.c", "S.global = 0; S.rail_duty = PWM_PERIOD; }", "S.global = 0; S.rail_duty = 0; }", "vcc_fatal"),
  ("src/sup.c", "    if (hot) o->stop = STOP_TEMP;", "    ;", "hot"),
@@ -33,6 +29,12 @@ M = [
  ("src/buzz_pure.c", "uint8_t buzz_busy(void) { return active; }", "uint8_t buzz_busy(void) { return 1; }", "TEST"),
  ("src/tele.c", "    if (ph == PH_FATAL) usb_tx2[54] = *ctx.fatal;", "    ;", "vcc_fatal"),
  ("src/chg.c", "    if (W.v < V_REFUSE) return go_fault();", "    ;", "dead_cell"),
+ # developer mode is gone: a host asking for it (command 7) must get "unknown command", and nothing may drive an output
+ ("src/app.c", "    default: res = 2; break;", "    default: res = 0; break;", "no_dev"),
+ # the storage offer must really lower the target (B2 on the offer), not just say so
+ ("src/app.c", "        settings.volt = settings.volt == VOLT_4_35 ? VOLT_3_85 : VOLT_3_80;", "        ;", "store"),
+ # the cell-resistance reading (an estimate shown to the user) must stay checked against the model
+ ("src/stats.c", "                        if (mv > w.v0) { mv -= w.v0; if (mv > 655) mv = 655; r = mv * 100u / ma; }    /* mV x 1000 / mA */", "                        if (mv > w.v0) { mv -= w.v0; if (mv > 655) mv = 655; r = mv * 10u / ma; }", "TEST"),
 ]
 
 def main():
@@ -59,27 +61,26 @@ def main():
 if __name__ == '__main__':
     main()
 
-# Result on 2026-11-03 (commit after 78a79d3):
+# Result on 2026-11-03 (developer mode removed; storage and statistics added):
 #   M0 src/chg.c [rail_sense_low]: killed
 #   M1 src/chg.c [rail_sense_low]: killed
 #   M2 src/chg.c [bleed_over]: killed
 #   M3 src/chg.c [gentle]: killed
-#   M4 src/app.c [dev_rules]: killed
-#   M5 src/app.c [dev_rules]: killed
-#   M6 src/chg.c [held_never_full]: killed
-#   M7 src/chg.c [pre_short]: killed
-#   M8 src/dev.c [dev_pulse]: killed
-#   M9 src/dev.c [dev_bleed]: killed
-#   M10 src/hal.c [vcc_fatal]: SURVIVED
-#   M11 test/sim/sim_hal.c [vcc_fatal]: killed
-#   M12 src/sup.c [hot]: killed
-#   M13 src/cfg.c [cfg_damage]: killed
-#   M14 src/adc.c [both_at_boot]: killed
-#   M15 src/adc.c [pack_on_laptop]: killed
-#   M16 src/adc.c [pd_steps]: killed
-#   M17 src/adc.c [vcc_high]: killed
-#   M18 src/buzz_pure.c [TEST]: killed
-#   M19 src/tele.c [vcc_fatal]: killed
-#   M20 src/chg.c [dead_cell]: killed
-#   20 of 21 caught.  M10 survives by construction: the simulator replaces src/hal.c with its model (test/sim/sim_hal.c), so the
-#   fatal-stop rail value in hal.c is checked by review and on the charger only; M11 is the same change made in the model, and is caught.
+#   M4 src/chg.c [held_never_full]: killed
+#   M5 src/chg.c [pre_short]: killed
+#   M6 src/hal.c [vcc_fatal]: SURVIVED
+#   M7 test/sim/sim_hal.c [vcc_fatal]: killed
+#   M8 src/sup.c [hot]: killed
+#   M9 src/cfg.c [cfg_damage]: killed
+#   M10 src/adc.c [both_at_boot]: killed
+#   M11 src/adc.c [pack_on_laptop]: killed
+#   M12 src/adc.c [pd_steps]: killed
+#   M13 src/adc.c [vcc_high]: killed
+#   M14 src/buzz_pure.c [TEST]: killed
+#   M15 src/tele.c [vcc_fatal]: killed
+#   M16 src/chg.c [dead_cell]: killed
+#   M17 src/app.c [no_dev]: killed
+#   M18 src/app.c [store]: killed
+#   M19 src/stats.c [TEST]: killed
+#   19 of 20 caught.  M6 survives by construction: the simulator replaces src/hal.c with its model (test/sim/sim_hal.c), so the
+#   fatal-stop rail value in hal.c is checked by review and on the charger only; M7 is the same change made in the model, and is caught.

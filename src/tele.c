@@ -10,7 +10,6 @@
 #include "cfg.h"
 #include "limits.h"
 #include "portset.h"
-#include "dev.h"
 #include "app.h"
 #include "version.h"
 #include "version_build.h"
@@ -68,7 +67,7 @@ void tele_pass(uint8_t ph)
     usb_tx[9] = settings.cur; usb_tx[10] = (uint8_t)(FW_MAJOR << 4 | FW_MINOR); usb_tx[11] = *ctx.stop; usb_tx[12] = (uint8_t)(*ctx.alarm | (*ctx.screen << 4));
     usb_tx[13] = ev_seq; usb_tx[14] = ev_code; usb_tx[15] = ev_port; usb_tx[16] = cmd_seq; usb_tx[17] = cmd_res;
     usb_tx[25] = ph;
-    if (ph >= PH_RUN && ph < PH_FATAL && *ctx.screen != SCR_DEV) {          /* developer mode: the ports are on page 3 */
+    if (ph >= PH_RUN && ph < PH_FATAL) {
         for (k = 0; k < NPORTS; k++) {
             usb_tx[18 + k] = ctx.out->state[k];
             usb_tx[24] |= (uint8_t)(ctx.out->sw[k] << k);
@@ -80,8 +79,7 @@ void tele_pass(uint8_t ph)
     }
     tele_put16(usb_tx, 56, adc_raw(ADC_RAIL)); tele_put16(usb_tx, 58, adc_raw(ADC_VIN)); tele_put16(usb_tx, 60, adc_raw(ADC_BANDGAP));   /* counts */
     usb_tx[63] = tele_seq;
-    if (*ctx.screen == SCR_DEV) { tele_head(usb_tx2, 3, ms); dev_tele(usb_tx2); usb_tx2[63] = tele_seq; }
-    else tele_limits(ph, ms);
+    tele_limits(ph, ms);
 }
 
 void tele_init(const tele_ctx_t XD *c)

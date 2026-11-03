@@ -20,7 +20,7 @@ static const char *const LABEL[NITEMS] = { "VOLTAGE", "CURRENT", "MAX IN AMPS", 
 
 /* the setting each item edits, and the largest value of the plain choices (the current and the two limits step by their own rules) */
 static uint8_t XD *const CODE SLOT[NITEMS] = { &settings.volt, &settings.cur, &settings.ilim, &settings.vmin, &settings.vcut, &settings.lmode, &settings.sound, &settings.theme, &settings.usb_off };
-static const CODE uint8_t MAX[NITEMS] = { NVOLTS - 1, 0, 0, 0, 1, LM_NMODES - 1, 1, TH_COUNT - 1, 1 };
+static const CODE uint8_t MAX[NITEMS] = { NVOLTS - 1, 0, 0, 0, 1, LM_NMODES - 1, 2, TH_COUNT - 1, 1 };
 
 static uint8_t is_locked(uint8_t it) { return running && (it == IT_VOLT || it == IT_CURRENT || it == IT_USBOFF); }
 
@@ -82,7 +82,7 @@ static void value(uint8_t it)
     switch (it) {
     case IT_VOLT: rb_right(sup_volt_name(v), ROW_COLS - 1); break;
     case IT_CURRENT: fmt_a1(tmp, cal_set_to_ma(v)); rb_right(tmp, ROW_COLS - 1); break;
-    case IT_SOUND: rb_right(v ? "ON" : "OFF", ROW_COLS - 1); break;
+    case IT_SOUND: rb_right(v == 2 ? "HEARTBEAT" : v ? "ON" : "OFF", ROW_COLS - 1); break;
     case IT_THEME: rb_right(th_name(v), ROW_COLS - 1); break;
     case IT_USBOFF: rb_right(v ? "YES" : "NO", ROW_COLS - 1); break;
     case IT_ILIM:

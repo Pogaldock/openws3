@@ -37,8 +37,9 @@ To press both buttons together, press them within about 0.2 s of each other and 
 
 ## Start up
 
-The unit shows its logo and beeps twice, then the main screen. It needs an input of about 4.6 V or more: below that it shows
-`INPUT LOW` and waits until a supply is connected.
+The unit shows its logo and plays its start-up sound, then the main screen. In the ROT theme the logo tears out of static, a scan
+line passes, the skulls open their eyes and the screen flashes green: about 3 seconds, and **any key skips it**. It needs an input
+of about 4.6 V or more: below that it shows `INPUT LOW` and waits until a supply is connected.
 
 | Logo | No input |
 |---|---|
@@ -107,8 +108,44 @@ Check the target before you insert a cell that you want to keep full.
 A cell inserted after the start is picked up too. A run does not end by itself: when every port says `FULL` the ports stay on guard and top a
 cell up if it sags, so stop the run when you are done.
 
-The charger beeps twice when a port becomes full. It stops on its own if the input drops too low or something is wrong with the
+The charger beeps when a port becomes full. It stops on its own if the input drops too low or something is wrong with the
 supply (see [When something is wrong](#when-something-is-wrong)).
+
+### What the cells show while charging
+
+**Tap B2 while charging** to change what the line under each voltage shows. The middle box names the view for a moment.
+
+| View | Shows |
+|---|---|
+| `CURRENT` | the measured current (the normal view) |
+| `MAH IN` | the charge put into this cell since it was inserted, in mAh |
+| `TO FULL` | an estimate of the time left, `~12MIN`; `~?MIN` until there is enough to go on (about a minute of charging), `DONE` when full |
+| `HEALTH` | the cell's internal resistance as a grade: `GOOD` (under 90 mOhm), `TIRED` (90 to 150), `RETIRE` (over 150); one second in four the number (`77MR`) |
+
+These numbers are estimates and do not change how the cell is charged. The resistance includes the lead and connector, so compare
+cells on the same lead; a cell that reads `TIRED` on every lead is getting old. The time to full assumes a typical LiPo or LiHV
+cell and leaves a 25 % margin.
+
+| mAh in | Time to full | Health |
+|---|---|---|
+| <img src="docs/screens/rot_view_mah.png" width="300"> | <img src="docs/screens/rot_view_eta.png" width="300"> | <img src="docs/screens/rot_view_health.png" width="300"> |
+
+In the ROT theme each charging cell has an eye: it fills with green as the cell fills, looks around faster the more current flows,
+and shuts when the cell is full. A cell that finishes or faults bursts into static, and the other eyes glance at it.
+
+### When everything is full
+
+When every cell is full, the ROT theme plays its finale (the logo burns in through static, with a fanfare), then a summary: how many
+packs, how long the run took, the total mAh and the cell with the highest resistance. Any key returns to the main screen; the run
+carries on guarding the cells.
+
+| Summary | Storage offer |
+|---|---|
+| <img src="docs/screens/rot_summary.png" width="320"> | <img src="docs/screens/rot_storage.png" width="320"> |
+
+**Storage reminder.** Full LiPos should not sit at 4.20 or 4.35 V for days. If the cells have been full for 2 hours and the run is
+still on, the charger beeps and offers storage voltage: **B2** stops the run, sets 3.80 V (3.85 V after a 4.35 V charge) and starts
+again, so the cells are discharged to storage; **B1** keeps them full. It asks at most three times, 10 minutes apart.
 
 ## Per-port settings
 
@@ -162,7 +199,7 @@ While you edit, the item is marked orange and the bottom row changes to `< -`, `
 | | MIN IN VOLTS | a floor for the input voltage: `OFF`, or 4.80 to 5.00 V in 0.05 V steps, up to 6.0 V in 0.1 V steps, then 0.5 V steps up to 25 V |
 | | BELOW MIN | what happens when the input falls below that floor: `LIMIT` or `STOP RUN` |
 | | REGULATION | which ports get the available current first: `EQUAL`, `CH1 FIRST` or `HIGH V FIRST` |
-| **PREFERENCES** | SOUND | beeps `ON` or `OFF` |
+| **PREFERENCES** | SOUND | `ON`, `HEARTBEAT` (also a soft beat while charging) or `OFF` |
 | | THEME | the look: `ROT` (default in WS3 Unlocked), `CLASSIC`, `CALM`, `AMBER`, `HIGH CONTRAST` |
 | | DISABLE USB POWER | `NO` or `YES`. With `YES` the USB-C input is never switched on: use it when the charger is powered from the XT60 and the USB-C is only a data link to a computer (monitor, web page, flashing). A computer then neither powers the unit nor gets power from it. While it is on, the input voltage in the header is green and reads `USB OFF` for a second every four seconds, so you can see at a glance that the USB-C is isolated. On USB alone the unit shows `INPUT LOW` with `USB POWER OFF, USE XT60` and waits for the XT60; the menu still opens, so the setting can be switched back. Not while charging; takes effect at once, switching back to `NO` waits for the next start |
 | **DIAGNOSTICS** | | the technical pages, see below |
@@ -252,7 +289,8 @@ switch the setting back. Set it back to `NO` to charge from a USB-C supply again
 ## Themes
 
 The theme changes the look only, never behaviour, and applies at once. WS3 Unlocked adds `ROT` and makes it the default: neon green on
-black, skulls, eyes, static and thorns, an animated SYMBIOZE splash and a spiky font. The numbers and states it shows are the same as in
+black, skulls, eyes, static and thorns, an animated SYMBIOZE splash, a finale, a screen saver (skulls drifting over static, after
+about 3 minutes with nothing plugged in; any key or a cell wakes it) and a spiky font. The numbers and states it shows are the same as in
 the other themes.
 
 | ROT, charging | ROT, idle |
@@ -276,13 +314,21 @@ across the room (green; in `AMBER` a brighter amber).
 
 | Sound | When |
 |---|---|
-| two short bursts | the unit has started |
-| one short beep | a button press was accepted |
-| two beeps | a port has become full |
-| two long beeps | an error: a port fault, a stop by MIN IN VOLTS, or a locked item that you tried to change |
-| a repeating triple beep | the output rail is out of regulation (`RAIL!`): charging has stopped (on OpenWS3 builds compiled with SDCC 4.6 this alarm is silent; fixed in WS3 Unlocked) |
+WS3 Unlocked plays real notes (C5 to C8). The ROT theme has its own sound set (E minor, glitchy); the other themes keep beeps close
+to OpenWS3's.
 
-PREFERENCES, SOUND `OFF` mutes all of them.
+| Sound | When |
+|---|---|
+| start-up jingle (ROT: two glitch chirps, a rising arpeggio) | the unit has started |
+| one short beep | a button press was accepted |
+| a short two-note motif | a port has become full |
+| a falling three-note phrase (others: two long beeps) | an error: a port fault, a stop by MIN IN VOLTS, or a locked item that you tried to change |
+| a fanfare | every cell is full |
+| two or three falling notes | the storage reminder |
+| a repeating triple beep | the output rail is out of regulation (`RAIL!`): charging has stopped (on OpenWS3 builds compiled with SDCC 4.6 this alarm is silent; fixed in WS3 Unlocked) |
+| a soft low double beat, about every 4 s | while charging, with SOUND `HEARTBEAT` only |
+
+PREFERENCES, SOUND: `ON`, `HEARTBEAT` (as `ON`, plus the heartbeat) or `OFF` (mutes all of them).
 
 ## Default settings
 

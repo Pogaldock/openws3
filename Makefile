@@ -4,13 +4,16 @@
 #   make screens  render the screens of the user guide into docs/screens (host build of the real screen code)
 #   make clean
 SDCC   ?= sdcc
-SRCS    = src/main.c src/hal.c src/adc.c src/cal.c src/ctl.c src/fmt.c src/font.c src/lcd.c src/ui.c src/cfg.c src/cfg_pure.c src/input_pure.c src/buzz_pure.c src/chg.c src/sup.c src/app.c src/ports.c src/usb.c src/dbgscr.c src/rowbuf.c src/limits.c src/menu.c src/portset.c src/theme.c src/dev.c src/tele.c src/sprites.c src/logo.c src/font_rot.c
+SRCS    = src/main.c src/hal.c src/adc.c src/cal.c src/ctl.c src/fmt.c src/font.c src/lcd.c src/ui.c src/cfg.c src/cfg_pure.c src/input_pure.c src/buzz_pure.c src/chg.c src/sup.c src/app.c src/ports.c src/usb.c src/dbgscr.c src/rowbuf.c src/limits.c src/menu.c src/portset.c src/theme.c src/tele.c src/sprites.c src/logo.c src/font_rot.c src/stats.c
 # large model on purpose: locals live in XRAM, IRAM is left for the stack.  NOT medium: MOVX @Ri would use P2
 # (a power-path port on this board) as the high address byte.
 BUILD  ?= build
 CFLAGS  = -I$(BUILD) -mmcs51 --model-large --code-loc 0x0000 --xram-loc 0x0000 --xram-size 8192 --iram-size 256 --Werror
 HOSTCC ?= gcc
-PURE    = src/ports.c src/menu.c src/portset.c src/theme.c src/rowbuf.c src/limits.c src/dbgscr.c src/cal.c src/ctl.c src/fmt.c src/cfg_pure.c src/input_pure.c src/buzz_pure.c src/chg.c src/sup.c
+# the chip's settings (EEPROM) area starts here: 3 KB at the top of the 64 KB flash, as set in the WhoopStor V3's chip options
+# (read with the installer's "Check the unit").  An image that reaches it is refused here, and by the installer.
+CODE_LIMIT ?= 0xF400
+PURE    = src/ports.c src/menu.c src/portset.c src/theme.c src/rowbuf.c src/limits.c src/dbgscr.c src/cal.c src/ctl.c src/fmt.c src/cfg_pure.c src/input_pure.c src/buzz_pure.c src/chg.c src/sup.c src/stats.c
 
 all: $(BUILD)/fw.bin $(BUILD)/openws3.html
 
@@ -42,6 +45,7 @@ $(BUILD)/fw.bin: $(RELS)
 	@awk '$$3 == "l_XINIT" && $$2 != "00000000" { print "error: initialised XRAM variable (README build rule 1)"; exit 1 }' $(BUILD)/fw.map
 	makebin -p -s 65536 $(BUILD)/fw.ihx $(BUILD)/fw.bin   # the flash is 64 KB; makebin defaults to 32 KB
 	@echo "image: $$(stat -c %s $(BUILD)/fw.bin) bytes"
+	@python3 -c "import sys; n = len(open('$(BUILD)/fw.bin','rb').read().rstrip(b'\\xff')); print('code: %d bytes, %d free below the settings area at 0x%04X' % (n, $(CODE_LIMIT) - n, $(CODE_LIMIT))); sys.exit(n > $(CODE_LIMIT))" || { echo "error: the image reaches the settings area"; exit 1; }
 
 $(BUILD)/openws3.html: tools/openws3.html tools/bundle.py $(BUILD)/fw.bin
 	python3 tools/bundle.py $(BUILD)/fw.bin tools/openws3.html $@
@@ -56,7 +60,7 @@ test: $(TESTS)
 	@for t in $(TESTS); do ./$$t || exit 1; done
 
 # the whole firmware (app.c and everything it calls) against a simulated board: test/sim
-APP_SRC = src/app.c src/adc.c src/cfg.c src/ui.c src/font.c src/font_rot.c src/sprites.c src/logo.c src/dev.c src/tele.c $(PURE)
+APP_SRC = src/app.c src/adc.c src/cfg.c src/ui.c src/font.c src/font_rot.c src/sprites.c src/logo.c src/tele.c $(PURE)
 $(BUILD)/sim_app: test/sim/sim_app.c test/sim/sim_hal.c test/sim/sim.h $(APP_SRC) $(wildcard src/*.h) $(BUILD)/version_build.h
 	@mkdir -p $(BUILD)
 	$(HOSTCC) -std=gnu99 -O2 -Wall -Wextra -Isrc -I$(BUILD) -Itest/sim -D__code= -o $@ test/sim/sim_app.c test/sim/sim_hal.c $(APP_SRC) -lm

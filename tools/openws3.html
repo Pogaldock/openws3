@@ -6,9 +6,10 @@
 <title>WS3 Unlocked</title>
 <!--
   OpenWS3 in the browser: a monitor and control panel for the charger (ports, start / stop, charge current and voltage), a firmware
-  updater, and, in the Advanced view, the limiter, the event log and developer mode, which switches every output by hand.
+  updater, and, in the Advanced view, the limiter and the event log.  (OpenWS3's developer mode, which switched every output
+  by hand, is removed from WS3 Unlocked: the firmware refuses it and this page does not offer it.)
   Open this file in Chrome or Edge (WebHID); no server, no install.  Windows and macOS need no driver; Linux needs read/write access
-  to /dev/hidraw* (a udev rule, shown on the page).  Protocol: USB.md (commands, telemetry pages 1 to 3).  The updater speaks the
+  to /dev/hidraw* (a udev rule, shown on the page).  Protocol: USB.md (commands, telemetry pages 1 and 2).  The updater speaks the
   chip's USB loader (the same frames as tools/isp.py).  `make` embeds build/fw.bin into build/openws3.html: see tools/bundle.py.
 -->
 <style>
@@ -78,6 +79,8 @@ input[type=number] { width: 72px; padding: 4px 6px; border: 1px solid var(--line
 .hint { color: var(--dim); font-size: 12px; margin-top: 8px; }
 .locked main .devonly { opacity: .55; pointer-events: none; }
 body:not(.mode-dev) .devonly, body.mode-dev .mononly { display: none !important; }
+/* WS3 Unlocked has no developer mode (the firmware refuses commands 7 to 9), so its controls are never shown */
+#bEnter, .devonly { display: none !important; }
 body:not(.adv) .adv, body:not(.has-fw) .fwonly, body:not(.has-dev) .fwcard, body.has-dev .welcome { display: none !important; }
 .welcome p { margin: 0 0 10px; }
 .notice { border-color: var(--warn); background: var(--warn-bg); }

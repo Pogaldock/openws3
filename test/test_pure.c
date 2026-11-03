@@ -9,6 +9,7 @@
 #include "input.h"
 #include "dbgscr.h"
 #include "buzz.h"
+#include "stats.h"
 #include "limits.h"
 #include <string.h>
 
@@ -235,47 +236,92 @@ static void t_cfg(void)
     CHECK(settings.ch_cur[0] == 0 && settings.ch_cur[NPORTS - 1] == 0 && settings.ch_off == 0 && settings.usb_off == 0);
 }
 
-/* run the engine for `n` ticks (0.5 ms); returns the number of ticks with the tone pin high, and edges */
+/* run the melody engine for `ms` ticks (0.5 ms): ticks with a note sounding, note changes, ticks busy */
 static void buzz_run(int ms, int *high_ms, int *edges, int *on_ms)
 {
-    int k, last = 0;
+    int k, sounding = 0;
     *high_ms = *edges = *on_ms = 0;
     for (k = 0; k < ms; k++) {
-        int lvl = buzz_tick();
-        if (lvl) (*high_ms)++;
-        if (lvl != last) (*edges)++;
-        last = lvl;
+        uint8_t c = buzz_tick();
+        if (c != TONE_KEEP) { (*edges)++; sounding = c != TONE_OFF; }
+        if (sounding) (*high_ms)++;
         if (buzz_busy()) (*on_ms)++;
     }
 }
 
 static void t_buzz(void)
 {
-    int hi, ed, on;
+    int hi, ed, on, k;
     buzz_reset();
-    buzz_play(PAT_BOOT);
+    buzz_play(PAT_BOOT);                       /* plain: 80 ms on, 80 ms off, 80 ms on */
     buzz_run(700, &hi, &ed, &on);
-    NEAR(on, 501, 4);                          /* 167 + 167 + 167 ticks = 84 + 84 + 84 ms */
-    NEAR(ed, 334, 6);                          /* a level change every tick (1 kHz) for 2 x 167 ticks */
+    NEAR(on, 481, 3);
+    NEAR(hi, 320, 3);
     CHECK(!buzz_busy());
 
-    buzz_reset(); buzz_enable(0);              /* muted by the user: pattern runs, pin stays low */
+    buzz_reset(); buzz_enable(0);              /* muted by the user: the melody runs, nothing sounds */
     buzz_play(PAT_DONE);
     buzz_run(2000, &hi, &ed, &on);
-    CHECK(hi == 0 && ed == 0);
+    CHECK(hi == 0 && on > 0);
 
     buzz_reset();
     buzz_play(PAT_RAIL_ALARM);                 /* repeats until stopped */
     buzz_run(10000, &hi, &ed, &on);
-    CHECK(buzz_busy());
+    CHECK(buzz_busy() && hi > 2000);
     buzz_play(PAT_NONE);
-    CHECK(!buzz_busy() && buzz_tick() == 0);
+    { uint8_t c1 = buzz_tick(), c2 = buzz_tick();                       /* silenced at once (if a note was on), then nothing */
+      CHECK(!buzz_busy() && (c1 == TONE_OFF || c1 == TONE_KEEP) && c2 == TONE_KEEP); }
 
     buzz_reset();
     buzz_play(PAT_DONE);
-    buzz_play(PAT_KEY);                        /* a new pattern replaces the running one */
+    buzz_play(PAT_KEY);                        /* a new melody replaces the running one */
     buzz_run(200, &hi, &ed, &on);
-    NEAR(on, 33, 3);
+    NEAR(on, 41, 2);
+
+    buzz_reset(); buzz_bank(1);                /* the ROT pack: every melody ends (but the alarm), every note is in the table */
+    for (k = PAT_BOOT; k < PAT_COUNT; k++) {
+        int t, c;
+        if (k == PAT_RAIL_ALARM) continue;
+        buzz_play((uint8_t)k);
+        for (t = 0; t < 40000 && buzz_busy(); t++) { c = buzz_tick(); CHECK(c == TONE_KEEP || c == TONE_OFF || (c >= 2 && c <= 38)); }
+        CHECK(!buzz_busy());
+    }
+    CHECK(buzz_note_count(1) == 3185 && buzz_note_count(37) == 398);   /* C5 523 Hz, C8 4186 Hz: 1666667 / f */
+}
+
+/* the measurements (stats.h): state of charge, charge counted, resistance, time to full */
+static uint16_t vu_of(uint16_t mv) { return (uint16_t)((uint32_t)mv * 4096u / 4500u); }
+static void st_feed(uint8_t st, uint16_t mv, uint8_t i, long passes)
+{
+    long k;                                   /* long: int is 16 bits on the 8051, and a run is far more passes than that */
+    for (k = 0; k < passes; k++) {
+        stats_in.state[0] = st; stats_in.v[0] = vu_of(mv); stats_in.i[0] = i; stats_in.want[0] = 41; stats_in.held[0] = 0;
+        stats_pass(vu_of(4200), 0, 5);
+    }
+}
+static void t_stats(void)
+{
+    int k;
+    CHECK(stats_soc(3270, 0) == 0 && stats_soc(4200, 0) == 1000 && stats_soc(3800, 0) == 400 && stats_soc(4350, 1) == 1000);
+    CHECK(stats_soc(3820, 0) == 450);                                   /* halfway between 3.80 V (40 %) and 3.84 V (50 %) */
+    CHECK(stats_grade(0) == RG_NONE && stats_grade(50) == RG_GOOD && stats_grade(100) == RG_TIRED && stats_grade(200) == RG_RETIRE);
+    stats_start();
+    for (k = 1; k < NPORTS; k++) stats_in.state[k] = PS_IDLE;
+    st_feed(PS_IDLE, 0, 0, 2);
+    st_feed(PS_PROBE, 3700, 0, 4);                                      /* resting at 3.70 V */
+    st_feed(PS_CHARGE, 3760, 41, 200);                                 /* 0.60 A (41 iu = 600 mA), 60 mV above rest: 100 mOhm */
+    CHECK(stats.r_mohm[0] == 0);                                        /* not yet: one second at the working current first */
+    st_feed(PS_CHARGE, 3760, 41, 50);
+    NEAR(stats.r_mohm[0], 100, 3);
+    st_feed(PS_CHARGE, 3760, 41, 720000 - 250);                         /* 3600 s at 0.6 A in all: 600 mAh */
+    NEAR(stats.mah[0], 600, 3);
+    CHECK(stats.eta_s[0] == ETA_UNKNOWN);                               /* the voltage never rose: no estimate */
+    st_feed(PS_CHARGE, 4000, 41, 2000);                                 /* now it rose to about 69 %: an estimate exists */
+    CHECK(stats.eta_s[0] != ETA_UNKNOWN && stats.eta_s[0] > 60);
+    st_feed(PS_FULL, 4200, 0, 10);
+    CHECK(stats.eta_s[0] == 0 && stats.packs == 1 && stats.weak == 0 && stats.total_mah == stats.mah[0]);
+    st_feed(PS_IDLE, 0, 0, 2); st_feed(PS_PROBE, 3700, 0, 2);           /* a new cell: its own numbers */
+    CHECK(stats.mah[0] == 0 && stats.r_mohm[0] == 0);
 }
 
 static void t_dbg(void)
@@ -367,6 +413,6 @@ static void t_vcc(void)
 int main(void)
 {
     t_vcc();
-    t_cal(); t_clamp(); t_port(); t_rail(); t_fmt(); t_input(); t_cfg(); t_buzz(); t_dbg(); t_theme();
+    t_cal(); t_clamp(); t_port(); t_rail(); t_fmt(); t_input(); t_cfg(); t_buzz(); t_stats(); t_dbg(); t_theme();
     return check_report("pure");
 }

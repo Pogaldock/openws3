@@ -7,8 +7,8 @@ needed. The report descriptor uses a vendor-defined usage page, so the host does
   limiter and supervisor, so each page is refreshed every 20 ms. It is available from power-up, and the commands work in every state,
   also in a fatal condition (everything stays off; the unit can still be read, stopped and flashed). `fwmon.py` merges the two pages into one snapshot.
 * Commands: one 64-byte **OUT** report. The interrupt only stores it. `app_pass` executes it in the main loop with the same rules as
-  the buttons, so the power path is never touched from interrupt context. Raw PWM and pin access exists only in the separate
-  developer mode (commands 7–9, below), which keeps its own guards.
+  the buttons, so the power path is never touched from interrupt context. There is no raw PWM or pin access: OpenWS3's developer
+  mode (commands 7–9) is removed in WS3 Unlocked.
 * ISP is unaffected: hold the button while plugging USB-C to flash as before, or send command 6 (`fwmon.py isp`).
 * The 0.5 ms tick interrupt has higher priority than USB. A report costs about 0.4 ms of CPU every 10 ms.
 
@@ -18,7 +18,7 @@ needed. The report descriptor uses a vendor-defined usage page, so the host does
 unit: **vu** = 4.5 V / 4096 (1.0986 mV) for port voltages and the rail, **iu** = 1/68.25 A (14.65 mA) for port currents
 (`src/adc.h`). The bandgap count guards VCC. Every channel except the bandgap and ADC0 (the thermistor) is corrected for VCC in the firmware:
 reading = count × 1071 / bandgap count (the bandgap read first in every pass and not smoothed, so a step in VCC is followed at once; `cal_vcc_gain` in cal.h), so the port voltages, currents, rail
-and input do not follow the supply. The raw counts (developer mode, page 3) are plain counts.
+and input do not follow the supply.
 
 ## Telemetry report (IN, 64 bytes, big-endian)
 
@@ -32,7 +32,7 @@ and input do not follow the supply. The raw counts (developer mode, page 3) are 
 | 9 | current setting (iu: 21 = 0.3 A … 91 = 1.3 A, ×7 per 0.1 A) |
 | 10 | firmware release: major in the high nibble, minor in the low (`src/version.h`); 0 on firmware that predates it |
 | 11 | stop reason: 0 none, 1 input low, 2 VCC low, 3 rail, 4 user, 5 minimum input voltage (user setting), 6 board too hot or thermistor broken |
-| 12 | low nibble: the condition now, as a stop reason (byte 11: 1 input low, 2 VCC low, 3 rail out of range, 5 minimum input voltage, 6 too hot; 1, 2, 3 and 6 have a screen of their own); high nibble: screen open on the LCD (0 = main, 1..6 = diagnostics page, 13 = port settings, 14 = developer mode, 15 = menu) |
+| 12 | low nibble: the condition now, as a stop reason (byte 11: 1 input low, 2 VCC low, 3 rail out of range, 5 minimum input voltage, 6 too hot; 1, 2, 3 and 6 have a screen of their own); high nibble: screen open on the LCD (0 = main, 1..6 = diagnostics page, 12 = the run summary or the storage offer, 13 = port settings, 15 = menu; 14 was OpenWS3's developer mode, not used) |
 | 13–15 | last event: sequence (increments), code (1 port full, 2 port fault, 3 stopped), port 0..5 (or the stop reason for code 3) |
 | 16, 17 | last command: its sequence number, result (0 ok, 1 refused, 2 unknown) |
 | 18–23 | port states 1..6: 0 idle, 1 probe, 2 charge, 3 rest, 4 full, 5 bleed, 6 fault |
@@ -67,28 +67,14 @@ Same header (bytes 0–7, byte 3 = 2, head / tail sequence in bytes 2 / 63). Eve
 | 48–50 | reserved (0) |
 | 51 | some port is charging or bleeding (global enable) |
 | 52–56 | supervisor: stop reason (waiting condition: 1 input low, 2 VCC low, 3 rail out of range, 6 too hot), reserved (0), fatal condition (0 none, 0x10 VCC over 5.0 V, 0x11 rail overvoltage, 0x12 no rail, 0x13 rail self-test failed; also sent once the unit is in its fatal phase), rail alarm (stop reason 3), fan |
-| 57–60 | build id: the first 8 hex digits of the git commit the firmware was built from, 32 bit (the page is not sent in developer mode; use byte 10 of page 1 there) |
+| 57–60 | build id: the first 8 hex digits of the git commit the firmware was built from, 32 bit  |
 | 61 | 1 if the source tree had uncommitted changes when it was built |
 
 Voltages, currents and the rail are zero before phase 7 except the three ADC words, which are live from phase 1.
 
-### Page 3: developer mode
+### Page 3: removed
 
-Sent instead of page 2 while developer mode is on (byte 12's high nibble = 14). Page 1 then carries no port data. ADC values are raw counts (the mean of the samples, before any filtering or correction); the bandgap is in bytes 38–39.
-
-| Byte | Content |
-|---|---|
-| 8–19 | port voltage 1..6, raw counts (ADC1..6) |
-| 20–31 | port current 1..6, raw counts (ADC 12, 14, 13, 9, 10, 11) |
-| 32–39 | ADC0 (thermistor), ADC7 (input), ADC8 (rail), ADC15 (bandgap) |
-| 40–51 | PWM duty applied to ports 1..6 (0..400) |
-| 52, 53 | rail PWM duty applied |
-| 54 | switch pins applied, bit k = port k+1 high (bleed path) |
-| 55 | applied: b0 global enable P5.2, b1 fan P0.7, b2 profile P5.3, b3 beep request, b4 rail on raw duty (else regulated) |
-| 56 | inputs: b0 button 1 down, b1 button 2 down, b2 strap P3.4 |
-| 57 | b0 watchdog: no command 8 for 0.5 s, port outputs off and the rail back on its entry setpoint; b1 an input / VCC stop holds the port outputs off |
-| 58 | bit k: port k+1 cut by the guard (50 mV above the selected target, 2.8 A, a bleed below 3.0 V, or more than 0.2 A into a cell below 3.0 V; checked whether the port is on or not); released by asking for duty 0 and switch low on it, and set again at once if the reason is still there |
-| 59, 60 | rail setpoint in force, vu |
+OpenWS3 sends a page 3 (raw counts and applied outputs) in its developer mode. WS3 Unlocked has no developer mode and never sends it.
 
 The screen open on the LCD (menu, port settings or a diagnostics page) is in byte 12's high nibble. Stop reason 5 in byte 11 is the minimum input voltage (user setting).
 
@@ -97,20 +83,11 @@ The screen open on the LCD (menu, port settings or a diagnostics page) is in byt
 | Cmd | Argument | Effect |
 |---|---|---|
 | 1 | – | stop charging (staggered, like the button). Always allowed |
-| 2 | – | start charging. Refused if already running, if a supervisor stop or a fatal condition is active, before the rail self-test has passed, and in developer mode |
+| 2 | – | start charging. Refused if already running, if a supervisor stop or a fatal condition is active, and before the rail self-test has passed |
 | 3 | current in iu (21, 28 … 91) | set the charge current, stored in EEPROM. Refused while running or if not a valid step |
 | 4 | voltage 0..3 | set the target voltage (0 = 4.20 V, 1 = 4.35 V, 2 = 3.80 V storage, 3 = 3.85 V storage), stored in EEPROM. Refused while running |
 | 5 | – | ping |
 | 6 | – | reboot into the USB ISP loader, so the next flash needs no button. Refused while running. `fwmon.py flash FILE` does this and then writes the image |
-| 7 | session (1..255) | enter developer mode (`tools/devtool.py`): every port output off, the rail stays regulated at its setpoint, the input profile P5.3 stays as it is (the input depends on it), the LCD shows DEV MODE. Refused while running, and while another session is in control and still sending |
-| 8 | bytes 1, 3–18 (below) | developer mode: set the outputs. Must be repeated at least every 0.5 s. Refused outside developer mode or from another session |
-| 9 | session | leave developer mode: everything off, back to the main screen. Only the session that entered it, or anyone once that host has gone quiet (0.5 s). Holding both buttons on the unit does the same |
+| 7, 8, 9 | – | OpenWS3's developer mode (enter, set the outputs, leave). Removed in WS3 Unlocked: answered as an unknown command (result 2), nothing changes |
 | 10 | port 0..5, value in byte 3 | set one port's value, as in page 2 bytes 36–41 (0 off, 1 auto, else a current step in iu), stored in EEPROM. Refused while running, while that port settings mode on the unit is editing, or if not a valid value |
 
-Command 8: byte 1 flags (b0 global enable, b1 fan, b2 profile, b3 beep (a 0→1 change beeps once), b4 rail on raw duty), byte 3 switch
-pins (bit k = port k+1 to the bleed path), bytes 4–5 the rail: a setpoint in vu (at most 3972 = 4.35 V) or, with b4, a raw duty
-(0..400, higher = lower rail), bytes 6–17 PWM duty of ports 1..6 (0..400), all 16 bit big-endian, byte 18 the session given
-with command 7: only that host is obeyed, so two tools cannot fight over the outputs. A new session can enter once the old one has gone
-quiet for 0.5 s. Guards that stay on: a port 50 mV above the
-selected target voltage or at 2.8 A is cut (checked whether it is on or not), no bleed below 3.0 V, at most 0.2 A into a cell below 3.0 V, an input or VCC stop holds the ports off, the fan also runs when the board is warm, a rail over-voltage is
-the usual fatal error. The main power enable P4.7 is not offered (it would cut the unit's own supply).

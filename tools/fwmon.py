@@ -11,7 +11,7 @@ Layout and commands: USB.md.
   fwmon.py voltage 4.20            target voltage: 4.20, 4.35, 3.80 or 3.85 (V; the last two are storage); refused while charging
   fwmon.py port 2 0.8              one port's current: auto (the global one), off, or 0.3 ... 1.3 A; refused while charging
 
-Driving the outputs by hand: tools/devtool.py.
+(OpenWS3's developer mode and tools/devtool.py are removed in WS3 Unlocked: the outputs cannot be driven by hand.)
 
 Needs read/write access to /dev/hidraw* (udev rule or sudo).  Commands open the device afresh each time (a long-lived
 fd wedges after an OUT report on this chip).
@@ -41,7 +41,7 @@ vmin_volts = lambda v: v * 0.05 if v <= 200 else 10 + (v - 200) * 0.5        # l
 LMODE = ['EQUAL', 'CH1 FIRST', 'HIGH V FIRST']
 P_NONE = 10000                       # budget value meaning "no limit"
 _lim = {}                            # the latest page 2 (limits / supervision), merged into every page 1 report
-_dev = {}                            # the latest page 3 (developer mode, tools/devtool.py), merged the same way
+_dev = {}                            # page 3: OpenWS3 developer mode only (never sent by WS3 Unlocked)
 
 
 def parse_limits(r):

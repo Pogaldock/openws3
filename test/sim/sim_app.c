@@ -12,6 +12,8 @@
 #include "app.h"
 #include "cfg.h"
 #include "usb.h"
+#include "stats.h"
+#include "app.h"
 #include "../check.h"
 
 #define SEC(s) ((uint64_t)((s) * 2000))
@@ -331,43 +333,8 @@ static void s_selftest_fail(void)
     CHECK(!driven);
 }
 
-/* developer mode from a PC: drive port 1 flat out with the rail raw.  At the rail's top the ADC saturates and the unit locks out; just
-   under that (about 4.45 V) the per-port guard must cut the port.  And the outputs must go off by themselves when the PC goes quiet */
-static void dev_drive(int rail_duty, double secs)
-{
-    static const uint8_t enter[] = { 7, 9, 1 };
-    uint8_t set[19] = { 8, 0x15, 2, 0, 0, 0, 0x01, 0x90 };          /* P5.2 on + input bypass + rail raw, port 1 duty 400 (a host keeps the bypass as reported, else USB-C power drops by the diode) */
-    int k;
-    set[4] = (uint8_t)(rail_duty >> 8); set[5] = (uint8_t)rail_duty; set[18] = 9;
-    usb(enter, 3);
-    for (k = 0; k < secs * 10; k++) { usb(set, 19); run_for(0.1); }
-}
 
-static void s_dev_top(void)
-{
-    sim_attach(0, 4.10, 120);
-    boot(); dev_drive(0, 20);
-    printf("  developer mode, rail raw at its top: locked out: %s, cell peak %.3f V\n", all_off() ? "yes" : "NO", S.max_cell_v[0]);
-    CHECK(all_off());
-}
 
-static void s_dev_mode(void)
-{
-    uint8_t set[19] = { 8, 0x15, 2, 0, 0, 137, 0, 0, 0x01, 0x90 };  /* port 2 duty 400, rail raw 137 */
-    double t;
-    sim_attach(0, 4.10, 120); sim_attach(1, 4.10, 120);
-    boot();
-    dev_drive(137, 600);                                            /* 10 min of a host holding port 1 on, rail about 4.45 V */
-    printf("  developer mode, port driven flat out, rail ~%.2f V: cell peak %.3f V, PWM now %u (cut at the 4.20 V target + 50 mV: %s)\n", S.rail, S.max_cell_v[0], S.pwm[0], S.pwm[0] ? "NO" : "yes");
-    CHECK(S.pwm[0] == 0);                                           /* the guard cut it ... */
-    CHECK(S.max_cell_v[0] < 4.25);                                  /* ... before the cell went past target + 50 mV */
-    set[18] = 9;
-    usb(set, 19); run_for(0.2);
-    CHECK(S.pwm[1] > 0);
-    t = time_until(all_off, 3.0);                                   /* the PC goes quiet */
-    printf("  developer mode, PC stops sending: outputs off after %.2f s\n", t);
-    CHECK(t >= 0 && t < 0.8);
-}
 
 static int prof_off(void) { return !S.profile; }
 static int prof_on(void)  { return S.profile; }
@@ -519,55 +486,59 @@ static void s_bleed_over(void)
     CHECK(!S.pwm[0] && !S.sw[0]);
 }
 
-/* developer mode keeps the supervision: a start command is refused, and a lost input turns the host's outputs off */
-static void s_dev_rules(void)
+
+
+
+/* OpenWS3's developer mode is removed: a host asking for it is refused and nothing it sends drives an output */
+static void s_no_dev(void)
 {
-    static const uint8_t enter[] = { 7, 9, 1 }, startc[] = { 2, 0, 3 };
-    uint8_t set[19] = { 8, 0x15, 2, 0, 0, 137, 0x01, 0x90 };
+    static const uint8_t enter[] = { 7, 9, 1 };
+    uint8_t set[19] = { 8, 0x15, 2, 0x3F, 0, 0, 0x01, 0x90 };
     int k;
     set[18] = 9;
     sim_attach(0, 3.80, 300);
     S.usb_host = 1;
     boot(); usb(enter, 3);
     for (k = 0; k < 20; k++) { usb(set, 19); run_for(0.1); }
-    usb(startc, 3); run_for(0.2);
-    CHECK(!(usb_tx[8] & 1));                                        /* not running: a start is refused in developer mode */
-    CHECK(S.pwm[0] > 0);                                            /* the host's output, before */
-    S.vin = 3.0;
-    for (k = 0; k < 20; k++) { usb(set, 19); run_for(0.1); }
-    printf("  developer mode: input lost while a host drives port 1: PWM now %u, global %u\n", S.pwm[0], S.global);
-    CHECK(!S.pwm[0] && !S.global);
+    printf("  developer mode requested by a host: refused (result %u), outputs ever driven: %s\n", usb_tx[17], all_off() ? "no" : "YES");
+    CHECK(usb_tx[17] != 0 && all_off());
 }
 
-/* developer mode, a host pulsing a port on and off (each "off" used to release the voltage cut) with the rail at its top */
-static void s_dev_pulse(void)
+/* the measurements against the model: charge put in, resistance, time to full; then the end of the run (finale, summary) */
+static void s_stats(void)
 {
-    static const uint8_t enter[] = { 7, 9, 1 };
-    uint8_t on[19] = { 8, 0x15, 2, 0, 0, 100, 0x01, 0x90 }, off[19] = { 8, 0x15, 2, 0, 0, 100 };   /* rail raw 100, port 1 duty 400 / 0 */
-    int k;
-    double rest;
-    on[18] = off[18] = 9;
-    sim_attach(0, 4.10, 120);
-    boot(); usb(enter, 3);
-    for (k = 0; k < 60000; k++) { usb(on, 19); run_for(0.01); usb(on, 19); run_for(0.01); usb(off, 19); run_for(0.01); }   /* 30 min */
-    usb(off, 19); run_for(0.2); usb((const uint8_t[]){ 9, 9, 1 }, 3); run_for(300);
-    rest = sim_cell_v(0);
-    printf("  developer mode, a host pulsing port 1 on/off for 30 min, rail raw 100: cell peak %.3f V, after 5 min rest %.3f V (cut 4.25 V)\n", S.max_cell_v[0], rest);
-    CHECK(rest < 4.26);
+    double q0, t0, eta_mid = 0, t_mid = 0, t_full;
+    sim_attach(0, 3.70, 450);
+    S.usb_host = 1;
+    boot(); set_current(6); start();
+    q0 = S.cell[0].q; t0 = S.ticks / 2000.0;
+    while (S.cell[0].q < q0 + 0.30 * S.cell[0].cap_c) run_for(5);          /* a third of the way: the estimate then */
+    eta_mid = stats.eta_s[0]; t_mid = S.ticks / 2000.0;
+    while (S.pwm[0] && S.ticks / 2000.0 < t0 + 3 * 3600) run_for(1);
+    t_full = S.ticks / 2000.0;
+    run_for(10);
+    printf("  450 mAh cell at 0.6 A: put in %.0f mAh (model %.0f), resistance %u mOhm (model %.0f + polarisation), time to full at a third: %.0f s (took %.0f s), screen %u\n",
+           (double)stats.mah[0], (S.cell[0].q - q0) / 3.6, stats.r_mohm[0], S.cell[0].r * 1000, eta_mid, t_full - t_mid, usb_tx[12] >> 4);
+    CHECK(fabs(stats.mah[0] - (S.cell[0].q - q0) / 3.6) < 0.08 * (S.cell[0].q - q0) / 3.6);   /* charge counted within 8 % */
+    CHECK(stats.r_mohm[0] >= 60 && stats.r_mohm[0] <= 160);
+    CHECK(eta_mid > 0.6 * (t_full - t_mid) && eta_mid < 1.6 * (t_full - t_mid));              /* the estimate within -40 % / +60 % */
+    CHECK((usb_tx[12] >> 4) == SCR_SUMMARY && stats.packs == 1);                              /* every cell full: the summary */
 }
 
-/* developer mode, a host holding a port's bleed switch on: the cell must not be drained below 3.0 V */
-static void s_dev_bleed(void)
+/* full for two hours at 4.35 V: the offer to store them; B2 takes them to 3.85 V */
+static void s_store(void)
 {
-    static const uint8_t enter[] = { 7, 9, 1 };
-    uint8_t set[19] = { 8, 0x15, 2, 0x01, 0, 137 };                 /* port 1 bleed switch on (byte 3), no PWM, rail raw 137 (~4.3 V) */
-    int k;
-    set[18] = 9;
-    sim_attach(0, 3.80, 120);
-    boot(); usb(enter, 3);
-    for (k = 0; k < 7200; k++) { usb(set, 19); run_for(0.5); }     /* 1 h */
-    printf("  developer mode, bleed held on for 1 h: cell %.3f V, switch now %u\n", sim_cell_v(0), S.sw[0]);
-    CHECK(sim_cell_v(0) > 2.95 && !S.sw[0]);
+    sim_attach(0, 4.30, 300);
+    S.usb_host = 1;
+    cfg_load(); settings.volt = 1; cfg_save();
+    boot(); start(); run_for(600);
+    tap(1);                                                                    /* the summary: any key back */
+    run_for(2 * 3600);
+    printf("  full for 2 h at 4.35 V: storage offered (screen %u)", usb_tx[12] >> 4);
+    CHECK((usb_tx[12] >> 4) == SCR_SUMMARY);
+    tap(2); run_for(3600);
+    printf(", B2: target index %u, cell now %.3f V\n", settings.volt, sim_cell_v(0));
+    CHECK(settings.volt == 3 && sim_cell_v(0) < 3.95);
 }
 
 typedef struct { const char *name; void (*fn)(void); } scen_t;
@@ -578,11 +549,12 @@ static const scen_t SC[] = {
     { "gentle", s_gentle }, { "broken_rail", s_broken_rail }, { "short", s_short }, { "storage", s_storage },
     { "power_cycle", s_power_cycle }, { "never_full", s_never_full }, { "vcc_step", s_vcc_step }, { "leaky", s_leaky },
     { "menu_lock", s_menu_lock }, { "rail_pause", s_rail_pause }, { "vcc_fatal", s_vcc_fatal }, { "selftest_fail", s_selftest_fail },
-    { "dev_top", s_dev_top }, { "dev_mode", s_dev_mode }, { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
-    { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot },
-    { "dev_pulse", s_dev_pulse }, { "dev_bleed", s_dev_bleed }, { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
+    { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
+    { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot }, { "no_dev", s_no_dev },
+    { "stats", s_stats }, { "store", s_store },
+    { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
     { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
-    { "dev_rules", s_dev_rules },
+   
 };
 
 int main(int argc, char **argv)

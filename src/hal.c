@@ -2,6 +2,7 @@
  * STC8H8K64U @ 40 MHz.  Init values for PWM/ADC/ports are those of a bench firmware that has run on this board.
  */
 #include "hal.h"
+#include "buzz.h"
 #include "cfg.h"
 
 __sfr __at (0x80) P0;   __sfr __at (0x90) P1;   __sfr __at (0xA0) P2;
@@ -13,6 +14,7 @@ __sfr __at (0xBA) P_SW2;
 __sfr __at (0x88) TCON; __sfr __at (0x89) TMOD; __sfr __at (0x8A) TL0; __sfr __at (0x8C) TH0;
 __sfr __at (0xF4) USBCON;
 __sfr __at (0x8E) AUXR; __sfr __at (0xA8) IE;
+__sfr __at (0xD1) T4T3M; __sfr __at (0xD4) T3H; __sfr __at (0xD5) T3L; __sfr __at (0xAF) IE2;   /* Timer 3: the buzzer's notes */
 __sfr __at (0xC1) WDT_CONTR;   /* STC8H manual 6.3.1: watchdog */
 __sfr __at (0xFF) RSTCFG;      /* STC8H manual 6.3.3: reset configuration (low-voltage reset) */
 __sfr __at (0x8B) TL1; __sfr __at (0x8D) TH1;   /* Timer 1 is not used: its registers carry the RAM copy of the reference (below) */
@@ -137,6 +139,9 @@ void hal_init(void)
     TH0 = (65536UL - F_SYS / TICK_HZ) >> 8;
     TCON |= 0x10;              /* TR0 */
     IE |= 0x02;                /* ET0 */
+
+    T4T3M &= 0xF0;             /* Timer 3 stopped, timer mode, 12T clock (3.333 MHz), no clock output pin: main.c toggles P4.6 */
+    IE2 |= 0x20;               /* ET3: its interrupt (vector 19, same low priority as the others) */
 
     /* Low-voltage reset (manual 6.3.3, RSTCFG): ENLVR (bit 6) = reset, not just an interrupt; LVDS = 11 (3.0 V).  Its reset value is
        off at 2.0 V: a sagging supply would leave the chip running out of spec instead of resetting.  P54RST (bit 4) stays 0. */
@@ -290,7 +295,16 @@ uint8_t hal_ee_read(uint16_t addr)
 void hal_ee_erase(uint16_t addr) { iap(3, addr, 0); iap_idle(); }
 void hal_ee_write(uint16_t addr, uint8_t v) { iap(2, addr, v); iap_idle(); }
 
-void hal_tone(uint8_t level)  { TONE = level; }
+/* From the 0.5 ms interrupt only: TONE_OFF stops Timer 3 and leaves the pin low; a note sets its half period and runs it (each
+   overflow toggles the pin in timer3_isr, main.c).  Written while running, T3H/T3L load the next reload value. */
+void hal_tone_note(uint8_t cmd)
+{
+    static uint16_t XD n;
+    if (cmd == TONE_OFF) { T4T3M &= (uint8_t)~0x08; TONE = 0; return; }
+    n = (uint16_t)(0u - buzz_note_count((uint8_t)(cmd - 1)));
+    T3H = (uint8_t)(n >> 8); T3L = (uint8_t)n;
+    T4T3M |= 0x08;             /* T3R */
+}
 void hal_fan(uint8_t on)      { FAN = on; }
 uint8_t hal_btn(uint8_t n)    { return n == 1 ? !BTN1 : !BTN2; }   /* the timer interrupt's: not reentrant (its argument sits in XRAM) */
 uint8_t hal_btns(void)        { return (uint8_t)((!BTN1 ? 1 : 0) | (!BTN2 ? 2 : 0)); }   /* main-loop callers: no argument, safe beside the interrupt */
