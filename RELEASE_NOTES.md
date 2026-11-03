@@ -13,6 +13,7 @@ Five attackers were sent at 0.2.0-beta.2 to break it. None found a way to overch
   `fwmon.py` can't take an old acknowledgement for a new command. `isp.py` refuses a chip whose settings area starts lower.
 - The USB-C guard probes once, not again and again, with a 6S pack and a noisy reading.
 - **Settings load as defaults once** after installing this (a stronger settings check): set yours again.
+- Diagnostics pages 2 to 4 are shorter (rows that repeated other pages removed, to make room for the fixes).
 - Docs: an automatic stop (`INPUT LOW`, `VCC LOW`, `TOO HOT`) clears a port's fault too; treat a cell that faulted once as suspect.
 - Don't install WS3 Unlocked older than 0.2.0-beta.2: those predate the audit.
 - Details, and what was not fixed: SAFETY.md, "Red team".
@@ -39,8 +40,8 @@ The 4.35 V accuracy on the tested unit is not confirmed by a multimeter yet. No 
 clears a port's fault (SAFETY.md, Not fixed): pull a cell that faulted once.
 
 ### Checked
-57 whole-firmware scenarios, a fuzzer (a short batch on every build), the unit tests on PC and on a simulated 8051, and planted bugs
-(the result is in SAFETY.md). An audit, a review round on the changes, and a red-team round, all by AI agents.
+57 whole-firmware scenarios, a fuzzer (a short batch on every build), the unit tests on PC and on a simulated 8051, and 46 of 47
+planted bugs caught (the one left can't be reached by the simulator by design). An audit, a review round on the changes, and a red-team round, all by AI agents.
 
 ### Install and check
 Download `openws3.html`, open it in Chrome or Edge, press Connect, follow the steps. `sha256sum -c SHA256SUMS` checks the download

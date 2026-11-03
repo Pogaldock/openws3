@@ -207,7 +207,7 @@ earlier code: 15 of 29 planted bugs survived at least one suite, among them a di
 fault and developer mode ignoring a lost input. The scenarios added since (the rail sensor reading low, the overcharged cell, developer
 mode rules, the soft ramp after pre-charge) were written to catch exactly those. The runner and its list of planted bugs are in
 `test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit, the second review round and the red team it has 47
-planted bugs, one for each fix. On the current code **the result of the run on this code is being filled in**. The one that survives by design is the fatal-stop rail value in `src/hal.c`:
+planted bugs, one for each fix. On the current code **46 of 47 are caught** (GitHub Actions, "Mutation tests", run 41691500703). The one that survives by design is the fatal-stop rail value in `src/hal.c`:
 the simulator replaces that file with its model, so that line is checked by review and on the charger only (the same change made in
 the model is caught).
 
@@ -301,6 +301,9 @@ calibration. Fixed in 0.2-beta.3, each with a test and a planted bug:
   - **the millisecond clock wraps after about 25 days of continuous power:** once, a pending settings save or the USB-C guard's
     steady wait may come early or late. The simulator replaces that code, so a change could not be tested; power it off now and then
   - the mAh total can lose about 1 mAh on a very long pass (display only)
+  - **no self-checks of the chip itself** (a checksum of the program at start-up, a RAM test, a clock check: what IEC 60730 calls
+    "Class B" software for appliance controls): decided against, they would cost 100 to 200 bytes of flash the chip does not have
+    spare. A corrupted program or bad RAM is caught only as far as the watchdog and the range checks on every reading catch it
 
 ### On the charger (one unit, VIFLY WhoopStor V3, chip version A)
 - VCC 4.484 V on every supply tried: two PD chargers, a laptop port, a 4S pack (it comes from its own regulator).
