@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenWS3</title>
+<title>WS3 Unlocked</title>
 <!--
   OpenWS3 in the browser: a monitor and control panel for the charger (ports, start / stop, charge current and voltage), a firmware
   updater, and, in the Advanced view, the limiter, the event log and developer mode, which switches every output by hand.
@@ -130,11 +130,12 @@ progress { width: 100%; height: 10px; margin-top: 10px; accent-color: var(--acce
 </head>
 <body>
 <header>
-  <h1>OpenWS3</h1>
+  <h1>WS3 Unlocked</h1>
   <span id="conn">not connected</span>
   <a id="updChip" class="chip" href="#fwcard" hidden>Update available</a>
-  <a class="guide" href="https://github.com/openws3/openws3/blob/main/GUIDE.md" target="_blank" rel="noopener">User guide</a>
-  <a class="disc" href="https://discord.gg/n95aNxqCM" target="_blank" rel="noopener">Discord</a>
+  <a class="guide" href="https://github.com/Pogaldock/openws3/blob/rot-theme/GUIDE.md" target="_blank" rel="noopener">User guide</a>
+  <a class="guide" href="https://github.com/Pogaldock/openws3/blob/rot-theme/SAFETY.md" target="_blank" rel="noopener">Safety</a>
+  <a class="disc" href="https://github.com/Pogaldock/openws3/issues" target="_blank" rel="noopener">Report a problem</a>
   <button id="bConnect" class="primary">Connect</button>
   <span class="seg" id="view"><button id="bSimple">Simple</button><button id="bAdv">Advanced</button></span>
   <button id="bEnter" class="adv fwonly mononly" disabled>Enter dev mode</button>
@@ -150,32 +151,35 @@ progress { width: 100%; height: 10px; margin-top: 10px; accent-color: var(--acce
     <div class="actions"><button id="bUpdate" class="primary">Update now</button></div>
   </section>
   <section class="card notice">
-    <h2>Experimental beta firmware</h2>
-    <p>OpenWS3 is early software and testing is still ongoing, so it has not seen every cell, supply and load yet.
-      You are charging lithium cells with it, at your own risk.</p>
+    <h2>Unofficial, experimental firmware</h2>
+    <p>WS3 Unlocked is a modified build of <a href="https://github.com/openws3/openws3" target="_blank" rel="noopener">OpenWS3</a>, the open
+      firmware for this charger, with a custom look and extra safety checks. It is not made or supported by VIFLY, nor by the OpenWS3 authors.
+      It has been tested in simulation and on one charger only. You are charging lithium cells with it, at your own risk:
+      read <a href="https://github.com/Pogaldock/openws3/blob/rot-theme/SAFETY.md" target="_blank" rel="noopener">what was tested and what was not</a> first.</p>
     <ul>
       <li><b>Supervise the charger</b> the whole time it charges. Never leave it charging unattended or overnight.</li>
       <li>Charge only cells in good condition, and pick the target voltage for the cell: 4.35 V is for high-voltage (HV) cells only.</li>
-      <li>It is made for the <b>WhoopStor V3</b> charger only. See the <a href="https://github.com/openws3/openws3/blob/main/GUIDE.md" target="_blank" rel="noopener">user guide</a> for how to use it.</li>
+      <li>Check a full cell with a multimeter after your first charges: rested 5 minutes it should read the target (4.17 to 4.23 V for 4.20 V, 4.32 to 4.38 V for 4.35 V).</li>
+      <li>It is made for the <b>WhoopStor V3</b> charger only. See the <a href="https://github.com/Pogaldock/openws3/blob/rot-theme/GUIDE.md" target="_blank" rel="noopener">user guide</a> for how to use it.</li>
     </ul>
   </section>
   <section class="card join">
-    <h2>Questions, problems, news</h2>
-    <p>There is a Discord server for OpenWS3: installing it, flashing problems, charging behaviour, bug reports, and word of new releases.
-      It is the quickest place to get an answer, and a report there helps the next person with the same charger.</p>
-    <div class="actions"><a class="bigbtn" href="https://discord.gg/n95aNxqCM" target="_blank" rel="noopener">Join the OpenWS3 Discord</a></div>
+    <h2>Questions and problems</h2>
+    <p>Problems with WS3 Unlocked go to its own issue page, not to OpenWS3 or VIFLY: they did not make these changes.
+      Say what the charger did, which supply and cells you used, and add a photo of diagnostics page 1.</p>
+    <div class="actions"><a class="bigbtn" href="https://github.com/Pogaldock/openws3/issues" target="_blank" rel="noopener">Report a problem</a></div>
   </section>
   <section class="card welcome">
-    <h2>Already running OpenWS3?</h2>
-    <p>Plug the charger in with USB-C, press <b>Connect</b> and pick <i>OpenWS3</i> in the list.</p>
+    <h2>Already running WS3 Unlocked or OpenWS3?</h2>
+    <p>Plug the charger in with USB-C, press <b>Connect</b> and pick <i>WS3 Unlocked</i> (or <i>OpenWS3</i>) in the list.</p>
     <p id="noHid" class="badge" hidden>This browser cannot talk to USB devices: use Chrome, Edge or another Chromium browser.</p>
   </section>
   <section class="card welcome">
-    <h2>Install OpenWS3 on your charger</h2>
+    <h2>Install WS3 Unlocked on your charger</h2>
     <p id="newest" hidden></p>
     <div class="check">
       <p><b>Before you install, check that this charger is a WhoopStor V3</b> (six ports, a 160 x 80 colour screen, two buttons, USB-C).
-        OpenWS3 is written for that board. On another charger, or another hardware revision, it can drive the power stage wrongly.
+        WS3 Unlocked is written for that board. On another charger, or another hardware revision, it can drive the power stage wrongly.
         If you are not sure, do not install it.</p>
       <p>Installing replaces the firmware now on the charger, and this page does not keep a copy of it. The manufacturer's firmware can be put back later with the vendor's update package. Take all cells out of the charger first.</p>
     </div>
@@ -274,7 +278,7 @@ sudo udevadm control --reload-rules</pre>
     </div>
     <progress id="fwProg" max="100" value="0" hidden></progress>
     <div id="fwMsg" class="hint"></div>
-    <p class="hint">A running OpenWS3 restarts into its loader by itself, takes the new firmware and starts again (not while charging).
+    <p class="hint">A running WS3 Unlocked or OpenWS3 restarts into its loader by itself, takes the new firmware and starts again (not while charging).
       Do not unplug the charger meanwhile. If an update is ever interrupted, hold the left button while plugging in USB-C and install again.
       "Check the unit" only reads: it restarts the charger into its loader, reports the chip and the area it keeps its settings in, and
       starts the firmware again.</p>
@@ -419,7 +423,7 @@ async function connect(d) {
   p1 = p2 = p3 = out = null; ispRx.length = 0;
   dev.addEventListener('inputreport', kind === 'fw' ? onReport : ispOnReport);
   lastRx = performance.now();
-  $('conn').textContent = 'connected: ' + (dev.productName || 'OpenWS3');
+  $('conn').textContent = 'connected: ' + (dev.productName || 'WS3 Unlocked');
   fwShow();
 }
 function disconnected() {
@@ -572,7 +576,7 @@ async function sha256hex(b) {                       // of the image without its 
   return Array.from(h, x => x.toString(16).padStart(2, '0')).join('');
 }
 function fwCheck(b) {
-  if (!b.length || b.length > 65536 || b[0] !== 0x02) return 'This is not an OpenWS3 firmware image (.bin).';
+  if (!b.length || b.length > 65536 || b[0] !== 0x02) return 'This is not a firmware image for this charger (.bin).';
 }
 function fwSet(name, data, meta = '') {
   const bad = fwCheck(data);
@@ -596,16 +600,16 @@ function fwShow() {
   if (kind === 'isp') rows.push(['Charger', 'in loader mode', 'ready to be programmed']);
   if (kind === 'fw' && p1) {
     const tag = { update: ['Update available', 'upd'], same: ['Up to date', 'ok'], other: ['Another build of this release', ''], newer: ['Newer than this page', ''] }[st] || [];
-    rows.push(['On the charger', installed() || (inDev() ? 'developer mode: not shown' : p1.ver ? '…' : 'an earlier OpenWS3 (no version)'), '', tag[0], tag[1]]);
+    rows.push(['On the charger', installed() || (inDev() ? 'developer mode: not shown' : p1.ver ? '…' : 'an earlier OpenWS3 build (no version)'), '', tag[0], tag[1]]);
   }
   if (BUNDLED) rows.push(['Newest (in this page)', bundledText(), 'built ' + BUNDLED.built + ', ' + (BUNDLED.size / 1024).toFixed(1) + ' KB, SHA-256 ' + BUNDLED.sha256, bundledOk ? 'checked' : 'not checked', bundledOk ? 'ok' : 'upd']);
-  if (fw && !(BUNDLED && fw.name === 'OpenWS3 ' + bundledText())) rows.push(['Selected file', fw.name, (used / 1024).toFixed(1) + ' KB']);
+  if (fw && !(BUNDLED && fw.name === 'WS3 Unlocked ' + bundledText())) rows.push(['Selected file', fw.name, (used / 1024).toFixed(1) + ' KB']);
   else if (!fw) rows.push(['Firmware', 'choose a file (.bin) to install']);
   rows.push(...chipRows());
   kvSet($('fwKv'), rows);
   $('updChip').hidden = $('updCard').hidden = st !== 'update';
   if (st === 'update') {
-    $('updText').textContent = 'The charger runs ' + (installed() || 'an earlier OpenWS3') + '. The newest firmware, ' + bundledText() + ', is in this page.' +
+    $('updText').textContent = 'The charger runs ' + (installed() || 'an earlier build') + '. The newest firmware, ' + bundledText() + ', is in this page.' +
       (p1.run ? ' Stop charging first: it cannot be updated while it charges.' : '');
     $('bUpdate').disabled = busy || !!p1.run;
   }
@@ -648,10 +652,10 @@ $('bFlash').onclick = async () => {
   if (busy || !fw) return;
   let hash = '';
   try { hash = await sha256hex(fw.data); } catch (e) { fwStatus('Could not compute the SHA-256 of the image: open the page in Chrome or Edge.', true); return; }
-  if (BUNDLED && fw.name === 'OpenWS3 ' + bundledText() && hash !== BUNDLED.sha256) { fwStatus('The image does not match its SHA-256: not written.', true); return; }
+  if (BUNDLED && fw.name === 'WS3 Unlocked ' + bundledText() && hash !== BUNDLED.sha256) { fwStatus('The image does not match its SHA-256: not written.', true); return; }
   if (kind === 'fw' && (!p1 || p1.run || inDev())) { fwStatus(p1 && p1.run ? 'Stop charging first.' : 'Leave developer mode first.', true); return; }
   if (!confirm('Replace the firmware on the charger with ' + fw.name + '?\nSHA-256 ' + hash + (kind === 'isp' ? '\nThe current firmware will be erased.' : '') +
-               '\nOpenWS3 is experimental and is made for the WhoopStor V3 only: continue only if this is one.' +
+               '\nWS3 Unlocked is unofficial, experimental firmware made for the WhoopStor V3 only: continue only if this is one.' +
                '\nDo not unplug the charger until it has restarted.')) return;
   busy = true; fwShow();
   const prog = $('fwProg');
@@ -678,14 +682,14 @@ $('bFlash').onclick = async () => {
   busy = false; prog.hidden = true; fwShow();
 };
 let bundledOk = false;                               // the embedded image matches the SHA-256 written next to it (checked at load)
-const useBundled = () => { if (bundledOk) fwSet('OpenWS3 ' + bundledText(), Uint8Array.from(atob(BUNDLED.data), c => c.charCodeAt(0))); };
+const useBundled = () => { if (bundledOk) fwSet('WS3 Unlocked ' + bundledText(), Uint8Array.from(atob(BUNDLED.data), c => c.charCodeAt(0))); };
 if (BUNDLED) {
   sha256hex(Uint8Array.from(atob(BUNDLED.data), c => c.charCodeAt(0))).then(h => {
     bundledOk = h === BUNDLED.sha256;
     if (bundledOk) { useBundled(); fwShow(); }
     else fwStatus('The firmware inside this page is damaged (its SHA-256 does not match): download the page again.', true);
   }).catch(e => fwStatus('Could not check the firmware inside this page (' + e.message + '): open the page in Chrome or Edge.', true));
-  $('newest').textContent = 'The newest firmware, in this page: OpenWS3 ' + bundledText() + ', built ' + BUNDLED.built + '.';
+  $('newest').textContent = 'The newest firmware, in this page: WS3 Unlocked ' + bundledText() + ', built ' + BUNDLED.built + '.';
   $('newest').hidden = false;
 } else $('bFile').classList.remove('adv');           // a page without an image: everyone chooses a file
 $('bUpdate').onclick = () => { useBundled(); $('bFlash').click(); };   // the usual confirmation follows

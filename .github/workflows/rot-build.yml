@@ -27,7 +27,7 @@ jobs:
         run: make test
       - name: Whole-firmware safety scenarios on a simulated board
         run: make sim
-      - name: Unit tests and the charge-logic trace on a simulated 8051 (16-bit int, as on the charger)
+      - name: Pure, menu and port-settings unit tests and the charge-logic trace on a simulated 8051 (16-bit int, as on the charger)
         run: |
           sudo apt-get install -y -qq sdcc-ucsim >/dev/null      # s51, the 8051 simulator; this job holds no write token
           make check-8051

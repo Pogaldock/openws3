@@ -201,5 +201,5 @@ void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const uint8_t *bits,
 uint8_t usb_tx[USB_REPORT], usb_tx2[USB_REPORT];
 void usb_init(void) {}
 void usb_isr(void) {}
-uint8_t usb_configured(void) { return 0; }
+uint8_t usb_configured(void) { return S.usb_host; }                 /* a host reading the telemetry (some scenarios) */
 uint8_t usb_cmd_get(uint8_t *cmd) { int i; if (!S.usb_pending) return 0; for (i = 0; i < USB_CMD; i++) cmd[i] = S.usb_cmd[i]; S.usb_pending = 0; return 1; }

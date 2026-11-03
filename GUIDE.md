@@ -1,6 +1,6 @@
-# OpenWS3 user guide
+# WS3 Unlocked user guide
 
-How to use a WhoopStor V3 charger running OpenWS3: reading the screen, starting a charge, and what every setting does.
+How to use a WhoopStor V3 charger running WS3 Unlocked (or OpenWS3, which it is based on): reading the screen, starting a charge, and what every setting does.
 All pictures are what the unit's 160 x 80 screen shows; they are drawn by the firmware's own screen code (`make screens`).
 
 > **This firmware is early.** You are charging lithium cells with software that is still being tested. Stay with the
@@ -73,7 +73,7 @@ The line under the voltage and the small square in the corner give the port stat
 | `REST` | orange | output off for a moment; the cell voltage is read to decide what to do next |
 | `FULL` | white; the whole cell is tinted green | the cell is at the target voltage; the port keeps watching it |
 | `BLEED` | blue | the cell is above the target, so the port discharges it down to the target |
-| `ERR` | magenta, blinking | over-voltage or over-current on that port; it stays off until you remove the cell or stop the run |
+| `ERR` | magenta, blinking | a fault on that port: over-voltage, over-current, a cell below 2.5 V (over-discharged), 30 minutes without reaching 3.0 V, or 3 hours of charging without finishing; it stays off until you remove the cell or stop the run |
 
 While charging, a port shows its measured current, and for one second in four the current it is aiming for (`>0.6A`).
 
@@ -163,7 +163,7 @@ While you edit, the item is marked orange and the bottom row changes to `< -`, `
 | | BELOW MIN | what happens when the input falls below that floor: `LIMIT` or `STOP RUN` |
 | | REGULATION | which ports get the available current first: `EQUAL`, `CH1 FIRST` or `HIGH V FIRST` |
 | **PREFERENCES** | SOUND | beeps `ON` or `OFF` |
-| | THEME | the colours: `CLASSIC`, `CALM`, `AMBER`, `HIGH CONTRAST` |
+| | THEME | the look: `ROT` (default in WS3 Unlocked), `CLASSIC`, `CALM`, `AMBER`, `HIGH CONTRAST` |
 | | DISABLE USB POWER | `NO` or `YES`. With `YES` the USB-C input is never switched on: use it when the charger is powered from the XT60 and the USB-C is only a data link to a computer (monitor, web page, flashing). A computer then neither powers the unit nor gets power from it. While it is on, the input voltage in the header is green and reads `USB OFF` for a second every four seconds, so you can see at a glance that the USB-C is isolated. On USB alone the unit shows `INPUT LOW` with `USB POWER OFF, USE XT60` and waits for the XT60; the menu still opens, so the setting can be switched back. Not while charging; takes effect at once, switching back to `NO` waits for the next start |
 | **DIAGNOSTICS** | | the technical pages, see below |
 
@@ -251,7 +251,15 @@ switch the setting back. Set it back to `NO` to charge from a USB-C supply again
 
 ## Themes
 
-The theme changes colours only, never behaviour, and applies at once. In every theme the same colours mean the same kind of thing
+The theme changes the look only, never behaviour, and applies at once. WS3 Unlocked adds `ROT` and makes it the default: neon green on
+black, skulls, eyes, static and thorns, an animated SYMBIOZE splash and a spiky font. The numbers and states it shows are the same as in
+the other themes.
+
+| ROT, charging | ROT, idle |
+|---|---|
+| <img src="docs/screens/rot_charging.png" width="360"> | <img src="docs/screens/rot_idle.png" width="360"> |
+
+The other themes are the original OpenWS3 ones and change colours only. In every theme the same colours mean the same kind of thing
 (red/orange for charging and warnings, green for good, blue for bleed). A full cell is tinted in every theme, so it shows from
 across the room (green; in `AMBER` a brighter amber).
 
@@ -272,7 +280,7 @@ across the room (green; in `AMBER` a brighter amber).
 | one short beep | a button press was accepted |
 | two beeps | a port has become full |
 | two long beeps | an error: a port fault, a stop by MIN IN VOLTS, or a locked item that you tried to change |
-| a repeating triple beep | the output rail is out of regulation (`RAIL!`): charging has stopped |
+| a repeating triple beep | the output rail is out of regulation (`RAIL!`): charging has stopped (on OpenWS3 builds compiled with SDCC 4.6 this alarm is silent; fixed in WS3 Unlocked) |
 
 PREFERENCES, SOUND `OFF` mutes all of them.
 
@@ -289,7 +297,7 @@ A unit with nothing saved starts with these values:
 | BELOW MIN | LIMIT |
 | REGULATION | CH1 FIRST |
 | SOUND | ON |
-| THEME | CLASSIC |
+| THEME | ROT (WS3 Unlocked; CLASSIC on OpenWS3) |
 | DISABLE USB POWER | NO |
 | every port | AUTO |
 
@@ -303,6 +311,7 @@ fault: everything stays off until the power is cycled (the USB link keeps workin
 |---|---|---|
 | amber `INPUT LOW` | the input is below about 4.6 V, at start or during a run (a run is stopped). With DISABLE USB POWER on the second line says `USB POWER OFF, USE XT60` | connect or strengthen the supply, or use a lower current |
 | amber `VCC LOW` | the unit's own supply voltage is 4.4 V or less | try another supply or cable |
+| amber `TOO HOT` | the board is over about 60 C (an estimate: the sensor is not calibrated), or its temperature sensor reads as unplugged or shorted; a run is stopped | let it cool (below about 50 C) and start again; if it shows at room temperature, the sensor is faulty: do not use the charger |
 | amber `RAIL OUT OF RANGE`, with repeating beeps | the output rail is out of regulation for a while | check the supply; a run resumes by itself |
 | amber `RAIL TEST` | the rail self-test did not pass yet and is tried again | wait; after 3 tries it becomes `RAIL TEST FAIL` |
 | red `VCC HIGH` | the unit's own supply is over 5.0 V | power off, use a supply of at most the rated voltage |
@@ -310,7 +319,7 @@ fault: everything stays off until the power is cycled (the USB link keeps workin
 | red `NO RAIL` | the rail has not come up although the input is fine | power off, check the unit; see `HARDWARE.md` |
 | red `RAIL TEST FAIL` | the rail could not be regulated to the test levels (the two voltages shown are what it reached at the 3.80 V and 4.35 V levels) | power off and try again; see `HARDWARE.md` if it repeats |
 | `V LIMIT` in the input box | the input fell below MIN IN VOLTS with BELOW MIN on `STOP RUN` | as above, or set BELOW MIN to `LIMIT` |
-| a port shows `ERR` | over-voltage or over-current on that port | remove the cell, check it, or stop the run |
+| a port shows `ERR` | over-voltage, over-current, an over-discharged cell, or a charge time limit on that port | remove the cell and check it; a cell that faults again is damaged |
 | a port stays at `0.00V` | no cell, or a cell below 1.00 V, which is not charged | check the contacts and the cell |
 | a port shows `LIMIT` | an input limit holds it | wait for room, or raise MAX IN AMPS, or use a stronger supply |
 | a port shows `BLEED` | the cell is above the target voltage and is being discharged | wait, or choose a higher target |

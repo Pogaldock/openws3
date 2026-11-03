@@ -77,7 +77,7 @@ static const __code uint8_t HID_DESC[24] = {
 };
 static const __code uint8_t STR_LANG[4]  = { 0x04, 0x03, 0x09, 0x04 };
 static const __code uint8_t STR_MANUF[8] = { 0x08, 0x03, 'S', 0, 'T', 0, 'C', 0 };
-static const __code uint8_t STR_PROD[16] = { 0x10, 0x03, 'O', 0, 'p', 0, 'e', 0, 'n', 0, 'W', 0, 'S', 0, '3', 0 };
+static const __code uint8_t STR_PROD[26] = { 0x1A, 0x03, 'W', 0, 'S', 0, '3', 0, ' ', 0, 'U', 0, 'n', 0, 'l', 0, 'o', 0, 'c', 0, 'k', 0, 'e', 0, 'd', 0 };   /* "WS3 Unlocked" */
 
 uint8_t XD usb_tx[USB_REPORT];
 uint8_t XD usb_tx2[USB_REPORT];

@@ -21,6 +21,7 @@ typedef struct {
     int16_t   XD *rail_duty;   /* the rail actuator duty */
     uint8_t   XD *screen;      /* which screen is showing (app.h SCR_*) */
     uint8_t   XD *run, *rail_hold, *strap, *stop, *alarm, *stack;
+    uint8_t   XD *fatal;         /* the latched fatal condition (sup.h SF_*), 0 = none */
 } tele_ctx_t;
 
 void    tele_init(const tele_ctx_t XD *ctx);

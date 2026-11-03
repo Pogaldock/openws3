@@ -13,7 +13,7 @@ static uint16_t XD bg8;                         /* the bandgap count x 8 (cal_vc
 static uint8_t  XD slow_div;
 static uint32_t XD vg_t0, vg_tj;                /* input guard: start of the learning, last time the input jumped (hal_ms) */
 static uint16_t XD vg_ref, vg_off, vg_mv;       /* level with the bypass on (the USB-C level), level with it off, this reading */
-static uint8_t  XD vg_n, vg_hi, vg_state;       /* probe passes, passes above the level, VG_* (adc.h) */
+static uint8_t  XD vg_n, vg_hi, vg_lo, vg_state;   /* probe passes, passes above / far below the level, VG_* (adc.h) */
 
 /* Input bypass guard.  The bypass (P5.3) is requested at start when USB-C powers the board (strap low).  It conducts both ways, so a
    supply on the XT60 / DC jack that is higher than the USB-C source would be fed backwards into it (a laptop port, a phone charger).
@@ -34,12 +34,14 @@ static uint8_t  XD vg_n, vg_hi, vg_state;       /* probe passes, passes above th
 #define VG_DIODE_MV      200                    /* the rise that shows USB-C is the source (the diode drops about 600 mV) */
 #define VG_RISE_MV       400
 #define VG_HI_PASSES     3
+#define VG_DROP_MV       2000
+#define VG_LO_PASSES     222                    /* 1 s */
 
 static void vg_learn(void) { vg_state = VG_LEARN; vg_tj = hal_ms(); vg_off = vg_mv; }
 
 void adc_guard_start(void)                      /* once per power-up, before the first scan (app.c) */
 {
-    vg_t0 = vg_tj = hal_ms(); vg_ref = vg_off = vg_mv = 0; vg_n = vg_hi = 0; vg_state = VG_LEARN;
+    vg_t0 = vg_tj = hal_ms(); vg_ref = vg_off = vg_mv = 0; vg_n = vg_hi = vg_lo = 0; vg_state = VG_LEARN;
     hal_bypass_ok(0);
 }
 
@@ -57,6 +59,9 @@ static void vin_guard(void) REENT                 /* reentrant: its 32-bit time 
         break;
     case VG_OK:
         if (vg_mv > vg_ref + VG_RISE_MV) { if (++vg_hi >= VG_HI_PASSES) vg_learn(); } else vg_hi = 0;
+        /* far below the level for a second: not load (that sags by tenths of a volt) but a new USB-C level (a PD source reset to 5 V):
+           learnt again, so a supply plugged in afterwards is measured against the level that is really there */
+        if (vg_mv + VG_DROP_MV < vg_ref) { if (++vg_lo >= VG_LO_PASSES) { vg_lo = 0; vg_learn(); } } else vg_lo = 0;
         break;
     default:                                    /* VG_HOLD: a higher reading is still the XT60 supply; a fall may mean it has gone */
         if (vg_mv > vg_off) vg_off = vg_mv;

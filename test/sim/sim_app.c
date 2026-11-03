@@ -11,6 +11,7 @@
 #include "adc.h"
 #include "app.h"
 #include "cfg.h"
+#include "usb.h"
 #include "../check.h"
 
 #define SEC(s) ((uint64_t)((s) * 2000))
@@ -140,7 +141,8 @@ static void s_dead_cell(void)
 static void s_gentle(void)
 {
     uint64_t end;
-    double max_low = 0, max_high = 0;
+    double max_low = 0, max_high = 0, first = 0;
+    uint64_t t_up = 0;
     sim_attach(0, 2.7, 120);
     boot(); set_current(10); start();
     end = S.ticks + SEC(20 * 60);
@@ -148,10 +150,13 @@ static void s_gentle(void)
         pass();
         if (rested(0) < 2.98 && S.amps[0] > max_low) max_low = S.amps[0];
         if (rested(0) > 3.1 && S.amps[0] > max_high) max_high = S.amps[0];
+        if (!t_up && S.amps[0] > 0.13) t_up = S.ticks;                            /* the current leaves the pre-charge level */
+        if (t_up && S.ticks - t_up < SEC(0.05) && S.amps[0] > first) first = S.amps[0];
     }
-    printf("  2.70 V cell at a 1.0 A setting: %.3f A below 3.0 V, %.3f A above\n", max_low, max_high);
+    printf("  2.70 V cell at a 1.0 A setting: %.3f A below 3.0 V, %.3f A above, at most %.3f A in the first 50 ms above (soft ramp)\n", max_low, max_high, first);
     CHECK(max_low > 0.05 && max_low < 0.13);
     CHECK(max_high > 0.9);
+    CHECK(first < 0.6);                                                          /* up through the soft ramp, not in one jump */
 }
 
 static void s_broken_rail(void)
@@ -299,6 +304,7 @@ static void s_vcc_fatal(void)
 {
     double t;
     sim_attach(0, 3.9, 120);
+    S.usb_host = 1;
     boot(); start(); run_for(10);
     S.vcc = 5.15;
     t = time_until(all_off, 2.0);
@@ -307,6 +313,7 @@ static void s_vcc_fatal(void)
     CHECK(t >= 0 && t < 0.5);
     CHECK(all_off());
     CHECK(S.rail < 4.0);                                            /* a fatal stop leaves the rail at its lowest, not its highest */
+    CHECK(usb_tx2[54] == SF_VCC_HIGH);                              /* and the host is told why */
 }
 
 /* the rail cannot be regulated from the start (it sits at 4.20 V): the self-test fails, a run can never start */
@@ -405,13 +412,14 @@ static void s_pd_steps(void)
     S.vin = 5.0;
     sim_attach(0, 3.70, 300);
     app_boot(); S.booted = 1; run_for(0.6); S.vin = 19.5; run_for(2.0);
-    printf("  dbg after start-up: state %u profile %u\n", adc_bypass_state(), S.profile);
-    run_for(6);
-    printf("  dbg later: state %u profile %u\n", adc_bypass_state(), S.profile);
     start(); run_for(10);
     S.vin = 5.0; run_for(0.3); S.vin = 19.5; run_for(10);
     printf("  PD 5 V -> 20 V at start, a PD reset mid-charge: bypass on: %s\n", S.profile ? "yes" : "NO");
     CHECK(S.profile);
+    S.vin = 5.0; run_for(5);                                        /* the source falls back to 5 V and stays there ... */
+    S.xt60_v = 16.8; run_for(5);                                    /* ... then a 4S pack is plugged in */
+    printf("  ... PD source back at 5 V for good, then a 16.8 V pack: bypass now %s, fed backwards %.3f s\n", S.profile ? "ON" : "off", S.backfeed_s);
+    CHECK(!S.profile && S.backfeed_s < 0.05);
 }
 
 /* USB-C and a pack both in at power-up (or a reset with both in): the bypass must stay off whenever the pack is the higher supply */
@@ -490,6 +498,47 @@ static void s_hot(void)
     CHECK(t >= 0 && t < 2.0);
 }
 
+/* the rail's own sense reads 10 % low: the rail regulates 10 % high; the port readings (another sensor) must catch the cell going over */
+static void s_rail_sense_low(void)
+{
+    sim_attach(0, 4.00, 300);
+    S.adc_scale[ADC_RAIL] = 0.90;
+    boot(); start(); run_for(1800);
+    printf("  rail sense 10 %% low (rail really about %.2f V): cell peak %.3f V, port PWM now %u (faulted by the port reading: %s)\n", S.rail, S.max_cell_v[0], S.pwm[0], S.pwm[0] ? "NO" : "yes");
+    CHECK(S.max_cell_v[0] < 4.27 && S.pwm[0] == 0);
+}
+
+/* a 4.45 V cell (overcharged elsewhere) with the storage target: it goes to BLEED, and above 4.40 V it must fault instead (no current, no bleed) */
+static void s_bleed_over(void)
+{
+    sim_attach(0, 4.45, 300);
+    S.cell[0].r = 0.02;
+    cfg_load(); settings.volt = 2; cfg_save();                       /* 3.80 V storage */
+    boot(); start(); run_for(60);
+    printf("  4.45 V cell, storage target: PWM %u, bleed switch %u (faulted above 4.40 V: %s)\n", S.pwm[0], S.sw[0], !S.pwm[0] && !S.sw[0] ? "yes" : "NO");
+    CHECK(!S.pwm[0] && !S.sw[0]);
+}
+
+/* developer mode keeps the supervision: a start command is refused, and a lost input turns the host's outputs off */
+static void s_dev_rules(void)
+{
+    static const uint8_t enter[] = { 7, 9, 1 }, startc[] = { 2, 0, 3 };
+    uint8_t set[19] = { 8, 0x15, 2, 0, 0, 137, 0x01, 0x90 };
+    int k;
+    set[18] = 9;
+    sim_attach(0, 3.80, 300);
+    S.usb_host = 1;
+    boot(); usb(enter, 3);
+    for (k = 0; k < 20; k++) { usb(set, 19); run_for(0.1); }
+    usb(startc, 3); run_for(0.2);
+    CHECK(!(usb_tx[8] & 1));                                        /* not running: a start is refused in developer mode */
+    CHECK(S.pwm[0] > 0);                                            /* the host's output, before */
+    S.vin = 3.0;
+    for (k = 0; k < 20; k++) { usb(set, 19); run_for(0.1); }
+    printf("  developer mode: input lost while a host drives port 1: PWM now %u, global %u\n", S.pwm[0], S.global);
+    CHECK(!S.pwm[0] && !S.global);
+}
+
 /* developer mode, a host pulsing a port on and off (each "off" used to release the voltage cut) with the rail at its top */
 static void s_dev_pulse(void)
 {
@@ -532,7 +581,8 @@ static const scen_t SC[] = {
     { "dev_top", s_dev_top }, { "dev_mode", s_dev_mode }, { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
     { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot },
     { "dev_pulse", s_dev_pulse }, { "dev_bleed", s_dev_bleed }, { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
-    { "hot", s_hot }, { "cfg_damage", s_cfg_damage },
+    { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
+    { "dev_rules", s_dev_rules },
 };
 
 int main(int argc, char **argv)

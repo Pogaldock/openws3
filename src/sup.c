@@ -26,7 +26,6 @@ static const CODE uint16_t TGT[NVOLTS] = { VU(4200), VU(4350), VU(3800), VU(3850
 #define ADC0_STOP        815
 #define ADC0_RESUME      1082
 #define ADC0_OPEN        4000
-#define ADC0_SHORT       60
 
 uint16_t sup_target(uint8_t volt)   { return TGT[volt < NVOLTS ? volt : 0]; }
 uint16_t sup_setpoint(uint8_t volt) { return sup_target(volt) + RAIL_ABOVE_TARGET; }
@@ -71,7 +70,7 @@ void sup_pass(const sup_in_t XD *in, sup_out_t XD *o)
     if (nr_cnt >= NO_RAIL_PASSES) o->fatal = SF_NO_RAIL;
 
     /* ---- board temperature (the thermistor, ADC0): too hot or a broken sensor stops charging until it is back in range ---- */
-    if (in->adc0 < ADC0_STOP || in->adc0 > ADC0_OPEN || in->adc0 < ADC0_SHORT) hot = 1;
+    if (in->adc0 < ADC0_STOP || in->adc0 > ADC0_OPEN) hot = 1;            /* a shorted sensor reads near 0: below ADC0_STOP */
     else if (in->adc0 >= ADC0_RESUME) hot = 0;
     if (hot) o->stop = STOP_TEMP;
 

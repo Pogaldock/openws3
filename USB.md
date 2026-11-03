@@ -1,6 +1,6 @@
 # USB monitor interface
 
-The firmware is a USB **HID** device (VID `34bf`, PID `1004`, product "OpenWS3") alongside its normal job. No driver is
+The firmware is a USB **HID** device (VID `34bf`, PID `1004`, product "WS3 Unlocked"; "OpenWS3" on upstream builds) alongside its normal job. No driver is
 needed. The report descriptor uses a vendor-defined usage page, so the host does not turn the telemetry into keyboard or other input events. On Linux it shows up as `/dev/hidrawN`. Use `tools/fwmon.py`.
 
 * Telemetry: 64-byte **IN** reports, polled every 10 ms, in two pages sent alternately (byte 3 = page): page 1 is the charger, page 2 the
@@ -17,7 +17,7 @@ needed. The report descriptor uses a vendor-defined usage page, so the host does
 **Counts** are what the ADC returned: 0..4095, relative to VCC, which is regulated. The charger works on them as they are, in a fixed
 unit: **vu** = 4.5 V / 4096 (1.0986 mV) for port voltages and the rail, **iu** = 1/68.25 A (14.65 mA) for port currents
 (`src/adc.h`). The bandgap count guards VCC. Every channel except the bandgap and ADC0 (the thermistor) is corrected for VCC in the firmware:
-reading = count × 1071 / bandgap count (the bandgap smoothed, `cal_vcc_gain` in cal.h), so the port voltages, currents, rail
+reading = count × 1071 / bandgap count (the bandgap read first in every pass and not smoothed, so a step in VCC is followed at once; `cal_vcc_gain` in cal.h), so the port voltages, currents, rail
 and input do not follow the supply. The raw counts (developer mode, page 3) are plain counts.
 
 ## Telemetry report (IN, 64 bytes, big-endian)
@@ -66,7 +66,7 @@ Same header (bytes 0–7, byte 3 = 2, head / tail sequence in bytes 2 / 63). Eve
 | 47 | pre-release: the beta number of the firmware release (`src/version.h`), 0 for a final release or firmware that predates it |
 | 48–50 | reserved (0) |
 | 51 | some port is charging or bleeding (global enable) |
-| 52–56 | supervisor: stop reason (waiting condition: 1 input low, 2 VCC low, 3 rail out of range, 6 too hot), reserved (0), fatal condition (0 none, 0x10 VCC over 5.0 V, 0x11 rail overvoltage, 0x12 no rail), rail alarm (stop reason 3), fan |
+| 52–56 | supervisor: stop reason (waiting condition: 1 input low, 2 VCC low, 3 rail out of range, 6 too hot), reserved (0), fatal condition (0 none, 0x10 VCC over 5.0 V, 0x11 rail overvoltage, 0x12 no rail, 0x13 rail self-test failed; also sent once the unit is in its fatal phase), rail alarm (stop reason 3), fan |
 | 57–60 | build id: the first 8 hex digits of the git commit the firmware was built from, 32 bit (the page is not sent in developer mode; use byte 10 of page 1 there) |
 | 61 | 1 if the source tree had uncommitted changes when it was built |
 
@@ -87,7 +87,7 @@ Sent instead of page 2 while developer mode is on (byte 12's high nibble = 14). 
 | 55 | applied: b0 global enable P5.2, b1 fan P0.7, b2 profile P5.3, b3 beep request, b4 rail on raw duty (else regulated) |
 | 56 | inputs: b0 button 1 down, b1 button 2 down, b2 strap P3.4 |
 | 57 | b0 watchdog: no command 8 for 0.5 s, port outputs off and the rail back on its entry setpoint; b1 an input / VCC stop holds the port outputs off |
-| 58 | bit k: port k+1 cut by the guard (above 4.40 V or 2.8 A); released by asking for duty 0 and switch low on it |
+| 58 | bit k: port k+1 cut by the guard (50 mV above the selected target, 2.8 A, a bleed below 3.0 V, or more than 0.2 A into a cell below 3.0 V; checked whether the port is on or not); released by asking for duty 0 and switch low on it, and set again at once if the reason is still there |
 | 59, 60 | rail setpoint in force, vu |
 
 The screen open on the LCD (menu, port settings or a diagnostics page) is in byte 12's high nibble. Stop reason 5 in byte 11 is the minimum input voltage (user setting).
@@ -97,7 +97,7 @@ The screen open on the LCD (menu, port settings or a diagnostics page) is in byt
 | Cmd | Argument | Effect |
 |---|---|---|
 | 1 | – | stop charging (staggered, like the button). Always allowed |
-| 2 | – | start charging. Refused if already running or if a supervisor stop is active |
+| 2 | – | start charging. Refused if already running, if a supervisor stop or a fatal condition is active, before the rail self-test has passed, and in developer mode |
 | 3 | current in iu (21, 28 … 91) | set the charge current, stored in EEPROM. Refused while running or if not a valid step |
 | 4 | voltage 0..3 | set the target voltage (0 = 4.20 V, 1 = 4.35 V, 2 = 3.80 V storage, 3 = 3.85 V storage), stored in EEPROM. Refused while running |
 | 5 | – | ping |
@@ -111,6 +111,6 @@ Command 8: byte 1 flags (b0 global enable, b1 fan, b2 profile, b3 beep (a 0→1 
 pins (bit k = port k+1 to the bleed path), bytes 4–5 the rail: a setpoint in vu (at most 3972 = 4.35 V) or, with b4, a raw duty
 (0..400, higher = lower rail), bytes 6–17 PWM duty of ports 1..6 (0..400), all 16 bit big-endian, byte 18 the session given
 with command 7: only that host is obeyed, so two tools cannot fight over the outputs. A new session can enter once the old one has gone
-quiet for 0.5 s. Guards that stay on: a port above
-4.40 V or 2.8 A is cut, an input or VCC stop holds the ports off, the fan also runs when the board is warm, a rail over-voltage is
+quiet for 0.5 s. Guards that stay on: a port 50 mV above the
+selected target voltage or at 2.8 A is cut (checked whether it is on or not), no bleed below 3.0 V, at most 0.2 A into a cell below 3.0 V, an input or VCC stop holds the ports off, the fan also runs when the board is warm, a rail over-voltage is
 the usual fatal error. The main power enable P4.7 is not offered (it would cut the unit's own supply).

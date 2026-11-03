@@ -165,7 +165,7 @@ void app_boot(void)
 
     tctx.out = &cout; tctx.in = &cin; tctx.sup = &sout; tctx.rail_duty = &rail_duty;
     tctx.screen = &screen; tctx.run = &run; tctx.rail_hold = &rail_hold; tctx.strap = &strap;
-    tctx.stop = &stop_reason; tctx.alarm = &alarm_ui; tctx.stack = &stack_free;
+    tctx.stop = &stop_reason; tctx.alarm = &alarm_ui; tctx.stack = &stack_free; tctx.fatal = &fatal_code;
     tele_init(&tctx);
 
     hal_power(1);                                    /* main power enable, first on */
