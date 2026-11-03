@@ -642,6 +642,25 @@ static void s_b2_volt(void)
     CHECK(settings.volt == 1 && S.pwm[0] > 0);
 }
 
+/* the finale, then a new cell goes in and fills: a finale (and summary) of its own */
+static void s_new_cell_finale(void)
+{
+    int k, shown = 0, was = 0;
+    sim_attach(0, 4.10, 300);
+    S.usb_host = 1;
+    boot(); start();
+    for (k = 0; k < 2400; k += 5) {
+        int now;
+        if (k == 1200) sim_attach(1, 4.05, 300);                   /* 20 min in, after the first finale */
+        run_for(5);
+        now = (usb_tx[12] >> 4) == SCR_SUMMARY;
+        if (now && !was) { shown++; tap(1); }
+        was = (usb_tx[12] >> 4) == SCR_SUMMARY;
+    }
+    printf("  a second cell put in after the finale: the summary opened %d times (2)\n", shown);
+    CHECK(shown == 2);
+}
+
 typedef struct { const char *name; void (*fn)(void); } scen_t;
 static const scen_t SC[] = {
     { "nominal", s_nominal }, { "vcc_low", s_vcc_low }, { "vcc_mid", s_vcc_mid }, { "vcc_high", s_vcc_high },
@@ -653,7 +672,7 @@ static const scen_t SC[] = {
     { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
     { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot }, { "no_dev", s_no_dev },
     { "stats", s_stats }, { "store", s_store }, { "store_back", s_store_back }, { "fault_full", s_fault_full },
-    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt },
+    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale },
     { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
     { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
    

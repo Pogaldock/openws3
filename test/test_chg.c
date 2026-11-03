@@ -359,6 +359,16 @@ static void t_late(void)
     CHECK(b.out.state[0] == PS_FAULT && k < (int)(T_CHG_MAX_S * 222L / 4) + 2000 && k > (int)(T_CHG_MAX_S * 222L / 4) - 2000);
 }
 
+/* bleeding that cannot bring a cell down (a huge cell, a weak discharge path) faults the port after 3 h, real time */
+static void t_bleed_limit(void)
+{
+    bench_t b; int k, lim = (int)(T_BLEED_MAX_S * 222L / 4);
+    bench_init(&b, 0, 21); attach(&b, 0, 4.30, 400000, 0.1);   /* 4.30 V on a 4.20 V target, far too big to bleed down in 3 h */
+    b.in.late = 3;                                              /* every pass four passes long: 3 h in a quarter of the passes */
+    for (k = 0; k < lim + 4000 && b.out.state[0] != PS_FAULT; k++) step(&b);
+    CHECK(b.out.state[0] == PS_FAULT && k > lim - 2000 && k < lim + 2000 && !b.out.sw[0]);
+}
+
 static void t_pulled(void)
 {
     bench_t b; int n;
@@ -525,6 +535,6 @@ static void t_time_limit(void)
 int main(void)
 {
     t_refuse(); t_precharge(); t_time_limit();
-    t_sup(); t_idle_and_probe(); t_cc(); t_classify(); t_full_charge(); t_faults(); t_cut(); t_independent(); t_gate(); t_offset(); t_late(); t_pulled(); t_per_port(); t_storage(); t_full_hold(); t_bleed(); t_bleed_series();
+    t_sup(); t_idle_and_probe(); t_cc(); t_classify(); t_full_charge(); t_faults(); t_cut(); t_independent(); t_gate(); t_offset(); t_late(); t_bleed_limit(); t_pulled(); t_per_port(); t_storage(); t_full_hold(); t_bleed(); t_bleed_series();
     return check_report("chg");
 }

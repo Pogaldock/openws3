@@ -37,7 +37,7 @@ M = [
  ("src/stats.c", "                        if (mv > w.v0) { mv -= w.v0; if (mv > 655) mv = 655; r = mv * 100u / ma; }    /* mV x 1000 / mA */", "                        if (mv > w.v0) { mv -= w.v0; if (mv > 655) mv = 655; r = mv * 10u / ma; }", "TEST"),
  # from the independent audit (SAFETY.md "Audit"): each fix must be caught if it is undone
  ("src/app.c", "    if (fault) { if (screen == SCR_SUMMARY) summary_close(); return; }", "    ;", "fault_full"),
- ("src/app.c", "    if (done && stats.packs != fin_packs) done = 0;  /* a new cell went in: when all are full again, a finale of their own */", "    ;", "TEST"),
+ ("src/app.c", "    if (done && stats.packs != fin_packs) done = 0;  /* a new cell went in: when all are full again, a finale of their own */", "    ;", "new_cell_finale"),
  ("src/app.c", "    if (!full || (busy_ports & 0x7F)) return;        /* a top-up of a cell that sagged keeps `done`: no replay, the 2 h go on */", "    if (!full || (busy_ports & 0x7F)) { done = 0; return; }", "sag_finale"),
  ("src/app.c", "    if (store_on) { settings.volt = store_prev; store_on = 0; }   /* the storage run is over: the user's own target again */", "    ;", "store_back"),
  ("src/app.c", "        if (adc_saturated(port_v_ch(k))) cin.v_now[k] = V_SATURATED;", "        ;", "saturated"),
