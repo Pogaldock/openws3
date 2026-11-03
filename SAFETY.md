@@ -206,7 +206,7 @@ rail, the start-up hole in the USB-C guard, the interrupt nesting and the settin
   long charge with the web page connected, 15 or more; `BYP ON` on USB-C alone, `BYP OFF` on the XT60 alone; `THERM` about 2000 to
   2300 in a room.
 - **Outputs off:** with no cells in, after a charge, the ports read near 0 V on page 2.
-- **Downloads:** `sha256sum -c SHA256SUMS`, and `gh attestation verify openws3.html -R Pogaldock/openws3`.
+- **Downloads:** `sha256sum -c SHA256SUMS`, and `gh attestation verify openws3.html -R Pogaldock/ws3-unlocked`.
 
 ## Still open (for anyone who wants to be sure)
 
@@ -223,5 +223,5 @@ rail, the start-up hole in the USB-C guard, the interrupt nesting and the settin
 
 ## Reporting a problem
 
-[Open an issue](https://github.com/Pogaldock/openws3/issues) with what the charger did, the supply and cells, the firmware build
+[Open an issue](https://github.com/Pogaldock/ws3-unlocked/issues) with what the charger did, the supply and cells, the firmware build
 (on the installer page), and a photo of diagnostics page 1. Not to OpenWS3 or VIFLY: they did not make these changes.

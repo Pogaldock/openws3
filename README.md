@@ -23,7 +23,7 @@ that work this fork would not exist.
 - This fork starts from OpenWS3 commit [`b20df96`](https://github.com/openws3/openws3/commit/b20df960e0f57bcb687b09705a246208d612fbed)
   (2026-10-30). `git diff b20df96..rot-theme` shows every line changed since, and the git history shows who wrote what.
 - Licence: MIT, as OpenWS3. `LICENSE` keeps the OpenWS3 copyright notice and adds one for the changes listed below.
-- Not affiliated with OpenWS3 or VIFLY. Problems with WS3 Unlocked go to [this repository's issues](https://github.com/Pogaldock/openws3/issues),
+- Not affiliated with OpenWS3 or VIFLY. Problems with WS3 Unlocked go to [this repository's issues](https://github.com/Pogaldock/ws3-unlocked/issues),
   not to them: they did not make these changes.
 - The safety fixes below that apply to OpenWS3 itself are marked *(upstream too)*, with the details in SAFETY.md, so they can be taken back into OpenWS3.
 
@@ -79,7 +79,7 @@ Everything not listed here is OpenWS3's, unchanged.
 
 ## Install
 
-- **The easy way:** download `openws3.html` from the [latest release](https://github.com/Pogaldock/openws3/releases/tag/rot-latest),
+- **The easy way:** download `openws3.html` from the [latest release](https://github.com/Pogaldock/ws3-unlocked/releases/tag/rot-latest),
   open it in Chrome or Edge, press Connect and follow the steps. A charger that runs the VIFLY firmware is put into its loader by
   holding the left button while plugging in USB-C; one that runs OpenWS3 or WS3 Unlocked restarts into it by itself.
 - **Going back:** the VIFLY firmware can be put back with VIFLY's own update package; OpenWS3 from its own releases.
@@ -87,7 +87,7 @@ Everything not listed here is OpenWS3's, unchanged.
 
 ### Check what you downloaded
 - `sha256sum -c SHA256SUMS` next to the downloaded files: they are the files GitHub built.
-- `gh attestation verify openws3.html -R Pogaldock/openws3`: GitHub signed that this file was built by this repository's workflow, from
+- `gh attestation verify openws3.html -R Pogaldock/ws3-unlocked`: GitHub signed that this file was built by this repository's workflow, from
   the commit named in the release.
 - The page itself shows the SHA-256 of the firmware it holds and refuses to install it if it does not match.
 - To be independent of GitHub's build: build it yourself (below) with SDCC 4.6.0 and compare `build/fw.bin`.
