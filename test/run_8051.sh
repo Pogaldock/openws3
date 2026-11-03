@@ -16,7 +16,7 @@ CF="-mmcs51 --model-large -Isrc -Ibuild -Itest"
 LINK="--xram-size 65536 --code-size 65536"
 sdcc $CF -c test/s51/runner.c -o $W/runner.rel
 sdcc $CF -c test/s51/io.c -o $W/io.rel
-for m in ports menu portset theme rowbuf limits dbgscr cal ctl fmt cfg_pure input_pure buzz_pure chg sup stats; do sdcc $CF -c src/$m.c -o $W/$m.rel; done
+for m in ports menu portset theme rowbuf limits dbgscr cal ctl fmt cfg_pure input_pure buzz_pure chg sup stats usbq_pure; do sdcc $CF -c src/$m.c -o $W/$m.rel; done
 MODS=$(ls $W/*.rel | grep -v -e runner -e /io.rel -e /t_)
 
 run() {   # $1 = image, $2 = output file, $3 = seconds; stops at the program's "EXIT" line
@@ -38,6 +38,8 @@ for t in pure menu portset; do
     grep -E 'FAIL|checks' $W/o_$t.txt || true
     grep -q '^EXIT 0' $W/o_$t.txt || { echo "8051 $t: did not finish with 0 failures"; fail=1; }
 done
+
+test/hal_8051.sh || fail=1                # the real hal.c: what a fatal stop writes into the registers
 
 cc -std=c99 -Wall -Wextra -Isrc -o $W/trace_pc test/chg_trace.c src/chg.c src/sup.c src/ctl.c src/cal.c
 $W/trace_pc > $W/trace_pc.txt

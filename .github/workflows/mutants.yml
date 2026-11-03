@@ -13,6 +13,8 @@ jobs:
         with: { fetch-depth: 0, persist-credentials: false }
       - name: Planted bugs
         run: |
+          sudo apt-get install -y -qq sdcc >/dev/null || true       # the hal.c planted bug runs on the simulated 8051 (s51)
+          sudo apt-get install -y -qq sdcc-ucsim >/dev/null
           python3 test/mutants.py | tee mutants.txt
           { echo '```'; cat mutants.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           grep -q "SURVIVED" mutants.txt && echo "note: see test/mutants.py for the ones expected to survive" || true

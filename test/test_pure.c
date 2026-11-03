@@ -9,7 +9,9 @@
 #include "input.h"
 #include "dbgscr.h"
 #include "buzz.h"
+#include "usbq.h"
 #include "stats.h"
+#include "usbq.h"
 #include "limits.h"
 #include <string.h>
 
@@ -409,6 +411,21 @@ static void t_theme(void)
 }
 
 /* VCC correction: a 4.20 V cell must read 4.20 V whatever VCC is, within the counts' rounding */
+/* the USB slot (usbq.h, REQUIREMENTS.md SR-C4): one waiting, the first one wins, a short report 0-filled, taken once */
+static void t_usbq(void)
+{
+    uint8_t c[USB_CMD], k, *q;
+    usbq_reset();
+    CHECK(!usbq_take(c));
+    q = usbq_open(); CHECK(q != 0); for (k = 0; k < USB_CMD; k++) q[k] = (uint8_t)(100 + k); usbq_close();
+    CHECK(!usbq_open());                                                           /* a second while one waits: dropped */
+    CHECK(usbq_take(c) && c[0] == 100 && c[USB_CMD - 1] == 100 + USB_CMD - 1);
+    CHECK(!usbq_take(c));                                                          /* taken once */
+    q = usbq_open(); CHECK(q != 0); q[0] = 1; q[1] = 0; q[2] = 9; usbq_close();   /* a stop, 3 bytes */
+    CHECK(!usbq_open());                                                           /* a ping behind it: dropped, the stop stays */
+    CHECK(usbq_take(c) && c[0] == 1 && c[2] == 9 && c[3] == 0 && c[USB_CMD - 1] == 0);    /* the old bytes read 0 */
+}
+
 static void t_vcc(void)
 {
     static const double ratio[] = { 4.40 / 4.55, 1.0, 4.65 / 4.55, 4.80 / 4.55, 4.99 / 4.55 };   /* VCC over the VCC of the scales */
@@ -431,6 +448,7 @@ static void t_vcc(void)
 int main(void)
 {
     t_vcc();
+    t_usbq();
     t_cal(); t_clamp(); t_port(); t_rail(); t_fmt(); t_input(); t_cfg(); t_buzz(); t_stats(); t_dbg(); t_theme();
     return check_report("pure");
 }

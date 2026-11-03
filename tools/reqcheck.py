@@ -46,6 +46,8 @@ def main():
                 if not os.path.exists(os.path.join(ROOT, 'test/sim/fuzz.c')): errors.append('%s: fuzz named, test/sim/fuzz.c missing' % sr)
             elif it == 'build:imgcheck':
                 pass
+            elif it == 's51:hal':
+                if not os.path.exists(os.path.join(ROOT, 'test/s51/t_hal.c')): errors.append('%s: s51:hal named, test/s51/t_hal.c missing' % sr)
             elif it == 'review':
                 if 'Why review' not in sec: errors.append('%s: review named without a "Why review" line' % sr)
             else:

@@ -516,7 +516,7 @@ static void exec(const ev_t *e)
         break;
     case E_USB:
         ensure_boot();
-        memset(S.usb_cmd, 0, sizeof S.usb_cmd); memcpy(S.usb_cmd, e->b, e->n < USB_CMD ? e->n : USB_CMD); S.usb_pending = 1;
+        sim_usb_send(e->b, e->n < USB_CMD ? e->n : USB_CMD);
         if (e->b[0] == 2) user_tick = S.ticks;
         pass(); pass();
         if (S.reboot_isp) { S.reboot_isp = 0; if (verbose > 0) printf("  [%.1f s] reboot into the loader: power cycle\n", TOS(S.ticks)); power_cycle(1.0); }

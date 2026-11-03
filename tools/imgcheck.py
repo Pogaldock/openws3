@@ -16,7 +16,7 @@
 """
 import os, re, sys
 
-ISR_MODULES = ['main', 'hal', 'input_pure', 'buzz_pure', 'usb']
+ISR_MODULES = ['main', 'hal', 'input_pure', 'buzz_pure', 'usb', 'usbq_pure']
 ALLOWED = {'__gptrget', '__gptrput'}
 STACK_MIN = 132                 # bytes: what 0.2.0-beta.2 left (the stack measured on the charger with it: 24 never used)
 

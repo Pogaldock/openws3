@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include "sim.h"
+#include "usbq.h"
 #include "cfg.h"
 #include "hal.h"
 #include "lcd.h"
@@ -50,6 +51,7 @@ void sim_reset(void)
 {
     int k;
     memset(&S, 0, sizeof S);
+    usbq_reset();
     S.vin = 5.15; S.vcc = VCC_CAL;
     for (k = 0; k < 16; k++) S.adc_scale[k] = 1.0;
 }
@@ -206,12 +208,14 @@ uint8_t usb_tx[USB_REPORT], usb_tx2[USB_REPORT];
 void usb_init(void) {}
 void usb_isr(void) {}
 uint8_t usb_configured(void) { return S.usb_host; }                 /* a host reading the telemetry (some scenarios) */
-/* a report from the host, as usb.c takes it: one waiting at a time, the first one wins, a later one is dropped unacknowledged
-   (its sender sees no ack and sends again); the bytes a short report leaves out read 0 */
+/* a report from the host, taken by the firmware's own slot code (src/usbq_pure.c, as usb.c's interrupt does): 1 = taken, 0 = dropped */
 int sim_usb_send(const uint8_t *c, int n)
 {
-    if (S.usb_pending) return 0;
-    memset(S.usb_cmd, 0, sizeof S.usb_cmd); memcpy(S.usb_cmd, c, (size_t)n); S.usb_pending = 1;
+    int i;
+    uint8_t *q = usbq_open();
+    if (!q) return 0;
+    for (i = 0; i < n && i < USB_CMD; i++) q[i] = c[i];
+    usbq_close();
     return 1;
 }
-uint8_t usb_cmd_get(uint8_t *cmd) { int i; if (!S.usb_pending) return 0; for (i = 0; i < USB_CMD; i++) cmd[i] = S.usb_cmd[i]; S.usb_pending = 0; return 1; }
+uint8_t usb_cmd_get(uint8_t *cmd) { return usbq_take(cmd); }

@@ -4,7 +4,7 @@
 #   make screens  render the screens of the user guide into docs/screens (host build of the real screen code)
 #   make clean
 SDCC   ?= sdcc
-SRCS    = src/main.c src/hal.c src/adc.c src/cal.c src/ctl.c src/fmt.c src/lcd.c src/ui.c src/cfg.c src/cfg_pure.c src/input_pure.c src/buzz_pure.c src/chg.c src/sup.c src/app.c src/ports.c src/usb.c src/dbgscr.c src/rowbuf.c src/limits.c src/menu.c src/portset.c src/theme.c src/tele.c src/sprites.c src/logo.c src/font_rot.c src/stats.c
+SRCS    = src/main.c src/hal.c src/adc.c src/cal.c src/ctl.c src/fmt.c src/lcd.c src/ui.c src/cfg.c src/cfg_pure.c src/input_pure.c src/buzz_pure.c src/chg.c src/sup.c src/app.c src/ports.c src/usb.c src/dbgscr.c src/rowbuf.c src/limits.c src/menu.c src/portset.c src/theme.c src/tele.c src/sprites.c src/logo.c src/font_rot.c src/stats.c src/usbq_pure.c
 # large model on purpose: locals live in XRAM, IRAM is left for the stack.  NOT medium: MOVX @Ri would use P2
 # (a power-path port on this board) as the high address byte.
 BUILD  ?= build
@@ -13,7 +13,7 @@ HOSTCC ?= gcc
 # the chip's settings (EEPROM) area starts here: 3 KB at the top of the 64 KB flash, as set in the WhoopStor V3's chip options
 # (read with the installer's "Check the unit").  An image that reaches it is refused here, and by the installer.
 CODE_LIMIT ?= 0xF400
-PURE    = src/ports.c src/menu.c src/portset.c src/theme.c src/rowbuf.c src/limits.c src/dbgscr.c src/cal.c src/ctl.c src/fmt.c src/cfg_pure.c src/input_pure.c src/buzz_pure.c src/chg.c src/sup.c src/stats.c
+PURE    = src/ports.c src/menu.c src/portset.c src/theme.c src/rowbuf.c src/limits.c src/dbgscr.c src/cal.c src/ctl.c src/fmt.c src/cfg_pure.c src/input_pure.c src/buzz_pure.c src/chg.c src/sup.c src/stats.c src/usbq_pure.c
 
 all: $(BUILD)/fw.bin $(BUILD)/openws3.html
 
@@ -75,6 +75,10 @@ sim: $(BUILD)/sim_app
 check-8051: $(BUILD)/version_build.h
 	test/run_8051.sh
 
+# the real hal.c on the simulated 8051 only (seconds): the register values a fatal stop leaves
+check-hal: $(BUILD)/version_build.h
+	test/hal_8051.sh
+
 $(BUILD)/render_screens: tools/render_screens.c src/ui.c src/font.c src/font_rot.c src/sprites.c src/logo.c $(PURE) $(wildcard src/*.h) $(BUILD)/version_build.h
 	@mkdir -p $(BUILD)
 	$(HOSTCC) -std=c99 -Wall -Wextra -Werror -Isrc -I$(BUILD) -D__code= -o $@ tools/render_screens.c src/ui.c src/font.c src/font_rot.c src/sprites.c src/logo.c $(PURE) -lm
@@ -96,5 +100,5 @@ FUZZ_HOURS ?= 6
 fuzz: $(BUILD)/sim_fuzz
 	./$(BUILD)/sim_fuzz -s $(FUZZ_SEED) -n $(FUZZ_SEEDS) -j $(FUZZ_JOBS) -H $(FUZZ_HOURS)
 
-.PHONY: all test screens clean sim fuzz check-8051 FORCE
+.PHONY: all test screens clean sim fuzz check-8051 check-hal FORCE
 FORCE:

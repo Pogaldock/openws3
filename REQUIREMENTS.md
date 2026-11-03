@@ -12,6 +12,7 @@ How to read a section:
   - `unit:FILE.FUNCTION`: a unit test (`test/FILE.c`, `make test`)
   - `fuzz`: the fuzzer's rules, checked after every control pass (`test/sim/fuzz.c`, `make fuzz`)
   - `build:imgcheck`: a check run on every firmware build (`tools/imgcheck.py`)
+  - `s51:hal`: the real `src/hal.c`, built by the firmware's compiler, on the simulated 8051 (`test/hal_8051.sh`, `make check-hal`)
   - `review`: checked by reading the code only; the section then says why no test can reach it
 
 `tools/reqcheck.py` runs on every build: every requirement must have a proof, every proof must exist, and every simulation scenario
@@ -162,11 +163,11 @@ Planted bugs (`test/mutants.py`) then show that the tests named here really catc
 ### SR-C4: a USB stop can't be lost
 - **Requirement:** a stop from a USB host is always carried out: it is never replaced by a later command, and one dropped behind
   another is sent again by the host; a command sent again is never run twice.
-- **Enforced in:** `src/usb.c` (one waiting command, the first one wins), `src/app.c` (a number runs once), `tools/openws3.html` and
-  `tools/fwmon.py` (resend until acknowledged).
-- **Proof:** `sim:usb_stop_burst` `review`
-- **Why review too:** the simulator replaces `src/usb.c`; its "first one wins" is checked by reading it, and modelled in the
-  simulator the same way.
+- **Enforced in:** `src/usbq_pure.c` (one waiting command, the first one wins; `src/usb.c`'s interrupt and the simulator both use
+  it), `src/app.c` (a number runs once), `tools/openws3.html` and `tools/fwmon.py` (resend until acknowledged).
+- **Proof:** `sim:usb_stop_burst` `unit:test_pure.t_usbq` `review`
+- **Why review too:** only the loop in `src/usb.c` that reads the bytes out of the USB hardware into the slot; the simulator
+  replaces that file.
 
 ### SR-C5: a pulled cell's port turns off
 - **Requirement:** a cell removed mid-charge leaves its port off.
@@ -200,8 +201,10 @@ Planted bugs (`test/mutants.py`) then show that the tests named here really catc
 ### SR-F5: a fatal stop leaves the rail at its lowest
 - **Requirement:** a fatal stop drives the rail to its lowest voltage, not its highest.
 - **Enforced in:** `src/hal.c` (`hal_all_off`).
-- **Proof:** `review`
-- **Why review only:** the simulator replaces `src/hal.c` with its model. This is the planted bug that survives by design.
+- **Proof:** `s51:hal`
+- **How:** the whole-firmware simulation replaces `src/hal.c`, so the real file runs on the simulated 8051 instead, and the test
+  reads back what the "all off" function wrote into the rail and port registers. Whether the pin then really drives the rail low is
+  hardware: checked on the charger.
 
 ## Other checks
 

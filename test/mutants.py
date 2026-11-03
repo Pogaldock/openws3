@@ -18,7 +18,7 @@ M = [
  ("src/chg.c", "    else if (W.pre && W.v >= V_PRE_EXIT) { W.pre = 0; W.ramp = 1; W.ramp_div = 0; }", "    else if (W.pre && W.v >= V_PRE_EXIT) { W.pre = 0; }", "gentle"),
  ("src/chg.c", "    if (!W.t_held || W.i > I_OPEN) {", "    if (!W.t_held) {", "held_never_full"),
  ("src/chg.c", "        if (W.pre && ++W.t_pre_s >= T_PRE_MAX_S) return go_fault();", "        ;", "pre_short"),
- ("src/hal.c", "    hal_rail(PWM_PERIOD);", "    hal_rail(0);", "vcc_fatal"),
+ ("src/hal.c", "    hal_rail(PWM_PERIOD);", "    hal_rail(0);", "HAL"),
  ("test/sim/sim_hal.c", "S.global = 0; S.rail_duty = PWM_PERIOD; }", "S.global = 0; S.rail_duty = 0; }", "vcc_fatal"),
  ("src/sup.c", "    if (hot) o->stop = STOP_TEMP;", "    ;", "hot"),
  ("src/cfg.c", "    if (ok && hal_ee_read(SUM_ADDR) != cfg_sum) for (k = 0; k < sizeof settings; k++) BYTES[k] = 0xFF;   /* a damaged page: the defaults */", "    ;", "cfg_damage"),
@@ -82,7 +82,7 @@ def main():
         if s.count(a) != 1:
             print('M%d %s: the line is not in the code any more, update the list' % (i, f)); survived += 1; continue
         open(p, 'w').write(s.replace(a, b))
-        cmd = 'make -s test' if scen == 'TEST' else 'make -s build/sim_app >/dev/null 2>&1 && timeout 1200 ./build/sim_app ' + scen
+        cmd = 'make -s test' if scen == 'TEST' else 'make -s check-hal' if scen == 'HAL' else 'make -s build/sim_app >/dev/null 2>&1 && timeout 1200 ./build/sim_app ' + scen
         killed = subprocess.run(cmd, shell=True, cwd=d, capture_output=True).returncode != 0
         survived += not killed
         print('M%d %s [%s]: %s' % (i, f, scen, 'killed' if killed else 'SURVIVED'), flush=True)

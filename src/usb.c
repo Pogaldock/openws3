@@ -6,6 +6,7 @@
  * Only standard enumeration requests and SET_IDLE are answered; anything else is stalled.
  */
 #include "usb.h"
+#include "usbq.h"
 
 __sfr __at (0xAF) IE2;
 __sfr __at (0xB8) IP;
@@ -87,8 +88,7 @@ static setup_t XD setup;
 static uint8_t XD ep0_stage;
 static uint16_t XD ep0_left;
 static const __code uint8_t * XD ep0_ptr;
-static uint8_t XD rx[USB_CMD];
-static volatile uint8_t XD rx_pending, configured, start_stream;
+static volatile uint8_t XD configured, start_stream;
 
 static uint8_t sie_read(uint8_t addr)
 {
@@ -134,7 +134,7 @@ void usb_init(void)
     sie_write(INTRUSBE, 0x00);
     sie_write(POWER, 0x01);
 
-    ep0_stage = EPIDLE; rx_pending = 0; configured = 0; start_stream = 0;
+    ep0_stage = EPIDLE; usbq_reset(); configured = 0; start_stream = 0;
     /* timer 0 and USB at the same (low) priority: neither interrupts the other, so the stack holds at most one of their frames
        (nested, the two needed about 45 bytes together, more than the stack has spare).  A tick that arrives during the USB
        interrupt waits for it to end (well under the 0.5 ms period) and is not lost */
@@ -146,9 +146,9 @@ uint8_t usb_configured(void) { return configured; }
 
 uint8_t usb_cmd_get(uint8_t *cmd)
 {
-    uint8_t i, got = 0;
+    uint8_t got;
     IE2 &= (uint8_t)~0x80;
-    if (rx_pending) { for (i = 0; i < USB_CMD; i++) cmd[i] = rx[i]; rx_pending = 0; got = 1; }
+    got = usbq_take(cmd);
     IE2 |= 0x80;
     return got;
 }
@@ -256,13 +256,9 @@ void usb_isr(void)
         if (csr & OUTSTSTL) sie_write(OUTCSR1, OUTCLRDT);
         if (csr & OUTOPRDY) {
             uint8_t n = sie_read(COUNT0);
-            if (rx_pending) {                       /* one not yet run: the first one wins (a stop is never replaced); this one is */
-                for (i = 0; i < n; i++) sie_read(FIFO1);   /* dropped unacknowledged, so its sender sees no ack and can retry */
-            } else {
-                for (i = 0; i < USB_CMD; i++) rx[i] = 0;   /* a short report: the bytes it did not send read 0, not old ones */
-                for (i = 0; i < n; i++) { uint8_t b = sie_read(FIFO1); if (i < USB_CMD) rx[i] = b; }
-                rx_pending = 1;
-            }
+            uint8_t XD *q = usbq_open();            /* the slot's rules (usbq.h): one waiting, the first one wins, short reports 0-filled */
+            for (i = 0; i < n; i++) { uint8_t b = sie_read(FIFO1); if (q && i < USB_CMD) q[i] = b; }   /* no slot: dropped, unacknowledged */
+            if (q) usbq_close();
             sie_write(OUTCSR1, 0);
         }
     }

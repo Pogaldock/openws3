@@ -290,7 +290,7 @@ static void s_leaky(void)
     CHECK(faulted);
 }
 
-static void usb(const uint8_t *c, int n) { memset(S.usb_cmd, 0, sizeof S.usb_cmd); memcpy(S.usb_cmd, c, (size_t)n); S.usb_pending = 1; pass(); pass(); }
+static void usb(const uint8_t *c, int n) { sim_usb_send(c, n); pass(); pass(); }
 
 /* the menu while charging: the target voltage and the current must not change, whatever is pressed */
 static void s_menu_lock(void)
