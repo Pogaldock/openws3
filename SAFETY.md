@@ -173,7 +173,7 @@ real-time, current-offset, rail-alarm, 4.35 V switch, menu-lock and statistics t
 The real firmware (`src/app.c` and every module it calls; only the register layer is replaced) runs on the PC against a model of the
 board: the supply and its USB-C / XT60 paths, the inverted rail with sag, six ports, cells with an open-circuit curve, internal
 resistance, polarisation and optional leakage, an ADC referenced to VCC with noise, gain errors and reference spread, the display's bus
-time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 57 scenarios:
+time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 60 scenarios:
 - full charges at VCC 4.45 to 4.95 V, reference spread plus or minus 1 %, ADC noise, combined worst case
 - user stop, input lost, cell pulled mid-charge, short circuit and its latch, storage voltage, power cycle mid-charge
 - dead cell, deeply discharged cell, internally shorted cell, cell that never fills, leaking cell, never-full cells under MAX IN AMPS
@@ -194,6 +194,9 @@ time, the watchdog and the thermistor. It presses the buttons like a person and 
   on pre-charge; VCC too low for the 4.35 V target (a waiting stop, not a rail runaway); VCC stepping every second (the 3 h limit on
   time); two settings bits flipped 8 bytes apart; a host wearing out the settings flash with refused starts; the storage target never
   saved from the offer; a 6S pack with ADC noise (the USB-C guard probes once)
+- the input limits on the whole charger: MAX IN AMPS 1.0 A with four cells at 1.0 A (the real input current, not the firmware's
+  estimate, stays at the limit); MIN IN VOLTS on a weak supply (0.4 ohm), LIMIT holding the input up and STOP RUN stopping; a USB stop
+  among other commands, and behind one (dropped, resent by the host, carried out), and a command resent with the same number (run once)
 - USB-C: XT60 alone, a pack plugged in on a laptop and on a PD charger, packs present at power-up, PD start and reset, PD back at 5 V
 - in every scenario: the watchdog is never starved
 

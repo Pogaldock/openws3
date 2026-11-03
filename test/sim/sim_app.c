@@ -638,7 +638,7 @@ static void s_saturated(void)
 /* the voltage being edited in the menu when a host starts the run: the start is refused, the target cannot change mid-run */
 static void s_menu_edit_start(void)
 {
-    static const uint8_t go[] = { 2, 0, 5 };
+    static const uint8_t go[] = { 2, 0, 5 }, go2[] = { 2, 0, 6 };   /* a new attempt, a new number (USB.md) */
     sim_attach(0, 3.9, 120);
     S.usb_host = 1;
     boot();
@@ -648,7 +648,7 @@ static void s_menu_edit_start(void)
     printf("  host start while VOLTAGE is being edited: result %u (1 = refused), charging: %s", usb_tx[17], S.pwm[0] ? "YES" : "no");
     CHECK(usb_tx[17] == 1 && !S.pwm[0]);
     both(0.12); both(1.0); both(1.0); run_for(1);                  /* OK (the edit confirmed), back, back (menu closed, saved) */
-    usb(go, 3); run_for(5);
+    usb(go2, 3); run_for(5);
     printf("; after closing the menu: result %u, port active %s at target index %u\n", usb_tx[17], S.pwm[0] || S.sw[0] ? "yes" : "NO", settings.volt);
     CHECK(usb_tx[17] == 0 && S.global && S.pwm[0] && settings.volt == 1);   /* running at 4.35 V, the edit kept */
 }
@@ -809,6 +809,76 @@ static void s_backfeed_noise(void)
     CHECK(fed < 0.06);
 }
 
+/* MAX IN AMPS 1.0 A, four cells at a 1.0 A setting: the input current (the truth, not the firmware's estimate) stays at the limit */
+static void s_input_limit(void)
+{
+    int k;
+    double mx = 0, sum = 0;
+    uint64_t end;
+    cfg_load(); settings.ilim = 10; settings.cur = 70; settings.vmin = 0; cfg_save();
+    for (k = 0; k < 4; k++) sim_attach(k, 3.6, 2000);
+    boot(); start(); run_for(60);
+    end = S.ticks + SEC(10 * 60);
+    while (S.ticks < end) { pass(); if (S.iin > mx) mx = S.iin; }
+    for (k = 0; k < 4; k++) sum += S.amps[k];
+    printf("  MAX IN AMPS 1.0 A, four cells at 1.0 A: input current at most %.3f A, cells charging at %.2f A in all\n", mx, sum);
+    CHECK(mx <= 1.10 && sum > 0.5);
+    cfg_load(); settings.ilim = 0; settings.cur = 21; cfg_save();
+}
+
+/* MIN IN VOLTS 4.90 V on a weak supply (0.4 ohm): LIMIT holds the input up while still charging; STOP RUN stops the run */
+static void s_min_in_volts(void)
+{
+    int k, stopped;
+    double mn = 99, sum = 0;
+    uint64_t end;
+    cfg_load(); settings.ilim = 0; settings.cur = 70; settings.vmin = 98; settings.vcut = 0; cfg_save();
+    S.src_r = 0.4;
+    for (k = 0; k < 4; k++) sim_attach(k, 3.6, 2000);
+    boot(); start(); run_for(60);
+    end = S.ticks + SEC(10 * 60);
+    while (S.ticks < end) { pass(); if (S.vin_node < mn) mn = S.vin_node; }
+    for (k = 0; k < 4; k++) sum += S.amps[k];
+    hold(1); run_for(2);
+    cfg_load(); settings.vcut = 1; cfg_save();
+    sim_reset(); S.src_r = 0.4;
+    for (k = 0; k < 4; k++) sim_attach(k, 3.6, 2000);
+    boot(); start(); run_for(30);
+    stopped = !any_pwm();
+    printf("  MIN IN VOLTS 4.90 V, 0.4 ohm supply: LIMIT keeps the input at %.3f V or more while charging %.2f A; STOP RUN: %s\n",
+           mn, sum, stopped ? "stopped" : "STILL CHARGING");
+    CHECK(mn >= 4.85 && sum > 0.3 && stopped);
+    cfg_load(); settings.vmin = 0; settings.vcut = 0; settings.cur = 21; cfg_save();
+    S.src_r = 0;
+}
+
+/* a USB stop among other commands: taken first, it is never replaced; arriving behind another one, it is dropped unacknowledged,
+   and the host, seeing no acknowledgement, sends it again (tools/openws3.html and fwmon.py do) */
+static void s_usb_stop_burst(void)
+{
+    static const uint8_t stop1[] = { 1, 0, 21 }, ping1[] = { 5, 0, 22 }, cur1[] = { 3, 28, 23 }, ping2[] = { 5, 0, 24 }, stop2[] = { 1, 0, 25 };
+    int a, b, c, took;
+    sim_attach(0, 3.7, 300); S.usb_host = 1;
+    boot(); start(); run_for(5);
+    sim_usb_send(stop1, 3); sim_usb_send(ping1, 3); sim_usb_send(cur1, 3);   /* three before the main loop reads one */
+    pass(); pass(); run_for(1);
+    a = !any_pwm() && usb_tx[16] == 21;
+    start(); run_for(5);
+    sim_usb_send(ping2, 3); took = sim_usb_send(stop2, 3);                    /* the stop arrives behind a ping */
+    pass(); pass();
+    if (usb_tx[16] != 25) sim_usb_send(stop2, 3);                             /* no ack for it: the host sends it again */
+    pass(); pass(); run_for(1);
+    b = !took && !any_pwm() && usb_tx[16] == 25;
+    {   /* a start whose acknowledgement the host missed, sent again with the same number: run once, still reported as done */
+        static const uint8_t go[] = { 2, 0, 30 };
+        usb(go, 3); run_for(1); usb(go, 3); run_for(1);
+        c = usb_tx[16] == 30 && usb_tx[17] == 0 && any_pwm();
+    }
+    printf("  USB stop first among three: stopped %s; behind a ping: dropped, resent, stopped %s; a start resent: run once %s\n",
+           a ? "yes" : "NO", b ? "yes" : "NO", c ? "yes" : "NO");
+    CHECK(a && b && c);
+}
+
 /* a host toggling a setting and asking for a start that is always refused must not wear the settings flash out */
 static void s_usb_wear(void)
 {
@@ -856,7 +926,7 @@ static const scen_t SC[] = {
     { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
     { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot }, { "no_dev", s_no_dev },
     { "stats", s_stats }, { "store", s_store }, { "store_back", s_store_back }, { "fault_full", s_fault_full },
-    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale }, { "hv_race", s_hv_race }, { "hv_backstop", s_hv_backstop }, { "usb_wear", s_usb_wear }, { "backfeed_noise", s_backfeed_noise }, { "pre_ir", s_pre_ir }, { "store_saved", s_store_saved }, { "stop_any_screen", s_stop_any_screen }, { "hv_lowvcc", s_hv_lowvcc }, { "never_full_wobble", s_never_full_wobble }, { "rail_stop", s_rail_stop },
+    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale }, { "hv_race", s_hv_race }, { "hv_backstop", s_hv_backstop }, { "usb_wear", s_usb_wear }, { "usb_stop_burst", s_usb_stop_burst }, { "input_limit", s_input_limit }, { "min_in_volts", s_min_in_volts }, { "backfeed_noise", s_backfeed_noise }, { "pre_ir", s_pre_ir }, { "store_saved", s_store_saved }, { "stop_any_screen", s_stop_any_screen }, { "hv_lowvcc", s_hv_lowvcc }, { "never_full_wobble", s_never_full_wobble }, { "rail_stop", s_rail_stop },
     { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
     { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "cfg_damage2", s_cfg_damage2 }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
    

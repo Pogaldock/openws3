@@ -20,6 +20,7 @@ typedef struct {
     double bg_err;              /* bandgap off its nominal, as a fraction (chip to chip spread) */
     double adc_scale[16];       /* per-channel gain error (1.0 = exact) */
     double adc_noise;           /* counts, uniform +- */
+    double src_r;               /* the input source's resistance, ohms (0 = stiff): a weak supply sags under load */
     double rail_stuck;          /* > 0: the rail ignores its PWM and sits at this voltage (a broken buck) */
     double short_amps[NPORTS];  /* > 0: the port draws this much whatever the duty (a shorted cell or output) */
     int btn1, btn2;             /* buttons held */
@@ -37,6 +38,8 @@ typedef struct {
     /* ---- the plant's state ---- */
     double rail;                /* true rail voltage */
     double amps[NPORTS];        /* true current into each cell (charge positive, bleed negative) */
+    double iin;                 /* true input current, A (the charge power at 90 % efficiency) */
+    double vin_node;            /* the voltage at the input node, after the source's sag */
     uint64_t ticks;             /* 0.5 ms */
     double lcd_us;              /* display time not yet turned into ticks */
     int ee_erases;              /* settings page erases (flash wear) */
@@ -58,6 +61,7 @@ extern sim_t S;
 
 void   sim_reset(void);
 void   sim_advance(uint32_t ticks);
+int    sim_usb_send(const uint8_t *c, int n);   /* 1: taken; 0: dropped (one was already waiting) */
 void sim_ee_flip(uint16_t a, uint8_t mask);  /* damage one stored bit pattern (settings page) */
 double sim_cell_v(int p);                     /* the cell's own voltage (open circuit + polarisation) */
 void   sim_attach(int p, double v0, double cap_mah);

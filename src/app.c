@@ -63,6 +63,7 @@ static uint8_t  XD fin_packs;                 /* stats.packs when the finale pla
 static uint8_t  XD store_on, store_prev;      /* a storage run: the target it replaced, put back when the run stops (never saved) */
 static uint8_t  XD view_lbl_on;               /* the view's name is in the input box (until view_lo) */
 static uint16_t XD pass_prev, pass_d;          /* the tick count at the last pass start; ticks since */
+static uint8_t  XD usb_seq;                    /* the number of the last host command run (USB.md): a resend is not run twice */
 static uint16_t XD pass_acc;                   /* ticks not yet counted as passes: a pass longer than LATE_MAX is counted over the next ones */
 #define LATE_MAX        30                     /* at most this many lost passes handed over per pass (8-bit counters in chg.c); the rest next time */
 static uint32_t XD now_ms;                    /* hal_ms() once a pass */
@@ -269,6 +270,8 @@ static void usb_service(void)
 {
     uint8_t c[USB_CMD], res = 0;
     if (!usb_cmd_get(c)) return;
+    if (c[2] && c[2] == usb_seq) return;          /* the same report again (a host resends until acknowledged): already done, once */
+    usb_seq = c[2];
     switch (c[0]) {
     case 1: if (run) stop_run(STOP_USER); break;                                       /* stop (always allowed) */
     case 2: res = start_run() ? 0 : 1; break;                                          /* start */

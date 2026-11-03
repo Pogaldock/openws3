@@ -81,6 +81,15 @@ The screen open on the LCD (menu, port settings or a diagnostics page) is in byt
 
 ## Commands (OUT, byte 0 = command, 1 = argument, 2 = sequence echoed in telemetry byte 16)
 
+How a command travels (WS3 Unlocked):
+- The unit takes **one command at a time**. A report that arrives while one is still waiting to run is dropped, unacknowledged:
+  the first one wins, so a stop already waiting is never replaced.
+- A command is done when telemetry byte 16 shows its sequence number. **No acknowledgement within about half a second: send
+  the same report again**, same number. The unit runs a number only once, so a resend after a lost acknowledgement does nothing twice.
+- So **every new command needs a new number** (1..255), different from the one byte 16 shows now. 0 means "no number": always run.
+- Bytes a short report leaves out read as 0.
+- `tools/openws3.html` and `tools/fwmon.py` do all of this.
+
 | Cmd | Argument | Effect |
 |---|---|---|
 | 1 | – | stop charging (staggered, like the button). Always allowed |

@@ -62,7 +62,8 @@ static double term_v(int p)                               /* the voltage at the 
 }
 
 /* the input node: a supply on the XT60 reaches it directly; USB-C through the diode, or the bypass when it is on */
-static double vin_sensed(void) { double u = S.vin <= 0 ? 0 : S.profile ? S.vin : S.vin - 0.6; return S.xt60_v > u ? S.xt60_v : u; }
+static double vin_open(void) { double u = S.vin <= 0 ? 0 : S.profile ? S.vin : S.vin - 0.6; return S.xt60_v > u ? S.xt60_v : u; }
+static double vin_sensed(void) { double v = vin_open() - S.src_r * S.iin; return v > 0 ? v : 0; }
 
 static void plant_tick(void)
 {
@@ -92,6 +93,7 @@ static void plant_tick(void)
     S.rail += (target - S.rail) * DT / 0.002;
     S.rail -= total * R_SUPPLY * DT / 0.002;               /* sag under load, recovered by the regulator */
     if (S.rail < 0) S.rail = 0;
+    { double vn = S.vin_node > 1.0 ? S.vin_node : vin_open(); S.iin = vn > 1.0 ? S.rail * total / (0.9 * vn) : 0; S.vin_node = vin_sensed(); }   /* the power drawn, at the node's voltage */
     if (S.booted && S.rail > S.max_rail_after_boot) S.max_rail_after_boot = S.rail;
     if (S.global) { for (p = 0; p < NPORTS; p++) if (S.pwm[p]) { if (S.rail > S.max_rail_driven) S.max_rail_driven = S.rail; break; } }
 }
@@ -204,4 +206,12 @@ uint8_t usb_tx[USB_REPORT], usb_tx2[USB_REPORT];
 void usb_init(void) {}
 void usb_isr(void) {}
 uint8_t usb_configured(void) { return S.usb_host; }                 /* a host reading the telemetry (some scenarios) */
+/* a report from the host, as usb.c takes it: one waiting at a time, the first one wins, a later one is dropped unacknowledged
+   (its sender sees no ack and sends again); the bytes a short report leaves out read 0 */
+int sim_usb_send(const uint8_t *c, int n)
+{
+    if (S.usb_pending) return 0;
+    memset(S.usb_cmd, 0, sizeof S.usb_cmd); memcpy(S.usb_cmd, c, (size_t)n); S.usb_pending = 1;
+    return 1;
+}
 uint8_t usb_cmd_get(uint8_t *cmd) { int i; if (!S.usb_pending) return 0; for (i = 0; i < USB_CMD; i++) cmd[i] = S.usb_cmd[i]; S.usb_pending = 0; return 1; }

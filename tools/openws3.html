@@ -388,10 +388,15 @@ async function sendRaw(bytes) {
 function command(c, arg = 0, extra = []) {           // resolves with the result code once page 1 acknowledges it; extra: bytes 3..
   do seq = seq % 254 + 1; while (p1 && p1.cmdSeq === seq);   // never a number the unit already shows as done (a stale ack)
   const s = seq, t0 = performance.now();
+  // the unit takes one command at a time and drops one that arrives behind another, unacknowledged: the same report is sent again
+  // every 600 ms until it is acknowledged (same number, so it never runs twice), for 2 s in all
+  let sent = t0;
   return sendRaw([c, arg, s, ...extra]).then(() => new Promise((ok, fail) => {
     const tick = () => {
       if (p1 && p1.cmdSeq === s) return ok(p1.cmdRes);
-      if (performance.now() - t0 > 2000) return fail(new Error('command ' + c + ' not acknowledged'));
+      const now = performance.now();
+      if (now - t0 > 2000) return fail(new Error('command ' + c + ' not acknowledged'));
+      if (now - sent > 600) { sent = now; sendRaw([c, arg, s, ...extra]).catch(() => {}); }
       setTimeout(tick, 20);
     };
     tick();

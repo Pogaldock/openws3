@@ -116,12 +116,14 @@ def command(cmd, arg=0, ack=True, extra=b''):
     try:
         t = read_report(fd, 0.5)
         if t and t['cmd_seq'] == seq: seq = seq % 255 + 1   # never a number the unit already shows as done (a stale ack)
-        os.write(fd, bytes([0, cmd, arg, seq]) + bytes(extra) + bytes(61 - len(extra)))
-        if not ack: return 0              # the device resets: nothing to wait for
-        end = time.time() + 3
-        while time.time() < end:
-            t = read_report(fd, 0.5)
-            if t and t['cmd_seq'] == seq: return t['cmd_res']
+        report = bytes([0, cmd, arg, seq]) + bytes(extra) + bytes(61 - len(extra))
+        for _ in range(3):                # the unit takes one command at a time and drops one that arrives behind another, unacknowledged:
+            os.write(fd, report)          # not acknowledged within a second, the same report again (same number: never run twice)
+            if not ack: return 0          # the device resets: nothing to wait for
+            end = time.time() + 1
+            while time.time() < end:
+                t = read_report(fd, 0.5)
+                if t and t['cmd_seq'] == seq: return t['cmd_res']
     finally:
         os.close(fd)
     sys.exit('command not acknowledged')
