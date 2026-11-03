@@ -29,7 +29,12 @@ static uint8_t XD burst[NPORTS];                 /* ROT: visits of static left o
 #define BURST_VISITS 8                           /* one visit per port per 21 control passes: about 0.75 s */
 static uint16_t XD last_cv[NPORTS];              /* ROT: the voltage last shown on a charging port, centivolts */
 static uint8_t XD pulse[NPORTS];                 /* ROT: visits left with that voltage in green, after it rose */
-static uint8_t XD look_p, look_n;                /* ROT: the port that just finished or faulted, and visits left that the eyes look at it */
+static uint8_t XD look_p, look_n;                /* ROT: the port that just finished, faulted or got a cell, and rounds left that the eyes look at it */
+static uint8_t XD badge_k[NPORTS];               /* ROT: the port number's colour on screen (BK_*), 0xFF = not drawn */
+static uint8_t XD was_empty[NPORTS];             /* ROT: the port was empty at its last visit */
+enum { BK_EMPTY = 0, BK_CELL, BK_FAULT };
+#define UI_C_DKGREEN 0x0AC0                      /* ROT: an empty port's number, and the barbed wire's frame (#0e5a06) */
+#define UI_C_BONE    0xEEF9                      /* ROT: the input skull (#e8dcc8) */
 
 /* ROT screensaver: no battery anywhere, nothing running, no key changing anything for SAVER_AFTER control passes (about 3 min) */
 #define SAVER_AFTER  40000u
@@ -85,7 +90,7 @@ static void centered(uint8_t y, const char *text, uint8_t sx, uint8_t sy, uint16
 
 /* ROT borders.  Their arguments are shared variables in external RAM, not parameters: these run deep in the screen code (inside a cell
  * repaint), where every byte of stack counts, and plain functions with no parameters keep both the stack and the direct RAM free. */
-static uint8_t XD tn_x, tn_y, tn_w, tn_h, tn_len, tn_step, tn_i, tn_k;
+static uint8_t XD tn_x, tn_y, tn_w, tn_len, tn_step, tn_i, tn_k;
 static int8_t  XD tn_dir;
 static uint16_t XD tn_c;
 
@@ -95,17 +100,6 @@ static void thorns(void)
     lcd_fill(tn_x, tn_y, tn_w, 1, tn_c);
     for (tn_i = 2; tn_i + 2 < tn_w; tn_i += tn_step)
         for (tn_k = 1; tn_k <= tn_len; tn_k++) lcd_fill((uint8_t)(tn_x + tn_i), (uint8_t)(tn_y + tn_dir * (int8_t)tn_k), 1, 1, tn_c);
-}
-
-/* the border of the box at tn_x, tn_y, tn_w x tn_h in tn_c: thorns pointing inward on the top and bottom edges */
-static void border(void)
-{
-    uint8_t y0 = tn_y;
-    tn_len = 1; tn_step = 5;
-    tn_dir = 1; thorns();
-    tn_y = (uint8_t)(y0 + tn_h - 1); tn_dir = -1; thorns();
-    lcd_fill(tn_x, y0, 1, tn_h, tn_c);
-    lcd_fill((uint8_t)(tn_x + tn_w - 1), y0, 1, tn_h, tn_c);
 }
 
 /* ROT splash: static, a black band with barbed edges, the wordmark between two skulls, the version on its own strip */
@@ -128,7 +122,6 @@ void ui_splash_frame(uint8_t n) REENT
     uint8_t j, lx = (uint8_t)((LCD_PX_W - LOGO_W) / 2), sw = spr_w[SPR_SKULL], sh = spr_h[SPR_SKULL];
     int8_t off;
     uint16_t s;
-    if (!ROT) return;
     lcd_noise(0, 0, LCD_PX_W, 7, (uint16_t)(0x1234 + n * 977u));
     lcd_noise(0, 61, LCD_PX_W, 7, (uint16_t)(0x4321 + n * 613u));
     if (n < 2) return;
@@ -165,17 +158,8 @@ void ui_splash_frame(uint8_t n) REENT
 
 void ui_splash(void)
 {
-    if (ROT) {
-        rot_splash();
-        centered(69, "V" STR(FW_MAJOR) "." STR(FW_MINOR) FW_STAGE " " FW_BUILD_STR, 1, 1, th(R_DIM), th(R_BG));
-        return;
-    }
-    lcd_fill(0, 0, LCD_PX_W, LCD_PX_H, th(R_BG));
-    lcd_fill(0, 14, LCD_PX_W, 3, th(R_BAD));
-    lcd_fill(0, 63, LCD_PX_W, 3, th(R_BAD));
-    centered(24, "OPENWS3", 2, 2, th(R_TEXT), th(R_BG));
-    centered(44, "OPEN FW FOR WHOOPSTOR V3", 1, 1, th(R_INFO), th(R_BG));
-    centered(54, "V" STR(FW_MAJOR) "." STR(FW_MINOR) FW_STAGE " " FW_BUILD_STR, 1, 1, th(R_DIM), th(R_BG));
+    rot_splash();
+    centered(69, "V" STR(FW_MAJOR) "." STR(FW_MINOR) FW_STAGE " " FW_BUILD_STR, 1, 1, th(R_DIM), th(R_BG));
 }
 
 /* ROT: the end of a run.  Static floods the screen, the wordmark burns through it in neon, then green flashes; the summary is
@@ -266,18 +250,39 @@ static uint8_t changed(uint8_t e, uint16_t c)
 /* ROT: the thorned border of box b (red round a fault cell), on its own so box_draw keeps no extra temporaries in direct RAM */
 static void box_thorns(uint8_t b, uint16_t bg)
 {
-    if (!ROT) return;
-    tn_w = UI_BOX_W; tn_c = th(R_DIM);
-    if (b < 3) { tn_x = box_x(b); tn_y = UI_HDR_Y; tn_h = UI_HDR_H; }
-    else { tn_x = box_x((b - 3) % 3); tn_y = cell_y(b - 3); tn_h = UI_CELL_H; if (bg == UI_C_BLOOD) tn_c = th(R_BAD); }
-    border();
+    static uint8_t XD x, i;
+    (void)bg;
+    if (!ROT || b >= 3) return;                      /* ROT: barbed wire round the header boxes; the port cells are plain */
+    x = box_x(b);
+    lcd_fill(x, UI_HDR_Y, 1, UI_HDR_H, UI_C_DKGREEN);
+    lcd_fill((uint8_t)(x + UI_BOX_W - 1), UI_HDR_Y, 1, UI_HDR_H, UI_C_DKGREEN);
+    lcd_fill(x, UI_HDR_Y + UI_HDR_H - 1, UI_BOX_W, 1, UI_C_DKGREEN);
+    for (i = 0; i < UI_BOX_W - 2; i += 6) {
+        lcd_fill((uint8_t)(x + i), UI_HDR_Y, 3, 1, UI_C_NEON);                    /* the top wire, in lengths, with a barb under each */
+        lcd_fill((uint8_t)(x + i + 1), UI_HDR_Y + 1, 1, 1, UI_C_NEON);
+        lcd_fill((uint8_t)(x + i + 4), UI_HDR_Y + UI_HDR_H - 2, 1, 1, UI_C_NEON);  /* barbs standing on the bottom wire */
+    }
+}
+
+/* ROT: port p's number, coloured by what is in the port: dark green empty, green with a cell, red on a fault */
+static void badge(uint8_t p, uint8_t k)
+{
+    static uint8_t XD x, y;
+    static uint16_t XD bc, dc;
+    static char XD d[2];
+    badge_k[p] = k;
+    x = box_x(p % 3); y = cell_y(p);
+    bc = k == BK_FAULT ? th(R_BAD) : k == BK_CELL ? UI_C_NEON : UI_C_DKGREEN;
+    dc = k == BK_EMPTY ? UI_C_NEON : th(R_BG);
+    d[0] = (char)('1' + p); d[1] = 0;
+    lcd_fill((uint8_t)(x + 1), (uint8_t)(y + 1), 10, UI_CELL_H - 2, bc);
+    lcd_text((uint8_t)(x + 3), (uint8_t)(y + 7), d, 1, 2, dc, bc);
 }
 
 /* box b (a header box, or port b - 3) painted in bg, its elements marked as wiped */
 static void box_draw(uint8_t b, uint16_t bg)
 {
     uint8_t p, x, y, k;
-    char d[2];
     box_bg[b] = bg;
     if (b < 3) {
         lcd_fill(box_x(b), UI_HDR_Y, UI_BOX_W, UI_HDR_H, bg);
@@ -286,10 +291,8 @@ static void box_draw(uint8_t b, uint16_t bg)
     }
     p = b - 3; x = box_x(p % 3); y = cell_y(p);
     lcd_fill(x, y, UI_BOX_W, UI_CELL_H, bg);
-    lcd_fill(x + UI_BADGE_X, y + 2, UI_BADGE_W, UI_CELL_H - 4, th(R_BADGE0 + p));
-    d[0] = (char)('1' + p); d[1] = 0;
-    lcd_text(x + UI_BADGE_X + 2, y + 6, d, 1, 2, th(R_BG), th(R_BADGE0 + p));
     for (k = 0; k < 3; k++) shown[3 + p * 3 + k][0] = 0;
+    badge(p, badge_k[p] == 0xFF ? BK_CELL : badge_k[p]);
 }
 
 static void box(uint8_t b, uint16_t bg) { if (box_bg[b] != bg) { box_draw(b, bg); box_thorns(b, bg); } }
@@ -298,8 +301,8 @@ void ui_main_init(void)
 {
     uint8_t b;
     lcd_fill(0, 0, LCD_PX_W, LCD_PX_H, th(R_BG));
+    for (b = 0; b < NPORTS; b++) { last_st[b] = 0xFF; burst[b] = 0; last_cv[b] = 0; pulse[b] = 0; badge_k[b] = 0xFF; was_empty[b] = 0; }
     for (b = 0; b < NBOX; b++) { box_draw(b, th(R_BOX)); box_thorns(b, th(R_BOX)); }
-    for (b = 0; b < NPORTS; b++) { last_st[b] = 0xFF; burst[b] = 0; last_cv[b] = 0; pulse[b] = 0; }
     quiet_n = 0; saver = 0;
     next_el = 0;
 }
@@ -313,7 +316,6 @@ static void frame(uint8_t x, uint8_t y, uint16_t c)
     lcd_fill(x, (uint8_t)(y + UI_CELL_H - UI_FRAME), UI_BOX_W, UI_FRAME, c);
     lcd_fill(x, y, UI_FRAME, UI_CELL_H, c);
     lcd_fill((uint8_t)(x + UI_BOX_W - UI_FRAME), y, UI_FRAME, UI_CELL_H, c);
-    if (ROT && c == th(R_BOX)) { tn_x = x; tn_y = y; tn_w = UI_BOX_W; tn_h = UI_CELL_H; tn_c = th(R_DIM); border(); }   /* the thorns come back */
 }
 
 static uint16_t status_color(uint8_t state)
@@ -327,13 +329,10 @@ static uint16_t status_color(uint8_t state)
     }
 }
 
-/* text colour col on a background bg: when they are the same (ROT's white running header), the text is inked in the background colour */
-static uint16_t ink(uint16_t col, uint16_t bg) { return col == bg ? th(R_BG) : col; }
-
 static void header(const ui_state_t *s, uint8_t e, char XD *t) REENT
 {
-    static const CODE char *const ALARM[] = { "", "VIN!", "VCC!", "RAIL!", "", "V LIMIT", "HOT!" };   /* by STOP_* */
-    uint16_t col = th(R_TEXT), bg = s->run ? th(R_RUN) : th(R_BOX);
+    static const CODE char *const ALARM[] = { "", "VIN!", "VCC!", "RAIL!", "", "V LIM!", "HOT!" };   /* by STOP_*; 6 characters at most */
+    uint16_t col = th(R_TEXT), bg = th(R_BG);
     if (s->ps) {                                     /* port settings: what this is, the port, what the keys do */
         if (e == 0) scopy(t, "PORTS");
         else if (e == 1) {
@@ -344,32 +343,27 @@ static void header(const ui_state_t *s, uint8_t e, char XD *t) REENT
         fmt_a1(t, cal_set_to_ma(s->iset));
         if (s->mixed) { uint8_t n = slen(t); t[n] = '*'; t[n + 1] = 0; }
     } else if (e == 1) {
-        static const CODE char *const VIEW[] = { "CURRENT", "MAH IN", "TO FULL", "HEALTH" };   /* by UV_* */
+        static const CODE char *const VIEW[] = { "AMPS", "MAH IN", "ETA", "HEALTH" };   /* by UV_* */
         if (s->alarm) { scopy(t, ALARM[s->alarm]); col = th(R_WARN); }
         else if (s->view_lbl) { scopy(t, VIEW[s->view]); col = th(R_INFO); }
-        else if (s->usb_off && s->tphase) { scopy(t, "USB OFF"); col = th(R_GOOD); }   /* 1 s in 4, like the targets in the port cells */
+        else if (s->usb_off && s->tphase) { scopy(t, "NO USB"); col = th(R_GOOD); }   /* 1 s in 4, like the targets in the port cells */
         else { fmt_vin(t, cal_vin_mv(s->vin)); col = s->usb_off ? th(R_GOOD) : th(R_VIN); }
     } else fmt_v2(t, cal_port_mv(s->tgt));
-    col = ink(col, bg);                              /* a theme whose running header is the text colour (ROT): ink the text */
-    pad(t, 7);
     box(e, bg);
-    put(e, box_x(e) + UI_HDR_TX, UI_HDR_Y + UI_HDR_TY, 2, col, bg, t);
+    pad(t, 6);
+    put(e, box_x(e) + 14, UI_HDR_Y + 6, 1, col, bg, t);      /* small text after the big icon */
 }
 
-/* ROT: the icon in each header box's left margin (current: a bolt that crackles while charging, input: a skull, red on an alarm,
- * target: a spike, green once every battery is full), drawn on every visit: 35 pixels. */
+/* ROT: the big icon in each header box's left margin (current: a bolt that crackles while charging, input: a bone skull, red on an
+ * alarm, target: a spike), drawn on every visit at twice its size. */
 static void header_icon(const ui_state_t *s, uint8_t e, uint16_t bg) REENT
 {
-    uint8_t spr, p, cells = 0, full = 0;
-    uint16_t c = bg == th(R_TEXT) ? th(R_BG) : th(R_DIM);           /* ink on the white running header, grey on the dark one */
+    uint8_t spr;
+    uint16_t c = UI_C_NEON;
     if (e == 0) spr = s->run && ((anim >> 6) & 1) ? SPR_BOLT_SPARK : SPR_BOLT;
-    else if (e == 1) { spr = SPR_SKULL5; if (s->alarm) c = th(R_BAD); }
-    else {
-        spr = SPR_SPIKE5;
-        for (p = 0; p < NPORTS; p++) if (s->state[p] != PS_IDLE) { cells++; if (s->state[p] == PS_FULL) full++; }
-        if (cells && full == cells) c = bg == th(R_TEXT) ? th(R_BG) : UI_C_NEON;
-    }
-    lcd_bitmap((uint8_t)(box_x(e) + 2), UI_HDR_Y + 7, spr_w[spr], spr_h[spr], SPR_BITS(spr), c, bg);
+    else if (e == 1) { spr = SPR_SKULL5; c = s->alarm ? th(R_BAD) : UI_C_BONE; }
+    else spr = SPR_SPIKE5;
+    lcd_sprite2((uint8_t)(box_x(e) + 2), UI_HDR_Y + 3, 10, 14, SPR_BITS(spr), 0, 0, c, bg, 0);    /* twice its size */
 }
 
 /* ROT: the 2-pixel strip between the header and the cells (y 20-21) is a charge bar for the whole charger: how close the cells are
@@ -402,29 +396,30 @@ static void charge_bar(const ui_state_t *s) REENT
 /* "0.5A", the current a port charges at */
 static void amps1(char XD *t, uint8_t iu) { fmt_a1(t, cal_set_to_ma(iu)); }
 
-/* ROT: a port's eye.  Charging, it looks around (faster the more current flows), and for a while after a port finishes or faults
- * every eye looks at that port; it fills with green from the bottom as the cell nears the target (0.9 V below it = empty).
+/* ROT: a port's eye.  Charging, it looks around (faster the more current flows); asleep when idle, opening for a moment now and then;
+ * for a while after a port gets a cell, finishes or faults, every eye looks toward that port.
  * One plain step per statement, all in external RAM: element(), which calls this, is the deepest stack frame of the firmware. */
-#define EYE_H 7                                    /* the eye sprites are 7 x 7, one byte a row (sprites.txt) */
-static uint8_t XD eye_spr, eye_lvl;
+static uint8_t XD eye_spr;
 static void eye(const ui_state_t *s, uint8_t p, uint8_t st)
 {
     static const CODE uint8_t GAZE[8] = { SPR_EYE_OPEN, SPR_EYE_OPEN, SPR_EYE_LEFT, SPR_EYE_OPEN, SPR_EYE_OPEN, SPR_EYE_RIGHT, SPR_EYE_OPEN, SPR_EYE_HALF };
-    static uint16_t XD q, t;
+    static uint16_t XD q;
     static uint8_t XD c, lc;
-    eye_spr = st; eye_lvl = 0;
+    eye_spr = st;
+    if (st == PS_FULL || st == PS_FAULT || st == PS_BLEED) return;              /* their own icons, never looking */
+    if (look_n) {                                                                /* every other eye looks toward that port */
+        c = p % 3; lc = look_p % 3;
+        eye_spr = lc < c ? SPR_EYE_LEFT : lc > c ? SPR_EYE_RIGHT : SPR_EYE_OPEN;
+        return;
+    }
+    if (st == PS_IDLE) {                                                         /* asleep; now and then it opens for a moment */
+        q = anim >> 6; q += p * 11u;
+        eye_spr = ((uint8_t)q & 63) == 0 ? SPR_EYE_OPEN : SPR_EYE_SHUT;
+        return;
+    }
     if (st != PS_CHARGE) return;
     q = s->i[p]; q /= 16u; q += 1u; q *= anim; q >>= 8; q += p * 3u;
     eye_spr = GAZE[(uint8_t)q & 7];
-    if (look_n) {
-        c = p % 3; lc = look_p % 3;
-        eye_spr = lc < c ? SPR_EYE_LEFT : lc > c ? SPR_EYE_RIGHT : SPR_EYE_OPEN;
-    }
-    t = cal_port_mv(s->tgt); q = cal_port_mv(s->v[p]);
-    q = t > q ? t - q : 0;
-    if (q >= 900u) return;
-    q = 900u - q; q *= EYE_H; q /= 900u;
-    eye_lvl = (uint8_t)q;
 }
 
 /* the lower line of a cell in the views other than the current: 6 characters; 0 = nothing to say yet (the current is shown) */
@@ -465,18 +460,43 @@ static void element(const ui_state_t *s, uint8_t e) REENT
     x = box_x(p % 3); y = cell_y(p);
     st = s->state[p]; off = s->set[p] == PV_OFF;
     full = !s->ps && st == PS_FULL;                  /* a full port's cell is tinted, so it shows from across the room */
-    bg = full ? th(R_FULL) : (ROT && !s->ps && st == PS_FAULT) ? UI_C_BLOOD : th(R_BOX);
-    if (ROT && !s->ps) {
+    bg = full ? th(R_FULL) : (!s->ps && st == PS_FAULT) ? UI_C_BLOOD : th(R_BOX);
+    if (!s->ps) {
+        static uint8_t XD emp;                       /* external RAM: element's stack frame stays at its stock size */
+        emp = st == PS_IDLE && s->v[p] < SAVER_EMPTY;
         /* a port that has just gone full dissolves into static for a moment, then is stamped white (the box is repainted) */
         if (part == 0) {
             if ((st == PS_FULL || st == PS_FAULT) && last_st[p] != 0xFF && last_st[p] != st) { burst[p] = BURST_VISITS; look_p = p; look_n = 40; }
             last_st[p] = st;
+            if (was_empty[p] && !emp) { look_p = p; look_n = 20; box_draw(3 + p, bg); }   /* a cell went in: the static goes, every eye looks */
+            was_empty[p] = emp;
             if (burst[p]) {
-                lcd_noise((uint8_t)(x + 1), (uint8_t)(y + 2), UI_BOX_W - 2, UI_CELL_H - 4, (uint16_t)(anim * 7u + p));
-                if (--burst[p] == 0) { box_draw(3 + p, bg); box_thorns(3 + p, bg); }
+                lcd_noise((uint8_t)(x + 11), (uint8_t)(y + 1), UI_BOX_W - 12, UI_CELL_H - 2, (uint16_t)(anim * 7u + p));
+                if (--burst[p] == 0) box_draw(3 + p, bg);
                 return;
             }
         } else if (burst[p]) return;
+        if (emp) {
+            /* an empty port: static with its eye asleep in it.  The static is redrawn half a cell at a time about once a second, the
+             * eye when it changes: the control pass is the charger's clock, so drawing must stay cheap on average. */
+            box(3 + p, bg);
+            eye(s, p, st);
+            if (part == 2) {
+                if (badge_k[p] != BK_EMPTY) badge(p, BK_EMPTY);
+                if (shown[e][1] != (char)(eye_spr + 1)) {
+                    shown[e][1] = (char)(eye_spr + 1);
+                    lcd_sprite2((uint8_t)(x + 24), (uint8_t)(y + 7), 14, 14, SPR_BITS(eye_spr), 0, 0, UI_C_NEON, 0, (uint16_t)(anim | 1u));
+                }
+                return;
+            }
+            if (shown[e][0] != 'S' || --shown[e][1] == 0) {
+                shown[e][0] = 'S'; shown[e][1] = 11;  /* 11 visits of 21 passes: about 1 s */
+                lcd_sprite2((uint8_t)(x + 11), (uint8_t)(y + part * 14), UI_BOX_W - 11, 14, SPR_BITS(eye_spr), 13, (uint8_t)(7 - part * 14),
+                            UI_C_NEON, 0, (uint16_t)(anim * 13u + p * 101u + 1u));
+                shown[3 + p * 3 + 2][1] = (char)(eye_spr + 1);
+            }
+            return;
+        }
     }
     box(3 + p, bg);
     if (s->ps) {                                     /* port settings: the value big, what kind of value small, a frame round the selection */
@@ -498,6 +518,7 @@ static void element(const ui_state_t *s, uint8_t e) REENT
         }
     } else if (part == 0) {
         fmt_v2(t, cal_port_mv(s->v[p]));
+        if (ROT) t[4] = 0;                           /* ROT: "3.78", small, the unit is in the header */
         fg = off ? th(R_DIM) : full ? th(R_FULLTX) : th(R_VOLT);
         if (ROT && !off && st == PS_CHARGE) {         /* a charging voltage that rises flashes green for a moment */
             static uint16_t XD cv;                    /* external RAM: element's stack frame stays at its stock size */
@@ -506,6 +527,7 @@ static void element(const ui_state_t *s, uint8_t e) REENT
             last_cv[p] = cv;
             if (pulse[p]) { pulse[p]--; fg = UI_C_NEON; }
         } else last_cv[p] = 0;
+        if (ROT) { put(e, x + 13, y + 4, 1, fg, bg, t); return; }
     } else if (part == 1) {
         /* charging: the measured current, 1 s in 4 the target; idle: the target; an OFF port says so; else the state */
         static const CODE char *const NAME[] = { "", "TEST", "", "REST", "FULL", "BLEED", "ERR" };   /* by PS_* */
@@ -517,22 +539,22 @@ static void element(const ui_state_t *s, uint8_t e) REENT
         else if (st == PS_CHARGE) fmt_a2(t, cal_port_ma(s->i[p]));
         else scopy(t, NAME[st]);
         pad(t, 6);
+        if (ROT) { put(e, x + 13, y + 19, 1, fg, bg, t); return; }   /* ROT: small, under the eye */
     } else {
         st &= 7;
         fg = th(R_DOT0 + st);
         if (st == PS_FAULT && !s->blink) fg = bg;              /* errors blink */
-        if (ROT) {
-            /* sprites 0..6 are the PS_* icons; a charging eye looks around and blinks, each port out of step with the others */
-            static uint8_t XD spr, lvl, h;            /* external RAM: element's stack frame stays at its stock size */
-            eye(s, p, st);                            /* eye_spr, eye_lvl, eye_h: worked out outside this deep frame */
-            spr = eye_spr; lvl = eye_lvl;
-            h = (uint8_t)((spr << 4) + lvl + 1);      /* what is drawn: the sprite and its green level, in one byte */
-            if (changed(e, fg) | (shown[e][1] != (char)h)) {
-                shown[e][1] = (char)h;
-                lcd_bitmap(x + UI_DOT_X, y + UI_DOT_Y - 1, spr_w[spr], spr_h[spr], SPR_BITS(spr), fg, bg);
-                if (lvl) lcd_bitmap(x + UI_DOT_X, (uint8_t)(y + UI_DOT_Y - 1 + EYE_H - lvl), EYE_H, lvl, SPR_BITS(spr) + EYE_H - lvl, UI_C_NEON, bg);
+        {
+            /* the port number's colour, then the big eye: sprites 0..6 are the PS_* icons; a charging eye looks around and blinks */
+            static uint8_t XD bk;                     /* external RAM: element's stack frame stays at its stock size */
+            bk = st == PS_FAULT ? BK_FAULT : BK_CELL;
+            if (!s->ps && badge_k[p] != bk) badge(p, bk);
+            eye(s, p, st);                            /* eye_spr: worked out outside this deep frame */
+            if (changed(e, fg) | (shown[e][1] != (char)(eye_spr + 1))) {
+                shown[e][1] = (char)(eye_spr + 1);
+                lcd_sprite2((uint8_t)(x + 37), (uint8_t)(y + 2), 14, 14, SPR_BITS(eye_spr), 0, 0, fg, bg, 0);
             }
-        } else if (changed(e, fg)) lcd_fill(x + UI_DOT_X, y + UI_DOT_Y, UI_DOT_S, UI_DOT_S, fg);
+        }
         return;
     }
     put(e, x + FLD[part].dx, y + FLD[part].dy, FLD[part].sy, fg, bg, t);
@@ -593,17 +615,15 @@ void ui_main_step(const ui_state_t *s)
     uint8_t e = next_el;
     anim++;
     if (look_n && e == 0) look_n--;                   /* counted in rounds of the screen (21 passes): about 4 s */
-    if (ROT) {
-        if (quiet(s)) { if (quiet_n < SAVER_AFTER) quiet_n++; }
-        else {
-            quiet_n = 0; saver_iset = s->iset; saver_volt = s->volt;
-            if (saver) ui_main_init();                /* back to the charger screen, all of it repainted */
-        }
-        if (quiet_n >= SAVER_AFTER) {
-            saver = 1;
-            if ((anim & 7) == 0) saver_strip();
-            return;
-        }
+    if (quiet(s)) { if (quiet_n < SAVER_AFTER) quiet_n++; }
+    else {
+        quiet_n = 0; saver_iset = s->iset; saver_volt = s->volt;
+        if (saver) ui_main_init();                    /* back to the charger screen, all of it repainted */
+    }
+    if (quiet_n >= SAVER_AFTER) {
+        saver = 1;
+        if ((anim & 7) == 0) saver_strip();
+        return;
     }
     if (++next_el == NELEM) next_el = 0;
     if (++refresh_div >= REFRESH_EVERY) {
@@ -611,5 +631,5 @@ void ui_main_step(const ui_state_t *s)
         shown[e][0] = 0;
     }
     element(s, e);
-    if (ROT && e < 3 && !s->ps) { header_icon(s, e, box_bg[e]); if (e == 2) charge_bar(s); }   /* after element: less stack */
+    if (e < 3 && !s->ps) { header_icon(s, e, box_bg[e]); if (e == 2) charge_bar(s); }   /* after element: less stack */
 }

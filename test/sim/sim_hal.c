@@ -196,6 +196,8 @@ void lcd_noise_row(uint8_t y, uint16_t seed, const uint8_t *bits, uint8_t bx, ui
 { (void)y; (void)seed; (void)bits; (void)bx; (void)bw; (void)keep; (void)fg; lcd_cost(LCD_PX_W, 1); }
 void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const uint8_t *bits, uint16_t fg, uint16_t bg)
 { (void)x; (void)y; (void)bits; (void)fg; (void)bg; lcd_cost((uint32_t)w * h, 1); }
+void lcd_sprite2(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const uint8_t *bits, uint8_t ox, uint8_t oy, uint16_t fg, uint16_t bg, uint16_t seed)
+{ (void)x; (void)y; (void)bits; (void)ox; (void)oy; (void)fg; (void)bg; (void)seed; lcd_cost((uint32_t)w * h * 3 / 2, 1); }   /* more work per pixel */
 
 /* ---- usb.h: no host ---- */
 uint8_t usb_tx[USB_REPORT], usb_tx2[USB_REPORT];

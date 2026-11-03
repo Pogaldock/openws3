@@ -29,7 +29,7 @@ uint8_t cfg_valid_buzzer(uint8_t raw);        /* 0 off, 2 on with a heartbeat wh
 uint8_t cfg_valid_ilim(uint8_t raw);          /* 0 (off) or 5..100 (0.1 A), else 0 */
 uint8_t cfg_valid_vmin(uint8_t raw);          /* 0 (off) or 96..230 (limits.h VMIN_MV), else 4.90 V */
 uint8_t cfg_valid_lmode(uint8_t raw);         /* a limits.h LM_* regulation mode, else LM_BY_CH */
-uint8_t cfg_valid_theme(uint8_t raw);         /* a theme.h TH_* theme, else TH_ROT (the default of this build) */
+uint8_t cfg_valid_theme(uint8_t raw);         /* always TH_ROT: one look */
 uint8_t cfg_valid_ch_cur(uint8_t raw);        /* 21, 28 ... 91, else 0 (same as the global setting) */
 uint8_t cfg_valid_ch_off(uint8_t raw);        /* one bit per port, else (erased flash) none */
 uint8_t cfg_valid_usb_off(uint8_t raw);       /* 1 = USB power disabled, else 0 */

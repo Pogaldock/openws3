@@ -19,7 +19,7 @@
 
 static void fresh(uint8_t run)
 {
-    settings.volt = 0; settings.cur = 21; settings.sound = 1; settings.theme = TH_CLASSIC; settings.ilim = 0; settings.vmin = 0; settings.vcut = 0; settings.lmode = LM_EQUAL; settings.usb_off = 0;
+    settings.volt = 0; settings.cur = 21; settings.sound = 1; settings.theme = TH_ROT; settings.ilim = 0; settings.vmin = 0; settings.vcut = 0; settings.lmode = LM_EQUAL; settings.usb_off = 0;
     menu_open(run);
 }
 static void down(int n) { while (n--) menu_event(RIGHT_SHORT); }
@@ -58,7 +58,7 @@ static void t_nav(void)
     CHECK(has(menu_text(0), "LIMITS") && has(menu_text(0), "1/4"));
     CHECK(has(menu_text(1), "MAX IN AMPS") && has(menu_text(2), "MIN IN VOLTS") && has(menu_text(3), "BELOW MIN") && has(menu_text(4), "REGULATION"));
     fresh(0); go(C_PREFS, 0);
-    CHECK(has(menu_text(1), "SOUND") && has(menu_text(2), "THEME") && has(menu_text(3), "DISABLE USB POWER") && has(menu_text(3), "NO") && has(menu_text(0), "1/3"));
+    CHECK(has(menu_text(1), "SOUND") && has(menu_text(2), "DISABLE USB POWER") && has(menu_text(2), "NO") && has(menu_text(0), "1/2"));
     menu_event(BACK); CHECK(menu_text(3)[0] == '>');          /* the cursor returns to the category it came from */
     fresh(0); down(C_DIAG);
     CHECK(menu_event(OK) == MA_DIAG);
@@ -102,12 +102,9 @@ static void t_locked(void)
     more(1); CHECK(settings.ilim == 5);
     CHECK(has(menu_text(1), "0.5A"));
     confirm();
-    menu_event(BACK); down(1); menu_event(OK);                                     /* sound and theme too */
+    menu_event(BACK); down(1); menu_event(OK);                                     /* sound too */
     CHECK(menu_event(OK) == MA_CHANGED && menu_editing());
     less(1); CHECK(settings.sound == 0 && has(menu_text(1), "OFF"));
-    confirm();
-    down(1); CHECK(menu_event(OK) == MA_CHANGED);
-    more(1); CHECK(settings.theme == TH_CALM && has(menu_text(2), "CALM"));
     confirm();
     down(1); CHECK(menu_event(OK) == MA_LOCKED && settings.usb_off == 0);          /* DISABLE USB POWER: not while charging */
 }
@@ -151,24 +148,12 @@ static void t_limits(void)
     confirm();
 }
 
-static void t_theme(void)
-{
-    int n;
-    fresh(0); go(C_PREFS, 1);                                                      /* THEME */
-    CHECK(has(menu_text(2), "THEME") && has(menu_text(2), "CLASSIC"));
-    edit();
-    for (n = 0; n < TH_COUNT + 2; n++) more(1);
-    CHECK(settings.theme == TH_COUNT - 1 && has(menu_text(2), "ROT"));
-    less(1); CHECK(settings.theme == TH_CONTRAST);
-    cancel(); CHECK(settings.theme == TH_CLASSIC);
-}
-
 static void t_usb(void)
 {
-    fresh(0); go(C_PREFS, 2);                                                      /* DISABLE USB POWER */
-    CHECK(has(menu_text(3), "DISABLE USB POWER") && has(menu_text(3), "NO") && settings.usb_off == 0);
+    fresh(0); go(C_PREFS, 1);                                                      /* DISABLE USB POWER */
+    CHECK(has(menu_text(2), "DISABLE USB POWER") && has(menu_text(2), "NO") && settings.usb_off == 0);
     edit();
-    more(1); CHECK(settings.usb_off == 1 && has(menu_text(3), "YES"));
+    more(1); CHECK(settings.usb_off == 1 && has(menu_text(2), "YES"));
     more(1); CHECK(settings.usb_off == 1);                                         /* two choices only */
     cancel(); CHECK(settings.usb_off == 0);
     edit(); more(1); confirm(); CHECK(settings.usb_off == 1);
@@ -204,6 +189,6 @@ static void t_rows(void)
 
 int main(void)
 {
-    t_nav(); t_edit(); t_locked(); t_limits(); t_theme(); t_usb(); t_rows();
+    t_nav(); t_edit(); t_locked(); t_limits(); t_usb(); t_rows();
     return check_report("menu");
 }

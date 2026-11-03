@@ -173,8 +173,8 @@ void app_boot(void)
     dbg_view.chip_bgv = ((uint16_t)hal_chip_byte(7) << 8) | hal_chip_byte(8);
     dbg_view.chip_ram_bgv = hal_ram_bgv();           /* version A: the loader's copy in RAM (hal.h), shown only */
     dbg_view.chip_date[0] = hal_chip_byte(27); dbg_view.chip_date[1] = hal_chip_byte(28); dbg_view.chip_date[2] = hal_chip_byte(29);
-    th_set(settings.theme); apply_limits();
-    input_reset(); buzz_reset(); buzz_enable(settings.sound); buzz_bank(settings.theme == TH_ROT);
+    apply_limits();
+    input_reset(); buzz_reset(); buzz_enable(settings.sound);
 
     tctx.out = &cout; tctx.in = &cin; tctx.sup = &sout; tctx.rail_duty = &rail_duty;
     tctx.screen = &screen; tctx.run = &run; tctx.rail_hold = &rail_hold; tctx.strap = &strap;
@@ -206,11 +206,8 @@ void app_boot(void)
     hal_wdt_feed();
     ui_splash();
     buzz_play(PAT_BOOT);
-    if (th_get() == TH_ROT) {                       /* about 3 s; any key skips the rest */
-        for (n = 0; n < UI_SPLASH_FRAMES && input_get() == EV_NONE; n++) { hal_wdt_feed(); ui_splash_frame(n); hal_delay_ms(UI_SPLASH_MS); }
-        while (input_get() != EV_NONE) ;
-    }
-    else hal_delay_ms(1000);
+    for (n = 0; n < UI_SPLASH_FRAMES && input_get() == EV_NONE; n++) { hal_wdt_feed(); ui_splash_frame(n); hal_delay_ms(UI_SPLASH_MS); }   /* about 3 s; any key skips the rest */
+    while (input_get() != EV_NONE) ;
     hal_wdt_feed();
 
     sup_reset();
@@ -340,7 +337,7 @@ static void summary_part(uint8_t part)
 static void summary_open(uint8_t mode)
 {
     screen = SCR_SUMMARY; sum_mode = mode; sum_div = 0;
-    sum_frame = mode || th_get() != TH_ROT ? UI_FINALE_FRAMES : 0;
+    sum_frame = mode ? UI_FINALE_FRAMES : 0;
     if (!mode) summary_text();
 }
 static void summary_close(void) { screen = 0; ui_main_init(); }
@@ -479,9 +476,8 @@ void app_pass(void)
         portset_context(run);
         if (portset_pass() == MA_EXIT) ports_leave();                       /* 10 s without a key */
     } else if (screen && screen != SCR_SUMMARY) {    /* menu values apply while they are edited; they are saved when the menu closes */
-        buzz_enable(settings.sound); buzz_bank(settings.theme == TH_ROT);
+        buzz_enable(settings.sound);
         if (settings.usb_off) hal_profile(0);        /* DISABLE USB POWER takes effect at once; turning it off again waits for the next start */
-        if (settings.theme != th_get()) { th_set(settings.theme); show(screen); }   /* repaint the menu in the new colours */
         apply_limits();
         menu_context(run);
     }

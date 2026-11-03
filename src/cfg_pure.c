@@ -15,7 +15,7 @@ uint8_t cfg_valid_buzzer(uint8_t raw) { return raw == 2 ? 2 : raw != 0; }   /* 0
 uint8_t cfg_valid_ilim(uint8_t raw) { return (raw >= ILIM_MIN && raw <= ILIM_MAX) ? raw : ILIM_OFF; }
 uint8_t cfg_valid_vmin(uint8_t raw) { return (raw == VMIN_OFF || (raw >= VMIN_MIN && raw <= VMIN_MAX)) ? raw : VMIN_DEFAULT; }
 uint8_t cfg_valid_lmode(uint8_t raw) { return raw < LM_NMODES ? raw : LM_BY_CH; }
-uint8_t cfg_valid_theme(uint8_t raw) { return raw < TH_COUNT ? raw : TH_ROT; }      /* this build: ROT is the default */
+uint8_t cfg_valid_theme(uint8_t raw) { (void)raw; return TH_ROT; }      /* one look: the stored value is kept only for the settings layout */
 uint8_t cfg_valid_ch_cur(uint8_t raw) { return cal_cur_valid(raw) ? raw : 0; }
 uint8_t cfg_valid_ch_off(uint8_t raw) { return raw < (1u << NPORTS) ? raw : 0; }
 uint8_t cfg_valid_usb_off(uint8_t raw) { return raw == 1; }

@@ -197,8 +197,7 @@ void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint1
     uint8_t col[5], c, r, i, j, k, rows = FONT_H_PX * sy, cols = FONT_W * sx;
     uint8_t fh = fg >> 8, fl = fg & 0xFF, bh = bg >> 8, bl = bg & 0xFF;
 
-    lcd_font = font5x7; lcd_poke = 0;
-    if (th_get() == TH_ROT) { lcd_font = font_rot; if (sx > 1 && sy > 1) lcd_poke = 1; }
+    lcd_font = font_rot; lcd_poke = sx > 1 && sy > 1;   /* one look: the ROT font, big text poked (dotted) */
     for (; *s; s++, x += cols) {
         c = (uint8_t)*s;
         if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
@@ -238,6 +237,24 @@ void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const CODE uint8_t *
         for (i = 0; i < w; i++) {
             if (bits[i >> 3] & (0x80 >> (i & 7))) { tx(fh); tx(fl); } else { tx(bh); tx(bl); }
         }
+    CS = 1;
+}
+
+void lcd_sprite2(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const CODE uint8_t *bits, uint8_t ox, uint8_t oy, uint16_t fg, uint16_t bg, uint16_t seed) REENT
+{
+    uint8_t i, j, u, v;
+    uint16_t s = seed, c;
+    window(x, y, w, h);
+    for (j = 0; j < h; j++) {
+        v = (uint8_t)(j - oy);
+        for (i = 0; i < w; i++) {
+            u = (uint8_t)(i - ox);
+            if (u < 14 && v < 14 && (bits[v >> 1] & (0x80 >> (u >> 1)))) c = fg;
+            else if (seed) { s = LCD_LFSR(s); c = LCD_STATIC(s); }
+            else c = bg;
+            tx(c >> 8); tx(c & 0xFF);
+        }
+    }
     CS = 1;
 }
 

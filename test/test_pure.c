@@ -253,10 +253,10 @@ static void t_buzz(void)
 {
     int hi, ed, on, k;
     buzz_reset();
-    buzz_play(PAT_BOOT);                       /* plain: 80 ms on, 80 ms off, 80 ms on */
-    buzz_run(700, &hi, &ed, &on);
-    NEAR(on, 481, 3);
-    NEAR(hi, 320, 3);
+    buzz_play(PAT_DONE);                       /* G6 90 ms, gap 40, B6 90, gap 40, E7 240, then 120 ms of crackle: 0.5 ms ticks */
+    buzz_run(2000, &hi, &ed, &on);
+    NEAR(on, 1241, 3);
+    CHECK(hi >= 840 && hi <= 840 + 240);      /* the three notes, and a few crackle notes */
     CHECK(!buzz_busy());
 
     buzz_reset(); buzz_enable(0);              /* muted by the user: the melody runs, nothing sounds */
@@ -278,13 +278,22 @@ static void t_buzz(void)
     buzz_run(200, &hi, &ed, &on);
     NEAR(on, 41, 2);
 
-    buzz_reset(); buzz_bank(1);                /* the ROT pack: every melody ends (but the alarm), every note is in the table */
+    buzz_reset();                              /* the ROT pack: every melody ends (but the alarm), every note is in the table */
     for (k = PAT_BOOT; k < PAT_COUNT; k++) {
         int t, c;
         if (k == PAT_RAIL_ALARM) continue;
         buzz_play((uint8_t)k);
         for (t = 0; t < 40000 && buzz_busy(); t++) { c = buzz_tick(); CHECK(c == TONE_KEEP || c == TONE_OFF || (c >= 2 && c <= 38)); }
         CHECK(!buzz_busy());
+    }
+    {                                          /* the crackle at the start of the ROT boot: 0.3 s, now and then a high note, mostly quiet */
+        int t, c, notes = 0, offs = 0;
+        buzz_play(PAT_BOOT);
+        for (t = 0; t < 600; t++) { c = buzz_tick(); if (c >= 23) notes++; else if (c == TONE_OFF) offs++; }
+        CHECK(notes >= 2 && notes <= 15 && offs >= 2);
+        buzz_enable(0); buzz_play(PAT_BOOT);   /* muted: the crackle is silent too */
+        for (t = 0; t < 600; t++) CHECK(buzz_tick() < 2);
+        buzz_enable(1);
     }
     CHECK(buzz_note_count(1) == 3185 && buzz_note_count(37) == 398);   /* C5 523 Hz, C8 4186 Hz: 1666667 / f */
 }
@@ -370,25 +379,17 @@ static void t_dbg(void)
     CHECK(!strncmp(dbg_text(1, 0), "1/6 ", 4) && !strncmp(dbg_text(6, 0), "6/6 ", 4));
 }
 
-/* a theme changes colours only: text must be readable on every background it is drawn on, the meaning colours must stay distinct */
+/* the one look (ROT): text must be readable on every background it is drawn on, the meaning colours must stay distinct */
 static void t_theme(void)
 {
-    uint8_t t, k;
-    for (t = 0; t < TH_COUNT; t++) {
-        th_set(t);
-        CHECK(th_get() == t);
-        CHECK(th(R_TEXT) != th(R_BG) && th(R_TEXT) != th(R_BOX) && th(R_VOLT) != th(R_BOX) && th(R_DIM) != th(R_BOX));
-        CHECK(th(R_RUN) != th(R_BOX) && th(R_BOX) != th(R_BG));
-        CHECK(th(R_GOOD) != th(R_BAD) && th(R_WARN) != th(R_BAD) && th(R_GOOD) != th(R_WARN) && th(R_INFO) != th(R_BAD));
-        for (k = 0; k < 6; k++) CHECK(th(R_BADGE0 + k) != th(R_BG));       /* the badge digit is drawn in the background colour */
-        CHECK(th(R_FULLTX) != th(R_FULL) && th(R_FULL) != th(R_BOX) && th(R_FULL) != th(R_BG));     /* a full cell stands out, its text reads */
-        CHECK(th(R_DOT0 + PS_FULL) == th(R_FULLTX));                       /* the dot on a full cell is drawn like its text */
-        if (t != TH_ROT) CHECK(th(R_DOT0) == th(R_BOX));                   /* an idle port's dot disappears into the cell */
-        else CHECK(th(R_DOT0) != th(R_BOX));                               /* ...except in ROT, where idle is a shut eye */
-        CHECK(th_name(t)[0] != 0);
-    }
-    th_set(99); CHECK(th_get() == TH_CLASSIC);
-    CHECK(cfg_valid_theme(TH_COUNT - 1) == TH_COUNT - 1 && cfg_valid_theme(TH_COUNT) == TH_ROT && cfg_valid_theme(0xFF) == TH_ROT);
+    uint8_t k;
+    CHECK(th(R_TEXT) != th(R_BG) && th(R_TEXT) != th(R_BOX) && th(R_VOLT) != th(R_BOX) && th(R_DIM) != th(R_BOX));
+    CHECK(th(R_BOX) != th(R_BG));
+    CHECK(th(R_GOOD) != th(R_BAD) && th(R_WARN) != th(R_BAD) && th(R_GOOD) != th(R_WARN) && th(R_INFO) != th(R_BAD));
+    for (k = 0; k < 6; k++) CHECK(th(R_BADGE0 + k) != th(R_BG));
+    CHECK(th(R_FULLTX) != th(R_FULL) && th(R_FULL) != th(R_BOX) && th(R_FULL) != th(R_BG));     /* a full cell stands out, its text reads */
+    CHECK(th(R_DOT0) != th(R_BOX) && th(R_DOT0 + PS_FAULT) == th(R_BAD));                    /* a shut eye shows; a fault is red */
+    CHECK(th_get() == TH_ROT && cfg_valid_theme(0) == TH_ROT && cfg_valid_theme(0xFF) == TH_ROT);
 }
 
 /* VCC correction: a 4.20 V cell must read 4.20 V whatever VCC is, within the counts' rounding */

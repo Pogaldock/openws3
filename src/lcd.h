@@ -27,5 +27,8 @@ void lcd_noise_row(uint8_t y, uint16_t seed, const CODE uint8_t *bits, uint8_t b
 #define LCD_SURFACE(bits, i, s, keep) (((bits)[(i) >> 3] & (0x80 >> ((i) & 7))) && (uint8_t)((s) >> 8) < (keep))
 /* 1 bit per pixel, rows top to bottom padded to whole bytes, MSB = leftmost (tools/gen_sprites.py, tools/gen_logo.py) */
 void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const CODE uint8_t *bits, uint16_t fg, uint16_t bg) REENT;
+/* ROT: a sprite up to 7 pixels wide (one byte a row) drawn at twice its size, its top-left at (ox, oy) inside the w x h area at x, y
+ * (ox, oy wrap: an area that starts below the sprite's top passes 0 - rows); the rest of the area in bg, or static when seed is not 0 */
+void lcd_sprite2(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const CODE uint8_t *bits, uint8_t ox, uint8_t oy, uint16_t fg, uint16_t bg, uint16_t seed) REENT;
 
 #endif

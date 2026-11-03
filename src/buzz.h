@@ -14,7 +14,6 @@ enum { PAT_NONE = 0, PAT_BOOT, PAT_KEY, PAT_DONE, PAT_ERROR, PAT_RAIL_ALARM, PAT
 
 void    buzz_reset(void);
 void    buzz_enable(uint8_t on);            /* user setting: when off, notes are silent (the melody still runs) */
-void    buzz_bank(uint8_t rot);             /* 1: the ROT sound pack, 0: the plain beeps */
 void    buzz_play(uint8_t pattern);         /* PAT_NONE stops */
 uint8_t buzz_busy(void);
 uint8_t buzz_tick(void);                    /* 0.5 ms tick: TONE_KEEP, TONE_OFF or 2 + a note index */

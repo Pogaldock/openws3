@@ -1,7 +1,7 @@
 # WS3 Unlocked
 
 Custom firmware for the VIFLY WhoopStor V3, a six-port 1S LiPo / LiHV charger (STC8H8K64U, 8051 core). It replaces the firmware the
-charger ships with: a new look (the ROT theme: neon green, skulls, eyes, static, thorns, an animated SYMBIOZE splash), melodies,
+charger ships with: a new look (ROT: neon green, skulls, eyes, static, barbed wire, an animated SYMBIOZE splash), melodies,
 charge statistics (mAh, time to full, cell resistance), a storage reminder, and a set of safety changes on top of
 [OpenWS3](https://github.com/openws3/openws3), the open firmware it is built on.
 
@@ -14,7 +14,7 @@ charge statistics (mAh, time to full, cell resistance), a storage reminder, and 
   that wrong, a LiPo can swell, vent or catch fire. That is the stake here, not a crashed app.
 - **It is unofficial.** Not made, tested or supported by VIFLY, and not by the OpenWS3 authors. Installing it replaces VIFLY's
   firmware.
-- **Much of it was vibe coded.** I am an FPV pilot, not a professional charger or embedded firmware engineer. The theme, the safety
+- **Much of it was vibe coded.** I am an FPV pilot, not a professional charger or embedded firmware engineer. The look, the safety
   changes, the tests and these documents were written with an AI coding assistant (Claude), directed and checked by me. That is
   exactly why the rest of this section exists: so you can see what was done to check it, and judge for yourself.
 - **It has run on one charger.** Everything else is simulation, automated tests and review.
@@ -83,13 +83,15 @@ that work this fork would not exist.
 Everything not listed here is OpenWS3's, unchanged.
 
 ### The look
-- **ROT theme**, the default (`src/theme.c`, `src/ui.c`, `src/lcd.c`): neon green on black, skull and eye sprites that blink and look
-  around while charging, static noise, thorn borders, a spiky digit font, a charge bar and status icons in the header, a screen saver.
-  The other four themes are OpenWS3's and still in the menu.
+- **ROT, the only look** (`src/theme.c`, `src/ui.c`, `src/lcd.c`): black, neon green and white, red only for trouble. A barbed-wire
+  header with big icons, port numbers coloured by state (dark green empty, green with a cell, red on a fault), big eyes that blink
+  and look around, small text, a spiky font, a charge bar, a screen saver. OpenWS3's four themes (CLASSIC, CALM, AMBER, HIGH
+  CONTRAST, and the menu item to choose) were removed to make room in flash.
 - **Animated SYMBIOZE boot** (`src/logo.c`, made by `tools/gen_logo.py` from `tools/symbioze_logo.png`): the logo tears out of
   static, a scan line, the skulls' eyes open one by one, a neon flash; about 3 s, any key skips it.
-- **Reactive charging screen**: a charging eye fills with green as its cell fills and its gaze speeds up with the current; it shuts on
-  FULL; a cell that finishes or faults bursts into static and the other eyes glance at it.
+- **Reactive charging screen**: a charging eye's gaze speeds up with the current; an empty port is static with a sleeping eye that
+  opens now and then; when a cell goes in, finishes or faults, every eye looks toward that port; a cell that finishes or faults
+  bursts into static first.
 - **Charging views** (B2 while charging): per cell the current, the mAh put in, the time to full (an estimate, shown with `~`) or the
   cell's health (GOOD / TIRED / RETIRE from its measured resistance).
 - **Finale and run summary**: when every cell is full, the logo burns in through static with a fanfare, then a summary (packs, minutes,
@@ -98,10 +100,11 @@ Everything not listed here is OpenWS3's, unchanged.
   three times, 10 minutes apart.
 - **Screen saver**: three skulls drifting over static, the wordmark surfacing and sinking.
 - **Melodies** (`src/buzz_pure.c`, `src/hal.c`): the buzzer plays any note (C5 to C8) from a hardware timer, so there are tunes: boot
-  jingle, pack full, error, finale; the ROT theme has its own glitchy set. SOUND `HEARTBEAT` adds a soft beat while charging.
+  one short E minor phrase, plucked, with soft static (crackle) around it; every sound is a piece of it. SOUND `HEARTBEAT` adds a
+  soft beat while charging.
 - **Sprites and font** as editable text files: `tools/sprites.txt`, `tools/font_rot.txt`, turned into C by `tools/gen_sprites.py` and
   `tools/gen_font.py` (`src/sprites.c`, `src/font_rot.c`).
-- The theme only draws: it reads the same values as the other themes and changes no charging behaviour. Its code was written to fit
+- The look only draws: it reads the values the charge logic produces and changes no charging behaviour. Its code was written to fit
   the chip's full internal RAM (no new direct-RAM use) and its stack (measured on the charger: 24 to 45 bytes free).
 
 ### Safety (details, evidence and limits for each: [SAFETY.md](SAFETY.md))
@@ -146,7 +149,7 @@ Everything not listed here is OpenWS3's, unchanged.
   shows it in full, and refuses an image that would reach the settings area. USB name "WS3 Unlocked" (`src/usb.c`).
 - **Build and release** (`.github/workflows/rot-build.yml`): every test must pass before anything is published; the published files
   come with SHA256SUMS and a signed build-provenance attestation. OpenWS3's GitHub Pages workflow was removed from this fork.
-- **Documentation**: this README (rewritten top), [SAFETY.md](SAFETY.md) (new), and edits to `GUIDE.md` (the ROT theme, the views,
+- **Documentation**: this README (rewritten top), [SAFETY.md](SAFETY.md) (new), and edits to `GUIDE.md` (the look, the views,
   summary, storage reminder and sounds, the alarm note) and `USB.md` (stop reason 6, developer mode removed, screen 12, product name).
 - **Build guard** (`Makefile`): an image that would reach the chip's settings area (`CODE_LIMIT`, 0xF400) fails the build.
 
@@ -210,7 +213,6 @@ The menu has four categories; **OK** opens one and **BACK** returns to the list 
 | | REGULATION | how the limits share the budget over the ports: `EQUAL`, `CH1 FIRST`, `HIGH V FIRST` (below) |
 | PREFERENCES | SOUND | `ON`, `OFF`, or `HEARTBEAT` (a soft beat about every 4 s while charging) |
 | | DISABLE USB POWER | `YES` keeps the USB-C input switched off for good (the XT60 powers the unit, USB is data only); `NO` (default) switches it on at start when the board straps it so |
-| | THEME | the look only, no behaviour change: `ROT` (WS3 Unlocked's, the default), `CLASSIC` (the OpenWS3 look), `CALM` (colour only where it means something), `AMBER` (one hue on black, red for trouble), `HIGH CONTRAST`. Applies at once |
 | DIAGNOSTICS | | the debug pages (below) |
 
 Keys: the two buttons sit under the screen, **left = B1, right = B2**. A tap steps once; holding a button repeats, faster the longer it is held.
@@ -299,7 +301,7 @@ test/              host tests (C)                                 tools/      fw
 
 WS3 Unlocked additions:
 src/adc.c          also: VCC correction of every reading, the USB-C bypass guard
-src/theme.c, ui.c, lcd.c   the ROT theme             src/sprites.c, font_rot.c, logo.c   GENERATED (tools/gen_sprites.py, gen_font.py, gen_logo.py)
+src/theme.c, ui.c, lcd.c   the ROT look              src/sprites.c, font_rot.c, logo.c   GENERATED (tools/gen_sprites.py, gen_font.py, gen_logo.py)
 src/stats.c        mAh, cell resistance, time to full, the run summary (pure)
 test/sim/          the whole firmware against a simulated board (make sim)
 test/run_8051.sh, test/s51/, test/chg_trace.c   tests on a simulated 8051 (make check-8051)

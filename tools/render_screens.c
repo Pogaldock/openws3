@@ -61,6 +61,22 @@ void lcd_bitmap(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const uint8_t *bits,
             if (x + i < LCD_PX_W && y + j < LCD_PX_H) fb[y + j][x + i] = (bits[j * stride + i / 8] & (0x80 >> (i % 8))) ? fg : bg;
 }
 
+void lcd_sprite2(uint8_t x, uint8_t y, uint8_t w, uint8_t h, const uint8_t *bits, uint8_t ox, uint8_t oy, uint16_t fg, uint16_t bg, uint16_t seed)
+{
+    unsigned i, j;
+    uint16_t s = seed, c;
+    for (j = 0; j < h; j++) {
+        uint8_t v = (uint8_t)(j - oy);
+        for (i = 0; i < w; i++) {
+            uint8_t u = (uint8_t)(i - ox);
+            if (u < 14 && v < 14 && (bits[v >> 1] & (0x80 >> (u >> 1)))) c = fg;
+            else if (seed) { s = LCD_LFSR(s); c = LCD_STATIC(s); }
+            else c = bg;
+            if (x + i < LCD_PX_W && y + j < LCD_PX_H) fb[y + j][x + i] = c;
+        }
+    }
+}
+
 void lcd_noise_row(uint8_t y, uint16_t seed, const uint8_t *bits, uint8_t bx, uint8_t bw, uint8_t keep, uint16_t fg)
 {
     unsigned i;
@@ -141,17 +157,6 @@ static ui_state_t charging_state(void)
     return s;
 }
 
-static void themed(const char *name, uint8_t theme)
-{
-    ui_state_t s = charging_state();
-    char n[64];
-    th_set(theme);
-    draw_main(&s);
-    snprintf(n, sizeof n, "main_%s", name);
-    save(n);
-    th_set(TH_CLASSIC);
-}
-
 /* ---- the text screens ---- */
 static void draw_menu(void)
 {
@@ -215,7 +220,6 @@ static void ports_screens(void)
 static void rot_screens(void)
 {
     ui_state_t s;
-    th_set(TH_ROT);
     {
         uint8_t n;
         char nm[32];
@@ -285,8 +289,6 @@ static void rot_screens(void)
     s.state[2] = PS_FAULT; s.blink = 1; s.state[4] = PS_BLEED; draw_main(&s); save("rot_fault");
     s = idle_state(); s.ps = 1; s.sel = 1; draw_main(&s); save("rot_ports_select");
     settings.theme = TH_ROT; menu_open(0); keys(2, EV_B2); keys(1, EV_OK); keys(1, EV_B2); draw_menu(); save("rot_menu");
-    settings.theme = TH_CLASSIC;
-    th_set(TH_CLASSIC);
 }
 
 int main(int argc, char **argv)
@@ -297,12 +299,9 @@ int main(int argc, char **argv)
 
     memset(&settings, 0xFF, sizeof settings);                       /* a unit with nothing saved: the defaults */
     cfg_validate();
-    settings.theme = TH_CLASSIC;                                    /* the guide's pictures are the stock look; ROT has its own below */
-    th_set(settings.theme);
 
     ui_splash(); save("splash");
     ui_message(R_WAIT, "INPUT LOW", "CHECK THE SUPPLY", "4.52V", 0); save("input_low");
-    th_set(settings.theme);
 
     s = idle_state(); draw_main(&s); save("main_idle");
     s = charging_state(); draw_main(&s); save("main_charging");
@@ -317,7 +316,6 @@ int main(int argc, char **argv)
     menu_screens();
     diag_screen();
 
-    themed("calm", TH_CALM); themed("amber", TH_AMBER); themed("contrast", TH_CONTRAST);
     rot_screens();
     return 0;
 }

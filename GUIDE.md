@@ -16,7 +16,7 @@ All pictures are what the unit's 160 x 80 screen shows; they are drawn by the fi
 6. [The menu](#the-menu)
 7. [Running from a weak supply: the limits](#running-from-a-weak-supply-the-limits)
 8. [USB data with XT60 power](#usb-data-with-xt60-power)
-9. [Themes](#themes)
+9. [The look](#the-look)
 10. [Sounds](#sounds)
 11. [Default settings](#default-settings)
 12. [When something is wrong](#when-something-is-wrong)
@@ -37,7 +37,7 @@ To press both buttons together, press them within about 0.2 s of each other and 
 
 ## Start up
 
-The unit shows its logo and plays its start-up sound, then the main screen. In the ROT theme the logo tears out of static, a scan
+The unit shows its logo and plays its start-up sound, then the main screen. The logo tears out of static, a scan
 line passes, the skulls open their eyes and the screen flashes green: about 3 seconds, and **any key skips it**. It needs an input
 of about 4.6 V or more: below that it shows `INPUT LOW` and waits until a supply is connected.
 
@@ -57,24 +57,24 @@ of about 4.6 V or more: below that it shows `INPUT LOW` and waits until a supply
 | middle | the input voltage (`5.00V`). When the unit stops on its own, the reason replaces it, see [When something is wrong](#when-something-is-wrong) |
 | right | the target voltage the cells are charged to (`4.20V`) |
 
-The boxes turn red while charging.
+A green bar under the boxes shows how close the cells are, on average, to the target while charging.
 
-**The six cells** are the six ports, numbered by the coloured tab. Each shows the port's voltage and, below it, what it is doing.
-An empty port reads `0.00V`. A cell reading below 1.00 V is treated as not there: a deeply discharged cell is not charged.
+**The six cells** are the six ports. The number on the left is coloured by what is in the port: **dark green** empty, **green**
+with a cell, **red** on a fault. A cell shows its voltage (`3.78`, the unit is in the header), an eye, and below them what it is
+doing. An **empty port** is static with a sleeping eye that opens now and then. When a cell goes in, every eye looks toward it.
+A cell reading below 1.00 V is treated as not there: a deeply discharged cell is not charged.
 
-The line under the voltage and the small square in the corner give the port state:
-
-| Line | Square (CLASSIC theme) | Meaning |
+| Line | Eye | Meaning |
 |---|---|---|
-| `>0.3A` | none | idle: the current this port will charge at when you start |
-| `OFF` (dim) | none | idle, and this port is set to sit the run out |
-| `TEST` | yellow | a cell was found; the charger is checking it before charging |
-| `0.60A` | red | charging, at the measured current |
-| `LIMIT` | red | charging is wanted but an [input limit](#running-from-a-weak-supply-the-limits) holds this port until there is room |
-| `REST` | orange | output off for a moment; the cell voltage is read to decide what to do next |
-| `FULL` | white; the whole cell is tinted green | the cell is at the target voltage; the port keeps watching it |
-| `BLEED` | blue | the cell is above the target, so the port discharges it down to the target |
-| `ERR` | magenta, blinking | a fault on that port: over-voltage, over-current, a cell below 2.5 V (over-discharged), 30 minutes without reaching 3.0 V, or 3 hours of charging without finishing; it stays off until you remove the cell or stop the run |
+| `>0.3A` | asleep | idle: the current this port will charge at when you start |
+| `OFF` (dim) | asleep | idle, and this port is set to sit the run out |
+| `TEST` | half open | a cell was found; the charger is checking it before charging |
+| `0.60A` | open, looking around (faster at more current) | charging, at the measured current |
+| `LIMIT` | open | charging is wanted but an [input limit](#running-from-a-weak-supply-the-limits) holds this port until there is room |
+| `REST` | resting | output off for a moment; the cell voltage is read to decide what to do next |
+| `FULL` | a spike; the cell turns dark green | the cell is at the target voltage; the port keeps watching it |
+| `BLEED` | a drop | the cell is above the target, so the port discharges it down to the target |
+| `ERR` | a red skull, blinking; the cell turns red | a fault on that port: over-voltage, over-current, a cell below 2.5 V (over-discharged), 30 minutes without reaching 3.0 V, or 3 hours of charging without finishing; it stays off until you remove the cell or stop the run |
 
 While charging, a port shows its measured current, and for one second in four the current it is aiming for (`>0.6A`).
 
@@ -117,9 +117,9 @@ supply (see [When something is wrong](#when-something-is-wrong)).
 
 | View | Shows |
 |---|---|
-| `CURRENT` | the measured current (the normal view) |
+| `AMPS` | the measured current (the normal view) |
 | `MAH IN` | the charge put into this cell since it was inserted, in mAh |
-| `TO FULL` | an estimate of the time left, `~12MIN`; `~?MIN` until there is enough to go on (about a minute of charging), `DONE` when full |
+| `ETA` | an estimate of the time left, `~12MIN`; `~?MIN` until there is enough to go on (about a minute of charging), `DONE` when full |
 | `HEALTH` | the cell's internal resistance as a grade: `GOOD` (under 90 mOhm), `TIRED` (90 to 150), `RETIRE` (over 150); one second in four the number (`77MR`) |
 
 These numbers are estimates and do not change how the cell is charged. The resistance includes the lead and connector, so compare
@@ -130,12 +130,11 @@ cell and leaves a 25 % margin.
 |---|---|---|
 | <img src="docs/screens/rot_view_mah.png" width="300"> | <img src="docs/screens/rot_view_eta.png" width="300"> | <img src="docs/screens/rot_view_health.png" width="300"> |
 
-In the ROT theme each charging cell has an eye: it fills with green as the cell fills, looks around faster the more current flows,
-and shuts when the cell is full. A cell that finishes or faults bursts into static, and the other eyes glance at it.
+Each charging cell has an eye that looks around faster the more current flows. A cell that finishes or faults bursts into static, and the other eyes glance at it.
 
 ### When everything is full
 
-When every cell is full, the ROT theme plays its finale (the logo burns in through static, with a fanfare), then a summary: how many
+When every cell is full, the charger plays its finale (the logo burns in through static, with a fanfare), then a summary: how many
 packs, how long the run took, the total mAh and the cell with the highest resistance. Any key returns to the main screen; the run
 carries on guarding the cells.
 
@@ -200,8 +199,7 @@ While you edit, the item is marked orange and the bottom row changes to `< -`, `
 | | BELOW MIN | what happens when the input falls below that floor: `LIMIT` or `STOP RUN` |
 | | REGULATION | which ports get the available current first: `EQUAL`, `CH1 FIRST` or `HIGH V FIRST` |
 | **PREFERENCES** | SOUND | `ON`, `HEARTBEAT` (also a soft beat while charging) or `OFF` |
-| | THEME | the look: `ROT` (default in WS3 Unlocked), `CLASSIC`, `CALM`, `AMBER`, `HIGH CONTRAST` |
-| | DISABLE USB POWER | `NO` or `YES`. With `YES` the USB-C input is never switched on: use it when the charger is powered from the XT60 and the USB-C is only a data link to a computer (monitor, web page, flashing). A computer then neither powers the unit nor gets power from it. While it is on, the input voltage in the header is green and reads `USB OFF` for a second every four seconds, so you can see at a glance that the USB-C is isolated. On USB alone the unit shows `INPUT LOW` with `USB POWER OFF, USE XT60` and waits for the XT60; the menu still opens, so the setting can be switched back. Not while charging; takes effect at once, switching back to `NO` waits for the next start |
+| | DISABLE USB POWER | `NO` or `YES`. With `YES` the USB-C input is never switched on: use it when the charger is powered from the XT60 and the USB-C is only a data link to a computer (monitor, web page, flashing). A computer then neither powers the unit nor gets power from it. While it is on, the input voltage in the header is green and reads `NO USB` for a second every four seconds, so you can see at a glance that the USB-C is isolated. On USB alone the unit shows `INPUT LOW` with `USB POWER OFF, USE XT60` and waits for the XT60; the menu still opens, so the setting can be switched back. Not while charging; takes effect at once, switching back to `NO` waits for the next start |
 | **DIAGNOSTICS** | | the technical pages, see below |
 
 | CHARGING | LIMITS | PREFERENCES |
@@ -230,7 +228,7 @@ deliver, so you tell it. Both limits work on one **power budget**, the most the 
 * **MIN IN VOLTS** protects a source that sags under load. The default is 4.90 V, just above the point where the charger refuses to run
   (about 4.6 V). With **BELOW MIN** on `LIMIT` the charger lowers the charge current while the input is below the floor and lets it recover once
   the input is back, so a weak source steadies itself instead of collapsing. With `STOP RUN` the charger stops the run after one second below
-  the floor and shows `V LIMIT` in the input box.
+  the floor and shows `V LIM!` in the input box.
 
   <img src="docs/screens/main_stopped.png" width="320">
 
@@ -278,7 +276,7 @@ must not have a computer connected to its USB-C unless the switch is kept off.
 To use the monitor, the web page or flashing while the charger runs from the XT60:
 
 1. Open the menu and set **DISABLE USB POWER** to `YES` (not while charging).
-2. Check the input voltage in the header: it is **green**, and reads `USB OFF` for a second every four seconds. This is the sign that the
+2. Check the input voltage in the header: it is **green**, and reads `NO USB` for a second every four seconds. This is the sign that the
    switch is off and cannot be turned on, so it is safe to connect the computer.
 3. Connect the USB-C cable. The computer neither powers the unit nor gets power from it; only data passes.
 
@@ -286,45 +284,26 @@ With the setting on, the switch stays off after every start and cannot be turned
 USB alone the unit shows the amber `INPUT LOW` screen with `USB POWER OFF, USE XT60` and waits for the XT60; the menu still opens to
 switch the setting back. Set it back to `NO` to charge from a USB-C supply again.
 
-## Themes
+## The look
 
-The theme changes the look only, never behaviour, and applies at once. WS3 Unlocked adds `ROT` and makes it the default: neon green on
-black, skulls, eyes, static and thorns, an animated SYMBIOZE splash, a finale, a screen saver (skulls drifting over static, after
-about 3 minutes with nothing plugged in; any key or a cell wakes it) and a spiky font. The numbers and states it shows are the same as in
-the other themes.
-
-| ROT, charging | ROT, idle |
-|---|---|
-| <img src="docs/screens/rot_charging.png" width="360"> | <img src="docs/screens/rot_idle.png" width="360"> |
-
-The other themes are the original OpenWS3 ones and change colours only. In every theme the same colours mean the same kind of thing
-(red/orange for charging and warnings, green for good, blue for bleed). A full cell is tinted in every theme, so it shows from
-across the room (green; in `AMBER` a brighter amber).
-
-| CLASSIC | CALM |
-|---|---|
-| <img src="docs/screens/main_charging.png" width="360"> | <img src="docs/screens/main_calm.png" width="360"> |
-| **AMBER** | **HIGH CONTRAST** |
-| <img src="docs/screens/main_amber.png" width="360"> | <img src="docs/screens/main_contrast.png" width="360"> |
-
-`CLASSIC` is the original look, `CALM` colours only what carries meaning, `AMBER` is one hue on black with red for trouble, and
-`HIGH CONTRAST` uses pure colours.
+WS3 Unlocked has one look, ROT: black, neon green and white, red only for trouble, a barbed-wire header, eyes and skulls, static,
+an animated SYMBIOZE splash, a finale and a screen saver (skulls drifting over static, after about 3 minutes with nothing plugged in;
+any key or a cell wakes it). OpenWS3's themes (CLASSIC, CALM, AMBER, HIGH CONTRAST) were removed to make room in the charger's flash
+for the statistics, the sounds and this look; the THEME menu item went with them.
 
 ## Sounds
 
-| Sound | When |
-|---|---|
-WS3 Unlocked plays real notes (C5 to C8). The ROT theme has its own sound set (E minor, glitchy); the other themes keep beeps close
-to OpenWS3's.
+WS3 Unlocked plays real notes (C5 to C8): one short E minor phrase, plucked, with soft static (a crackle like an old record) around
+it. Every sound is a piece of that phrase.
 
 | Sound | When |
 |---|---|
-| start-up jingle (ROT: two glitch chirps, a rising arpeggio) | the unit has started |
-| one short beep | a button press was accepted |
-| a short two-note motif | a port has become full |
-| a falling three-note phrase (others: two long beeps) | an error: a port fault, a stop by MIN IN VOLTS, or a locked item that you tried to change |
-| a fanfare | every cell is full |
-| two or three falling notes | the storage reminder |
+| crackle, the phrase, crackle | the unit has started |
+| a short soft pluck | a button press was accepted |
+| two notes rising to a high one, a little crackle | a port has become full |
+| crackle, then a falling note | an error: a port fault, a stop by MIN IN VOLTS, or a locked item that you tried to change |
+| the phrase twice, the second time climbing to a long high note | every cell is full |
+| the phrase going down, into crackle | the storage reminder |
 | a repeating triple beep | the output rail is out of regulation (`RAIL!`): charging has stopped (on OpenWS3 builds compiled with SDCC 4.6 this alarm is silent; fixed in WS3 Unlocked) |
 | a soft low double beat, about every 4 s | while charging, with SOUND `HEARTBEAT` only |
 
@@ -343,7 +322,6 @@ A unit with nothing saved starts with these values:
 | BELOW MIN | LIMIT |
 | REGULATION | CH1 FIRST |
 | SOUND | ON |
-| THEME | ROT (WS3 Unlocked; CLASSIC on OpenWS3) |
 | DISABLE USB POWER | NO |
 | every port | AUTO |
 
@@ -364,7 +342,7 @@ fault: everything stays off until the power is cycled (the USB link keeps workin
 | red `RAIL OVERVOLTAGE` | the output rail was beyond what can be measured | power off; see `HARDWARE.md` if it repeats |
 | red `NO RAIL` | the rail has not come up although the input is fine | power off, check the unit; see `HARDWARE.md` |
 | red `RAIL TEST FAIL` | the rail could not be regulated to the test levels (the two voltages shown are what it reached at the 3.80 V and 4.35 V levels) | power off and try again; see `HARDWARE.md` if it repeats |
-| `V LIMIT` in the input box | the input fell below MIN IN VOLTS with BELOW MIN on `STOP RUN` | as above, or set BELOW MIN to `LIMIT` |
+| `V LIM!` in the input box | the input fell below MIN IN VOLTS with BELOW MIN on `STOP RUN` | as above, or set BELOW MIN to `LIMIT` |
 | a port shows `ERR` | over-voltage, over-current, an over-discharged cell, or a charge time limit on that port | remove the cell and check it; a cell that faults again is damaged |
 | a port stays at `0.00V` | no cell, or a cell below 1.00 V, which is not charged | check the contacts and the cell |
 | a port shows `LIMIT` | an input limit holds it | wait for room, or raise MAX IN AMPS, or use a stronger supply |
