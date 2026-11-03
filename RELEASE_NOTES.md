@@ -1,6 +1,6 @@
-**Unofficial, experimental firmware for the VIFLY WhoopStor V3. Read the README's "Read this before you install" and SAFETY.md first.**
-It replaces VIFLY's firmware and decides the voltage and current that go into your cells. It was written largely with an AI coding
-assistant and has run on one charger. Going back to VIFLY's firmware may not be possible. Charge in a LiPo bag or on a non-flammable
+**Unofficial, experimental firmware for the VIFLY WhoopStor V3. Read the README's "Before you install" section, APPROACH.md and SAFETY.md first.**
+It replaces VIFLY's firmware and decides the voltage and current that go into your cells. It's vibe coded (written largely with an AI coding
+assistant, directed and checked by me) and has run on one charger. Going back to VIFLY's firmware may not be possible. Charge in a LiPo bag or on a non-flammable
 surface, supervise every charge, never overnight. No warranty, no responsibility taken: you install it at your own risk.
 
 ### 0.2.0-beta.2: fixes from an independent audit
@@ -13,12 +13,20 @@ surface, supervise every charge, never overnight. No warranty, no responsibility
 - The sound code can no longer corrupt a cell-voltage reading from inside an interrupt; every build checks this.
 - No finale, summary or storage offer while a port is in fault; the storage target is not kept after the storage run; the finale
   plays once, not at every top-up.
-- The voltage can no longer be changed mid-run by a run starting during a menu edit.
+- The voltage can no longer be changed mid-run by a run starting during a menu edit, and a USB host can't slip 4.35 V in during an
+  ALLOW 4.35V edit.
+- A stop pressed while the rail is paused is no longer lost.
+- B2 changes the target voltage when stopped (as in OpenWS3), and cycles the views while charging.
 - Installer: five confirmations before installing, a fixed size limit, a warning on a unit that differs from the tested one.
 - The full list, what was not fixed and why, and every assumption with what breaks if it is wrong: SAFETY.md.
 
 ### Still open
-The 4.35 V accuracy on the tested unit is not confirmed by a multimeter yet. No human expert has reviewed the code.
+The 4.35 V accuracy on the tested unit is not confirmed by a multimeter yet. No human expert has reviewed the code. Stopping a run
+clears a port's fault (SAFETY.md, Not fixed): pull a cell that faulted once.
+
+### Checked
+49 whole-firmware scenarios, the unit tests on PC and on a simulated 8051, and 38 of 39 planted bugs caught (the one left can't be
+reached by the simulator by design). Two rounds of independent AI review; the last found nothing critical or high.
 
 ### Install and check
 Download `openws3.html`, open it in Chrome or Edge, press Connect, follow the steps. `sha256sum -c SHA256SUMS` checks the download

@@ -21,8 +21,13 @@ Where to go:
 - **It's a jailbreak of a lithium battery charger.** If firmware gets the voltage or current wrong, a pack can swell, vent or catch
   fire. That's the stake, not a crashed app.
 - **It's unofficial.** Not made, tested or supported by VIFLY, or by the OpenWS3 authors. Installing it replaces VIFLY's firmware.
-- **Much of it was vibe coded.** I'm not an embedded engineer. I wrote this with an AI coding assistant (Claude): I decided what it
-  should do, it wrote most of the code, and I tested it on my charger and argued with it. I'd rather tell you than have you find out.
+- **It's vibe coded.** Most of the code was written by an AI coding assistant (Claude), directed by me. But I've spent a long time
+  thinking this through and researching how to do it properly: how lithium cells should be charged (constant current then constant
+  voltage, gentle pre-charge for deeply discharged cells, time and temperature cut-offs), how this chip measures voltage, and how
+  safety-critical code gets checked (simulation, planted-bug testing, independent review, measuring on the real hardware). I know
+  some code, so I've reviewed parts of it myself. Where a function was beyond me, I sanity-checked what it produced: does the cell
+  stop where it should, does the fault fire when it should, do the numbers make physical sense. If that's a problem for you, don't
+  install it. Simple as that.
 - **It's run on one charger.** Mine. Everything else is simulation, automated tests and review.
 - **Going back to VIFLY's firmware may not be possible.** I don't have a tested way, and the old firmware can't be read out before
   installing. Treat installing as one-way.
@@ -43,8 +48,8 @@ independent shows it isn't. In practice that's several layers, each looking from
   scenarios: shorts, dead cells, cells that never fill, overheating, stuck hardware, supply faults, a hostile USB host.
 - **The tests also run on a simulated copy of the chip**, because it does arithmetic differently from a PC. That caught a bug the PC
   tests couldn't: the rail-fault alarm never sounded (in OpenWS3 too).
-- **I break each safety check on purpose** (mutation testing) to prove the tests notice. The result of the run on this code is being
-  filled in.
+- **I break each safety check on purpose** (mutation testing) to prove the tests notice: 38 of 39 planted bugs are caught. The one
+  left is a line the simulator can't reach by design (it replaces that file with its model); it's checked by review and on the charger.
 - **AI reviewers, several rounds**, each given only the code and one area, never my conclusions, so they aren't just agreeing with
   me. They found real defects every round: a way for a USB program to push a cell to 4.45 V, a time limit that never fired, the
   sound code able to corrupt a voltage reading from inside an interrupt, time limits running slow when the screen was busy. Each one

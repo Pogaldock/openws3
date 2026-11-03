@@ -15,11 +15,19 @@ So most of the work on this project went into safety, not into the look. The loo
 
 ## How it was built, honestly
 
-I'm not an embedded engineer. I wrote this with an AI coding assistant (Claude): I decided what it should do, it wrote most of the
-code, and I pushed it, tested it on my charger and argued with it. Call it vibe coded if you like; I'd rather say it plainly than
-have you find out.
+It's vibe coded: most of the code was written by an AI coding assistant (Claude), directed by me. That doesn't mean it was thrown
+together. I've spent a long time thinking about this and researching how to do it properly: how lithium cells should be charged
+(constant current then constant voltage, a gentle pre-charge for deeply discharged cells, time and temperature cut-offs), how this
+chip measures voltage and what that measurement depends on, and how people check code that can hurt someone (simulation, planted-bug
+testing, independent review, measuring the real hardware).
 
-That's exactly why I don't trust it by default, and neither should you. An AI writes code that looks confident whether it's right or
+I know some code, so I've reviewed parts of it myself. Some of it is beyond me. In those cases I made sure I could still check the
+output: does the cell stop where it should, does the fault fire when it should, do the numbers make physical sense. I don't need to
+follow every line of a function to see whether it gives sane results.
+
+If that's a problem for you, don't install it. Simple as that.
+
+I still don't trust it by default, and neither should you. An AI writes code that looks confident whether it's right or
 not. So the rule for this project has been: **assume it's wrong until something independent shows it isn't.** Everything below is
 about how "something independent" was done.
 

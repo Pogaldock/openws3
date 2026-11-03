@@ -81,8 +81,8 @@ def main():
 if __name__ == '__main__':
     main()
 
-# Result on 2026-11-03 (developer mode removed; storage and statistics added), and the same on 0.2.0-beta.1 (one look, new screen),
-# run on GitHub (Actions, "Mutation tests", run 41652240488):
+# Result on 2026-11-03, 0.2.0-beta.2 (after the audit and the second review round),
+# run on GitHub (Actions, "Mutation tests", run 41669530173):
 #   M0 src/chg.c [rail_sense_low]: killed
 #   M1 src/chg.c [rail_sense_low]: killed
 #   M2 src/chg.c [bleed_over]: killed
@@ -103,5 +103,23 @@ if __name__ == '__main__':
 #   M17 src/app.c [no_dev]: killed
 #   M18 src/app.c [store]: killed
 #   M19 src/stats.c [TEST]: killed
-#   19 of 20 caught.  M6 survives by construction: the simulator replaces src/hal.c with its model (test/sim/sim_hal.c), so the
-#   fatal-stop rail value in hal.c is checked by review and on the charger only; M7 is the same change made in the model, and is caught.
+#   M20 src/app.c [fault_full]: killed
+#   M21 src/app.c [new_cell_finale]: killed
+#   M22 src/app.c [sag_finale]: killed
+#   M23 src/app.c [store_back]: killed
+#   M24 src/app.c [saturated]: killed
+#   M25 src/app.c [menu_edit_start]: killed
+#   M26 src/menu.c [TEST]: killed
+#   M27 src/app.c [b2_volt]: killed
+#   M28 src/menu.c [TEST]: killed
+#   M29 src/cfg_pure.c [TEST]: killed
+#   M30 src/stats.c [TEST]: killed
+#   M31 src/chg.c [TEST]: killed
+#   M32 src/chg.c [TEST]: killed
+#   M33 src/chg.c [TEST]: killed
+#   M34 src/app.c [hv_backstop]: killed
+#   M35 src/app.c [rail_stop]: killed
+#   M36 src/sup.c [TEST]: killed
+#   M37 src/app.c [never_full_slow]: killed
+#   M38 src/app.c [hv_race]: killed
+#   38 of 39 planted bugs caught

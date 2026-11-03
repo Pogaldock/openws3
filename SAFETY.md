@@ -203,7 +203,7 @@ earlier code: 15 of 29 planted bugs survived at least one suite, among them a di
 fault and developer mode ignoring a lost input. The scenarios added since (the rail sensor reading low, the overcharged cell, developer
 mode rules, the soft ramp after pre-charge) were written to catch exactly those. The runner and its list of planted bugs are in
 `test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit and the second review round it has 39
-planted bugs, one for each fix. On the current code **the result of the run on this code is being filled in**. The one that survives by design is the fatal-stop rail value in `src/hal.c`:
+planted bugs, one for each fix. On the current code **38 of 39 are caught** (GitHub Actions, "Mutation tests", run 41669530173). The one that survives by design is the fatal-stop rail value in `src/hal.c`:
 the simulator replaces that file with its model, so that line is checked by review and on the charger only (the same change made in
 the model is caught).
 
