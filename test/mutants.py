@@ -16,7 +16,7 @@ M = [
  ("src/chg.c", "#define RAIL_MARGIN     30 ", "#define RAIL_MARGIN     300 ", "rail_sense_low"),
  ("src/chg.c", "    if (W.v >= V_FAULT) return go_fault();", "    ;", "bleed_over"),
  ("src/chg.c", "    else if (W.pre) { W.pre = 0; W.ramp = 1; W.ramp_div = 0; }", "    else if (W.pre) { W.pre = 0; }", "gentle"),
- ("src/chg.c", "    if ((!W.t_held || W.i > I_OPEN) && ++W.t_chg_div >= PASSES_PER_S) {", "    if (!W.t_held && ++W.t_chg_div >= PASSES_PER_S) {", "held_never_full"),
+ ("src/chg.c", "    if (!W.t_held || IC > I_OPEN) {", "    if (!W.t_held) {", "held_never_full"),
  ("src/chg.c", "        if (W.pre && ++W.t_pre_s >= T_PRE_MAX_S) return go_fault();", "        ;", "pre_short"),
  ("src/hal.c", "    hal_rail(PWM_PERIOD);", "    hal_rail(0);", "vcc_fatal"),
  ("test/sim/sim_hal.c", "S.global = 0; S.rail_duty = PWM_PERIOD; }", "S.global = 0; S.rail_duty = 0; }", "vcc_fatal"),
@@ -35,6 +35,21 @@ M = [
  ("src/app.c", "        settings.volt = settings.volt == VOLT_4_35 ? VOLT_3_85 : VOLT_3_80;", "        ;", "store"),
  # the cell-resistance reading (an estimate shown to the user) must stay checked against the model
  ("src/stats.c", "                        if (mv > w.v0) { mv -= w.v0; if (mv > 655) mv = 655; r = mv * 100u / ma; }    /* mV x 1000 / mA */", "                        if (mv > w.v0) { mv -= w.v0; if (mv > 655) mv = 655; r = mv * 10u / ma; }", "TEST"),
+ # from the independent audit (SAFETY.md "Audit"): each fix must be caught if it is undone
+ ("src/app.c", "    if (fault) { if (screen == SCR_SUMMARY) summary_close(); return; }", "    ;", "fault_full"),
+ ("src/app.c", "    if (done && stats.packs != fin_packs) done = 0;  /* a new cell went in: when all are full again, a finale of their own */", "    ;", "TEST"),
+ ("src/app.c", "    if (!full || (busy_ports & 0x7F)) return;        /* a top-up of a cell that sagged keeps `done`: no replay, the 2 h go on */", "    if (!full || (busy_ports & 0x7F)) { done = 0; return; }", "sag_finale"),
+ ("src/app.c", "    if (store_on) { settings.volt = store_prev; store_on = 0; }   /* the storage run is over: the user's own target again */", "    ;", "store_back"),
+ ("src/app.c", "        if (adc_saturated(port_v_ch(k))) cin.v_now[k] = V_SATURATED;", "        ;", "saturated"),
+ ("src/app.c", "    if (screen == SCR_MENU && menu_editing()) return 0;   /* an edit open: finish it first (the voltage must not change mid-run) */", "    ;", "menu_edit_start"),
+ ("src/menu.c", "    if (it == IT_VOLT && *v == VOLT_4_35 && !settings.hv) { if (up) (*v)++; else (*v)--; }   /* 4.35 V is skipped until it is allowed */", "    ;", "TEST"),
+ ("src/menu.c", "    if (editing && level && is_locked(item())) { *SLOT[item()] = backup; editing = 0; }", "    ;", "TEST"),
+ ("src/cfg_pure.c", "    if (!settings.hv && settings.volt == VOLT_4_35) settings.volt = VOLT_4_20;   /* 4.35 V only once it is allowed */", "    ;", "TEST"),
+ ("src/stats.c", "                if (w.ron && ++w.tt >= R_GIVE_UP) w.ron = 0;    /* no stable second in 60 s (a limited supply): no reading this fill */", "                ;", "TEST"),
+ ("src/chg.c", "        W.t_chg_div += LT;               /* passes, and those a long pass lost: real time */", "        W.t_chg_div += 1;", "TEST"),
+ ("src/chg.c", "    W.i0 = W.i > I_ZERO_MAX ? I_ZERO_MAX : (uint8_t)W.i;   /* the output has been off: what the current reads now is its offset */", "    W.i0 = 0;", "TEST"),
+ ("src/chg.c", "    if (W.t_chg_div >= PASSES_PER_S) { W.t_chg_div -= PASSES_PER_S; if (++W.t_bleed_s >= T_BLEED_MAX_S) return go_fault(); }", "    ;", "TEST"),
+ ("src/sup.c", "        if (++ok_cnt >= RAIL_OK_PASSES) { rail_alarm = 0; div_cnt = 0; ok_cnt = 0; }   /* in band for a second, not one lucky pass */", "        { rail_alarm = 0; div_cnt = 0; ok_cnt = 0; }", "TEST"),
 ]
 
 def main():

@@ -67,7 +67,7 @@ static const CODE uint8_t *pos, *start;
 static uint8_t  active, sounding, enabled, crk, rnd;
 static uint16_t left;
 
-void buzz_reset(void) { active = 0; pos = start = 0; left = 0; sounding = 0; enabled = 1; crk = 0; }
+void buzz_reset(void) { active = 0; pos = start = 0; left = 0; sounding = 0; enabled = 1; crk = 0; rnd = 0x5A; }
 void buzz_enable(uint8_t on) { enabled = on ? 1 : 0; }
 uint8_t buzz_busy(void) { return active; }
 uint16_t buzz_note_count(uint8_t note) { return NOTE[note - 1]; }
@@ -88,7 +88,7 @@ uint8_t buzz_tick(void)
     if (left) { left--; return TONE_KEEP; }
     if (crk) {                                                /* crackle: one 10 ms step, a random high note about one step in five */
         crk--; left = 19;
-        rnd = (uint8_t)(rnd * 109u + 89u);
+        rnd ^= (uint8_t)(rnd << 3); rnd ^= (uint8_t)(rnd >> 5); rnd ^= (uint8_t)(rnd << 1);   /* xorshift: shifts only (see below) */
         if (rnd < 51 && enabled) { sounding = 1; return (uint8_t)(23 + (rnd & 15)); }   /* notes 22..37 (A6..C8), returned as note + 1 */
         sounding = 0; return TONE_OFF;
     }
@@ -96,7 +96,10 @@ uint8_t buzz_tick(void)
     if (n == LOOP) { pos = start; n = pos[0]; }
     if (n == END) { active = 0; sounding = 0; return TONE_OFF; }
     if (n == CRK) { crk = pos[1]; pos += 2; sounding = 0; return TONE_OFF; }   /* the crackle starts on the next tick (0.5 ms) */
-    left = (uint16_t)pos[1] * 20u - 1u;                       /* 10 ms = 20 ticks, this one included */
+    /* 10 ms = 20 ticks, this one included.  Shifts, not "* 20": this runs in the timer interrupt, and a multiply here is a call to the
+       compiler's __mulint, whose operand sits at one fixed address shared with the main loop's multiplies (the charge filter):
+       an interrupt between the main loop setting it and using it would corrupt that result.  CI checks the interrupt code for such calls. */
+    left = (uint16_t)(((uint16_t)pos[1] << 4) + ((uint16_t)pos[1] << 2) - 1u);
     pos += 2;
     if (n == R || !enabled) { sounding = 0; return TONE_OFF; }
     sounding = 1;

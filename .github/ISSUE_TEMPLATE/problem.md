@@ -11,7 +11,10 @@ labels: ''
 
 **Diagnostics page 1**: a photo (menu, DIAGNOSTICS). It shows VCC, the chip version, the USB-C guard and the stack.
 
-**Cells**: LiPo or LiHV, size, how many ports in use, the VOLTAGE and CURRENT settings:
+**Check the unit** (installer page, Advanced, "Check the unit"): what it shows for the chip and the settings area. This tells
+whether your unit is the same hardware as the tested one.
+
+**Cells**: LiPo or LiHV, size, how many ports in use, the VOLTAGE and CURRENT settings, ALLOW 4.35V:
 
 **Power**: USB-C (which charger or computer) or XT60 (which pack or supply):
 

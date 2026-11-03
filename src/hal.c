@@ -15,6 +15,7 @@ __sfr __at (0x88) TCON; __sfr __at (0x89) TMOD; __sfr __at (0x8A) TL0; __sfr __a
 __sfr __at (0xF4) USBCON;
 __sfr __at (0x8E) AUXR; __sfr __at (0xA8) IE;
 __sfr __at (0xD1) T4T3M; __sfr __at (0xD4) T3H; __sfr __at (0xD5) T3L; __sfr __at (0xAF) IE2;   /* Timer 3: the buzzer's notes */
+__sfr __at (0xEF) AUXINTIF;                                   /* bit 1 T3IF: Timer 3 overflow pending */
 __sfr __at (0xC1) WDT_CONTR;   /* STC8H manual 6.3.1: watchdog */
 __sfr __at (0xFF) RSTCFG;      /* STC8H manual 6.3.3: reset configuration (low-voltage reset) */
 __sfr __at (0x8B) TL1; __sfr __at (0x8D) TH1;   /* Timer 1 is not used: its registers carry the RAM copy of the reference (below) */
@@ -164,9 +165,10 @@ void hal_tick(void) { g_ticks++; }
 uint32_t hal_ticks(void)
 {
     uint32_t t;
+    uint8_t ea = IE & 0x80;    /* interrupts back to how they were, not always on: a caller that had them off keeps them off */
     IE &= ~0x80;
     t = g_ticks;
-    IE |= 0x80;
+    IE |= ea;
     return t;
 }
 
@@ -300,7 +302,12 @@ void hal_ee_write(uint16_t addr, uint8_t v) { iap(2, addr, v); iap_idle(); }
 void hal_tone_note(uint8_t cmd)
 {
     static uint16_t XD n;
-    if (cmd == TONE_OFF) { T4T3M &= (uint8_t)~0x08; TONE = 0; return; }
+    if (cmd == TONE_OFF) {
+        /* timer stopped, its pending flag cleared (an overflow that came while this interrupt ran would otherwise toggle the pin once
+           more after this, leaving it high until the next note), then the pin low */
+        T4T3M &= (uint8_t)~0x08; AUXINTIF &= (uint8_t)~0x02; TONE = 0;
+        return;
+    }
     n = (uint16_t)(0u - buzz_note_count((uint8_t)(cmd - 1)));
     T3H = (uint8_t)(n >> 8); T3L = (uint8_t)n;
     T4T3M |= 0x08;             /* T3R */

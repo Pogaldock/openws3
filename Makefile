@@ -17,6 +17,8 @@ PURE    = src/ports.c src/menu.c src/portset.c src/theme.c src/rowbuf.c src/limi
 
 all: $(BUILD)/fw.bin $(BUILD)/openws3.html
 
+.DELETE_ON_ERROR:    # a failed step leaves no file behind that a second make would take as done
+
 RELS    = $(SRCS:src/%.c=$(BUILD)/%.rel)
 
 $(BUILD)/flags: FORCE
@@ -45,7 +47,7 @@ $(BUILD)/fw.bin: $(RELS)
 	@awk '$$3 == "l_XINIT" && $$2 != "00000000" { print "error: initialised XRAM variable (README build rule 1)"; exit 1 }' $(BUILD)/fw.map
 	makebin -p -s 65536 $(BUILD)/fw.ihx $(BUILD)/fw.bin   # the flash is 64 KB; makebin defaults to 32 KB
 	@echo "image: $$(stat -c %s $(BUILD)/fw.bin) bytes"
-	@python3 -c "import sys; n = len(open('$(BUILD)/fw.bin','rb').read().rstrip(b'\\xff')); print('code: %d bytes, %d free below the settings area at 0x%04X' % (n, $(CODE_LIMIT) - n, $(CODE_LIMIT))); sys.exit(n > $(CODE_LIMIT))" || { echo "error: the image reaches the settings area"; exit 1; }
+	@python3 tools/imgcheck.py $(BUILD) $(CODE_LIMIT) || { rm -f $(BUILD)/fw.bin $(BUILD)/fw.ihx; exit 1; }   # size, interrupt helpers
 
 $(BUILD)/openws3.html: tools/openws3.html tools/bundle.py $(BUILD)/fw.bin
 	python3 tools/bundle.py $(BUILD)/fw.bin tools/openws3.html $@

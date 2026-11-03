@@ -212,6 +212,8 @@ def log(path, secs):
 def flash(path):
     """Reboot into the ISP loader (command 6) and write the image with tools/isp.py."""
     data = open(path, 'rb').read()
+    if len(data.rstrip(b'\xff')) > isp.CODE_LIMIT:
+        sys.exit('the image reaches the settings area at 0x%04X: not written' % isp.CODE_LIMIT)
     try:
         command(6, 0, ack=False)
     except SystemExit:

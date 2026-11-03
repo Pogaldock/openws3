@@ -14,7 +14,10 @@ goes. Items marked *(upstream too)* are defects that are also in OpenWS3 as of c
 - **Tested on one charger.** Everything else is simulation, tests and review. Hardware differs from unit to unit.
 - **Supervise every charge.** Charge on a non-flammable surface, never unattended, never overnight, and only cells in good condition.
 - **The firmware cannot fix hardware.** A failed transistor that stays on, a cracked board or a damaged cell are beyond what it can stop.
-- **Check your unit once** with a multimeter (below) before you rely on it.
+- **Check your unit once** with a multimeter (below) before you rely on it. The 4.35 V (LiHV) setting is hidden until you allow it in
+  the menu; allow it only after that check.
+- **An independent audit found real bugs, and they were fixed** (section "Independent audit" below). An audit lowers the risk; it does
+  not prove the firmware correct. Expect more.
 
 ## The hazards, and what guards each one
 
@@ -32,6 +35,20 @@ The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades,
   host pulsing a port on and off pushed a cell to **4.45 V** (found by review, reproduced in simulation; a held bleed switch also
   drained a cell to 0 V in an hour). Both were fixed first *(upstream too)*; the mode was then removed altogether, to make room for
   the statistics and because no user needs it. Commands 7 to 9 now get "unknown command" and drive nothing (simulated: `no_dev`).
+- **4.35 V behind a switch (WS3 Unlocked 0.2-beta.2):** the LiHV target is skipped in the menu and refused over USB until CHARGING,
+  ALLOW 4.35V is set to YES; a stored 4.35 V target without it loads as 4.20 V. A LiPo can no longer be put on 4.35 V by one tap.
+- **B2 no longer changes the target (0.2-beta.2):** on the main screen B2 changes what the cells show; the voltage is set in the menu
+  only. Before, B2 changed the views while charging and the voltage when stopped: the habit of tapping it for the views could
+  select 4.35 V for ordinary LiPos the next time (found by the audit).
+- **The target cannot change mid-run (0.2-beta.2):** a run started (by a USB host, say) while the voltage was being edited in the
+  menu kept the edit going, and the target could be stepped mid-run, to 4.35 V on a LiPo run among others (found by the audit,
+  reproduced in simulation). Now a run cannot start during such an edit, and a run that starts undoes it (simulated: `menu_edit_start`;
+  unit test).
+- **A reading at the top of the ADC's range counts as over-voltage (0.2-beta.2):** a port's full scale is about 0.99 x VCC: 4.43 V at
+  the tested unit's 4.484 V, about 4.36 V at VCC 4.40 V. Between those, a cell above 4.40 V read at most the full scale, so the
+  over-voltage and 4.40 V bleed faults could not fire (it was bled instead). Such a reading is now passed on as 5.05 V, over every
+  threshold (simulated: `saturated`, a 4.46 V cell at VCC 4.42 V faults; without the change it bled). Side effect: at a VCC near
+  4.40 V a LiHV cell reaching 4.35 V can fault at the end of its charge. That is the safe direction.
 
 ### Too much current, or current into a damaged cell
 - **Per-port over-current fault and soft start (OpenWS3).** A 3 A short is cut in 10 ms and stays latched (simulated).
@@ -41,12 +58,22 @@ The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades,
   1.105 A above 3.0 V on a 1.0 A setting. The over-current fault uses the 0.1 A current there, not the full setting.
 - **Pre-charge time limit (WS3 Unlocked):** a cell that does not reach 3.0 V in 30 minutes is shorted inside: the port faults.
   Simulated with a 0.11 A internal leak: fed at 25 minutes, off at 35.
+- **Current sense zero (0.2-beta.2):** the end of charge is a current of 73 mA, "no current" (a pulled cell) 29 mA, read through a
+  sense resistor with no amplifier: a few counts of offset on a unit would stop charges from ending (each cell then held at full
+  voltage until the 3 h limit) or hide a pulled cell. The offset is now read with the output off, before each charge, and subtracted
+  (up to 58 mA; more is not taken as an offset). Unit test: a 4-count offset, the charge still ends and a pulled cell is still found.
 
 ### A cell that never finishes
 - **Charge time limit (WS3 Unlocked):** 3 hours of charging per cell, top-ups of the same cell included. Time with the port held at
   zero by the input limits does not count; time held with current flowing does. The first version did not count any held time, so
   with MAX IN AMPS on, a bad cell charged for **10 hours** (found by review); now each port stops after its own 3 hours with current
   (simulated: three never-full cells sharing 0.5 A all stop by 9.6 h). A cell leaking 50 mA is given up after 6.6 h of top-ups.
+- **The time limits run on real time (0.2-beta.2):** they used to count control passes, assumed 4.5 ms each. A pass that took longer
+  (a full repaint after a supply dip is about 140 ms) made every limit late: at 9 ms passes the 3 h limit became 6 h (found by the
+  audit). The app now measures each pass and hands the passes it lost to the charge logic, which counts them (the 3 h, 30 min and bleed
+  limits, and the over-current and over-voltage waits). Unit test: with every pass four passes long, the 3 h limit fires at 3 h.
+- **Bleed time limit (0.2-beta.2):** 3 hours of bleeding one cell faults the port: a discharge path that does not bring the cell down
+  is not left on for ever (about 1 W a port).
 
 ### Heat
 - **Fan (OpenWS3)** by the board thermistor.
@@ -72,11 +99,20 @@ The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades,
   of stack on a chip that measured 24 spare while charging. They can no longer interrupt each other.
 - **Smaller race fixes (WS3 Unlocked):** the buzzer pattern switch against the timer interrupt; a button read shared by the interrupt
   and the main loop; an input-current estimate that wrapped around above 10 A in total.
+- **No compiler helper routines in interrupts (0.2-beta.2):** the melody engine, which runs in the 0.5 ms timer interrupt, multiplied
+  by 20. On this chip and compiler that is a call to a shared routine that keeps an operand at one fixed address, also used by the
+  main loop's multiplies, among them the filter of every cell voltage. An interrupt at the wrong moment could corrupt one filtered
+  reading: rare and silent, and no PC test or simulation can see it (found by the audit, confirmed in the compiled code). Now shifts;
+  and every build fails if the code that runs in an interrupt calls any such routine (`tools/imgcheck.py`).
+- **Buzzer pin and interrupt flag (0.2-beta.2):** a note's last half-period could leave the buzzer pin high after the note ended;
+  reading the tick counter could switch interrupts on where they had been off. Both fixed (`src/hal.c`); neither was harmful today.
 
 ### Alarms that do not sound
 - **Rail-fault alarm (WS3 Unlocked, upstream too):** SDCC 4.6 assumes a pointer into program memory is never null, so the buzzer's
   "busy" test became "always busy" and the rail alarm (started only when the buzzer is idle) never sounded. The fault itself still cut
   the power. Found by the tests on a simulated 8051 (PC tests cannot see it); fixed with an explicit flag (`src/buzz_pure.c`).
+- **Rail alarm that clears too easily (0.2-beta.2):** one pass back in range cleared it, so a rail drifting out of regulation and
+  back each second kept charging about 99 % of the time. Now it needs a second in range (unit test).
 
 ### The charger's supplies: USB-C fed backwards
 The charger takes USB-C (PD, measured: STRAP 0 on a Samsung 45 W charger at 19.5 V, an Apple 61 W at 20.0 V and a laptop port at
@@ -101,28 +137,42 @@ bypass conducts both ways: a pack plugged into the XT60 afterwards would be fed 
 - **Check byte (WS3 Unlocked):** the settings page also carries a check byte; a page with any changed bit loads the defaults
   (simulated: one flipped bit that would have selected 4.35 V loads 4.20 V).
 - **Flash wear (WS3 Unlocked):** settings changed by a host are saved once it stops changing them, so a program cannot wear the flash out.
+- **New layout in 0.2-beta.2:** the byte that held the theme now holds ALLOW 4.35V. So that no old value can switch 4.35 V on, the
+  layout number changed: **installing 0.2-beta.2 resets every setting to its default** (0.3 A, 4.20 V, sound on, limits off).
 
 ### The installer and the files you download
 - **The page checks itself:** the firmware inside `openws3.html` comes with its SHA-256; the page computes it again and refuses to
   install if it differs (tested in Chromium: one changed character in the page is refused). The full SHA-256 is shown in the install
-  confirmation, and an image that would reach the charger's settings area is refused.
+  confirmation. This catches a damaged download, not a deliberate change: whoever edits the page can edit the hash too. The
+  attestation (below) is what shows where a file came from.
+- **Before installing (0.2-beta.2):** five boxes must be ticked (a WhoopStor V3; supervision; the multimeter check; unofficial, AI-assisted,
+  one unit, maybe no way back; at your own risk). An image past 0xF400 is refused whatever the chip reports, as is one reaching the
+  settings area the chip reports; a unit whose settings area is not where the tested unit's is (another revision or board) is
+  asked about first. The same size limit is in the build (`tools/imgcheck.py`, run by `make`, which also deletes a failed image so a
+  second `make` cannot pick it up), in `tools/bundle.py`, `tools/isp.py` and `fwmon.py flash`.
 - **The release:** built by GitHub Actions only after every test passed, in a job that has no write access; published by a separate job
   with `SHA256SUMS` and a signed build-provenance attestation. Actions are pinned to commit SHAs and the compiler download is checked
   by its SHA-256. Each version (a `v*` tag) is kept as its own release; `rot-latest` is the newest build of the branch.
-- **Not covered:** the installer does not read the flash back after writing (the loader's read command is not used), and anyone with
-  write access to the repository could publish a different build. The attestation and building it yourself are the checks for that.
+- **Releases (0.2-beta.2):** a version is released only from the main branch, only if its name matches what the firmware reports
+  (`src/version.h`), and never over an existing release; LICENSE is shipped with the files.
+- **Not covered:** the installer does not read the flash back after writing (the loader's read command is not used); the loader's
+  answers to its erase commands are not checked (what a good answer looks like is not documented; checking a guess could break every
+  install); the installer cannot tell a WhoopStor V3 from another board with the same chip family beyond the settings-area check; and
+  anyone with write access to the repository could publish a different build. The attestation and building it yourself are the checks
+  for the last one.
 
 ## How it was checked
 
 ### Unit tests (OpenWS3's, extended) - `make test`
-35,469 checks on the PC: the charge state machine (9,508), the input limits (20,852), the menu (321), port settings (4,490), and
-settings, display text and helpers (298). WS3 Unlocked added the refusal, pre-charge and time-limit tests and the diagnostics text.
+52,238 checks on the PC: the charge state machine (9,514), the input limits (20,852), the menu (324), port settings (4,490), and
+settings, display text, the melody engine, the statistics and helpers (17,058). WS3 Unlocked added the refusal, pre-charge, time-limit,
+real-time, current-offset, rail-alarm, 4.35 V switch, menu-lock and statistics tests and the diagnostics text.
 
 ### Whole-firmware simulation (WS3 Unlocked) - `make sim`
 The real firmware (`src/app.c` and every module it calls; only the register layer is replaced) runs on the PC against a model of the
 board: the supply and its USB-C / XT60 paths, the inverted rail with sag, six ports, cells with an open-circuit curve, internal
 resistance, polarisation and optional leakage, an ADC referenced to VCC with noise, gain errors and reference spread, the display's bus
-time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 38 scenarios:
+time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 43 scenarios:
 - full charges at VCC 4.45 to 4.95 V, reference spread plus or minus 1 %, ADC noise, combined worst case
 - user stop, input lost, cell pulled mid-charge, short circuit and its latch, storage voltage, power cycle mid-charge
 - dead cell, deeply discharged cell, internally shorted cell, cell that never fills, leaking cell, never-full cells under MAX IN AMPS
@@ -133,6 +183,9 @@ time, the watchdog and the thermistor. It presses the buttons like a person and 
 - a host asking for the removed developer mode: refused, no output ever driven
 - the statistics: mAh within 2 % of the model, resistance and time to full against the model's cell; the storage offer after 2 h
   full, and B2 on it taking the cells down to 3.85 V
+- after the audit: a storage run giving the user's target back when stopped (and never saving the storage one); a full cell next to a
+  faulted one (no finale, no storage offer, the fault stays); a cell that sags after full (one finale, then the offer, not one per
+  top-up); a cell over 4.40 V at a low VCC (faults); a host start while the voltage is being edited (refused)
 - USB-C: XT60 alone, a pack plugged in on a laptop and on a PD charger, packs present at power-up, PD start and reset, PD back at 5 V
 - in every scenario: the watchdog is never starved
 
@@ -145,7 +198,8 @@ a fault removed, a guard bypassed), and the suites run against the broken firmwa
 earlier code: 15 of 29 planted bugs survived at least one suite, among them a disabled charge over-voltage cut, a removed 4.40 V bleed
 fault and developer mode ignoring a lost input. The scenarios added since (the rail sensor reading low, the overcharged cell, developer
 mode rules, the soft ramp after pre-charge) were written to catch exactly those. The runner and its list of planted bugs are in
-`test/mutants.py`, with the last result at its end. On the current code **19 of 20 are caught**. The one that survives is the fatal-stop rail value in `src/hal.c`:
+`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit it has 34
+planted bugs, one for each fix. On the current code **the result of the run on this code is being filled in**. The one that survives by design is the fatal-stop rail value in `src/hal.c`:
 the simulator replaces that file with its model, so that line is checked by review and on the charger only (the same change made in
 the model is caught).
 
@@ -160,6 +214,38 @@ layer, USB / installer / build, and the test evidence. Every defect they found w
 test where the simulator can show it (the race and interrupt fixes cannot be simulated: they rest on review). That review is where the developer-mode pulse, the time limit under MAX IN AMPS, the fatal-stop
 rail, the start-up hole in the USB-C guard, the interrupt nesting and the settings check came from.
 
+### Independent audit (2026-11-03, before 0.2-beta.2)
+A second round, on the whole project after the new screen and sounds: four AI reviewers (again not people), each given only the
+repository and one area (the charge and safety logic; the hardware layer, interrupts and timing; the screens, features and tests;
+build, release, installer and documentation), asked for defects and for the assumptions the design rests on, with what breaks if
+one is wrong. Their claims were checked against the code before anything was changed; several they had reproduced in the simulator.
+- **Fixed** (each with a test, and a planted bug in `test/mutants.py` that the tests must catch):
+  - the interrupt calling a shared multiply routine (above); a build check now forbids it
+  - "ALL FULL" with a faulted port, and the storage offer restarting the run and clearing the fault
+  - a run starting mid-edit, so the voltage could change mid-run
+  - B2 changing the voltage when stopped; 4.35 V one tap away
+  - time limits counting passes instead of time
+  - over-voltage blind at the top of the ADC's range
+  - the current sense offset near the end-of-charge threshold
+  - no bleed time limit; the rail alarm clearing on one good pass
+  - the storage target left in place (and saved) after the storage run; the finale replayed at every top-up, which also kept the
+    storage reminder from ever coming
+  - the resistance reading never giving up on a limited supply (time to full blank for the whole charge); a resistance of "1 mOhm,
+    GOOD" when the voltage did not rise
+  - the view name flashing every 65 s; a summary text buffer one byte short above 10 Ah; the buzzer pin left high; interrupts switched
+    on by a tick read; a null test the compiler can fold (screen saver)
+  - the size check that a second `make` skipped; no size check in `bundle.py`, `isp.py`, `fwmon.py`; the installer applying no limit
+    when the chip reports no settings area, and calling 512 bytes of settings area enough (the settings sit at 2 KB)
+  - releases: a version name not checked against the firmware, an existing release overwritable, no LICENSE in the release
+  - documentation: the claim that VIFLY's firmware can be put back (no tested way exists); checksums described as proof of origin
+- **Not fixed, and why:**
+  - the loader's erase answers: not checked (above)
+  - the strap pin has no pull-up: on the tested unit it is driven (STRAP 0 and 1 read as expected on four supplies); a pull-up
+    could change what it reads on a unit where it is weak. A unit where it floats would request the USB-C bypass at random, and the
+    guard (above) then limits it
+  - per-unit calibration: needs a multimeter reading to calibrate against (Still open)
+  - human expert review: none yet
+
 ### On the charger (one unit, VIFLY WhoopStor V3, chip version A)
 - VCC 4.484 V on every supply tried: two PD chargers, a laptop port, a 4S pack (it comes from its own regulator).
 - Input reading within about 2 % of the supply on a 20 V and a 5 V source.
@@ -172,21 +258,54 @@ rail, the start-up hole in the USB-C guard, the interrupt nesting and the settin
   of the uncertainty (about 3 %) stays inside what a LiHV cell is made for.
 - Thermistor about 2150 counts at room temperature.
 
-## What it takes for granted
+## What it takes for granted, and what breaks if it is wrong
 
-- **The port voltage scale (4.5 V full scale):** the charger's own targets fall on it (OpenWS3, checked on hardware); the board's
-  resistor dividers have a tolerance nobody has measured. Up to about 2 % is plausible.
-- **The chip's internal reference (1.19 V nominal):** about 1 % from chip to chip. Simulated, plus or minus 1 % gives 4.157 to
-  4.247 V on a 4.20 V setting. Version B chips store a factory measurement (shown on diagnostics page 1); version A, like the tested
-  unit, does not, so it is not used yet.
-- **Worst case without a multimeter check:** both together, about plus or minus 3 %: up to about 4.33 V on 4.20 V, 4.48 V on 4.35 V.
-  That is why the multimeter check below matters.
-- **The strap (P3.4) means "USB-C powers the board":** measured on one unit with three USB-C sources and a pack.
-- **The input diode drops about 0.6 V:** OpenWS3, checked on hardware. The USB-C guard needs a rise of at least 0.2 V.
-- **The thermistor model:** estimated (above).
-- **The rail actuator is inverted** (more duty, lower rail): OpenWS3, checked on hardware.
-- **Register values** (watchdog, low-voltage reset, pin modes, interrupt priority): checked line by line against the STC8H manual; only
-  a charger can prove them (the first boot after installing).
+Each line: what is assumed, how well it is supported, what happens if it is wrong, and how to check it. Most of these are why
+"supervise every charge" and "check with a multimeter" are not optional.
+
+- **The port and rail voltage scale (4.5 V full scale).** Support: the charger's own targets fall on it (OpenWS3, on hardware); the
+  resistor dividers' tolerance has never been measured; up to about 2 % is plausible. If wrong: every cell ends that much off its
+  target, up to about 4.29 V on 4.20 V. Check: a rested full cell with a multimeter.
+- **The chip's internal reference (1.19 V nominal).** Support: datasheet, about 1 % from chip to chip. Simulated, plus or minus 1 %
+  gives 4.157 to 4.247 V on a 4.20 V setting. Version B chips store a factory measurement (diagnostics page 1); version A, like the
+  tested unit, does not, so it is not used yet. If wrong: as above, all channels together.
+- **Worst case of the two without a multimeter check: about plus or minus 3 %**, up to about 4.33 V on 4.20 V and 4.48 V on 4.35 V.
+  This is why 4.35 V is hidden until allowed, and why the multimeter check matters.
+- **The rail and the six ports read alike.** Support: none measured. The cell's final voltage is set by the rail sensor; "full", the
+  over-voltage faults and the bleed are judged by the port sensors. If they differ by about 0.7 % or more: a cell never reads "full"
+  and is held at full voltage until the 3 h fault, or false over-voltage faults. Check: compare the rail and each port with a
+  multimeter (Still open: per-unit calibration).
+- **VCC is above about 4.45 V.** Support: one unit, 4.484 V on every supply. If lower: the ports cannot read above about 4.40 V;
+  since 0.2-beta.2 such a reading counts as over-voltage, so the result is a fault, not a missed one. Check: diagnostics page 1.
+- **The current sense offset is under 58 mA.** Support: assumed about 29 mA upstream; since 0.2-beta.2 it is measured and subtracted.
+  If larger: charges end late (at the 3 h limit) or a pulled cell is not noticed. Check: page 2 with no cells.
+- **The control pass length.** Support: never measured on the charger; since 0.2-beta.2 the time limits no longer depend on it.
+  Short waits (a fault must hold 0.45 to 0.9 s) still count whole passes and stretch with slow passes. Check: a pass-length readout
+  (Still open).
+- **The strap (P3.4) means "USB-C powers the board".** Support: one unit, three USB-C sources and a pack. If wrong or floating: the
+  USB-C bypass is requested wrongly; the guard and the diode limit what happens.
+- **The input diode drops about 0.6 V.** OpenWS3, on hardware. The USB-C guard needs a rise of at least 0.2 V.
+- **The thermistor model (10 k, B 3950).** Support: fitted to two points. If wrong: the 60 C stop could really be at 70 to 80 C. The
+  cells' temperature is not measured at all. Check: a thermometer at two temperatures.
+- **The rail actuator is inverted** (more duty, lower rail): OpenWS3, on hardware. If wrong, a fatal stop would drive the rail to its
+  highest; the over-voltage supervision is then the only stop.
+- **Register values** (watchdog, low-voltage reset, pin modes, interrupt priority, Timer 3): checked line by line against the STC8H
+  manual (twice, by two reviewers); only a charger can prove them (the first boot after installing).
+- **Pins after a watchdog reset are as at power-up.** Support: the manual only. If not: a reset could briefly switch outputs on.
+  Check: an oscilloscope across a forced reset (Still open).
+- **The settings area starts at 0xF400 (3 KB) on every unit.** Support: one unit. The installer asks before writing to a unit where it
+  does not.
+- **The cell curves and health thresholds** (time to full, GOOD / TIRED / RETIRE at 90 and 150 mOhm): generic, not measured on whoop
+  cells; the resistance includes the lead and connector. If wrong: the estimate is off by minutes, and good packs read "RETIRE".
+  These only display; nothing charges by them.
+- **Users read the warnings, own a multimeter and supervise.** Support: none; many will not. That is why the installer asks for five
+  boxes to be ticked, 4.35 V is off by default, and the defaults are the safe ones. Supervision remains the only backup for what the
+  firmware cannot see (a failing transistor, a cell heating up).
+- **VIFLY's firmware can be put back.** Not supported: no restore package has been tested, and the loader cannot read the old firmware
+  out first. Treat installing as possibly one-way.
+- **Passing the simulator means the chip behaves the same.** Partly: the simulator has no interrupts and replaces the register layer,
+  so interrupt-timing bugs (like the one the audit found) are invisible to it. The chip-level tests and the build checks cover some of
+  that gap.
 - **The simulation's model:** realistic, not exact. It shows that the logic does the right thing under the conditions modelled, and
   nothing about what was left out. Known gaps:
   - The register layer (`src/hal.c`), the start-up code, `src/main.c` and the USB driver are replaced by the model, so the watchdog,
@@ -204,42 +323,52 @@ rail, the start-up hole in the USB-C guard, the interrupt nesting and the settin
 ### The features added after the safety work (WS3 Unlocked)
 - **They only display.** The statistics (`src/stats.c`), the views, the summary, the animations and the melodies read the same values
   the charge logic uses; nothing in the charge logic reads them. The one exception is the storage offer: B2 on it stops the run, sets
-  the storage voltage and starts again, exactly like doing it in the menu (simulated: `store`).
+  the storage voltage and starts again, exactly like doing it in the menu (simulated: `store`). Since 0.2-beta.2 the storage target
+  is not saved and the user's own target comes back when the run stops (`store_back`), and there is no offer, finale or summary
+  while any port is in fault (`fault_full`).
 - **Estimates are marked as such.** Time to full has a `~` and a 25 % margin; the resistance includes the leads; the grade thresholds
   (GOOD under 90 mOhm, TIRED to 150, RETIRE above) are rules of thumb for whoop-size 1S cells, not a measurement of capacity.
 - **Timing.** The full-screen pictures (finale, summary) are drawn a strip at a time, so a control pass stays under 50 ms (simulated:
   longest 41.5 ms).
-- **Drawing is part of the clock.** The charge time limits count control passes, so a screen that draws too much on average makes
-  them run slow in real time. The first version of the empty-port static redrew it on every visit; the simulator caught it (the 3 h
-  limit, the 30 min pre-charge limit and the fatal stop all came late). The static is now drawn 7 rows a visit and again only every few
-  seconds, the big header icons and the eyes only when they change, and the same scenarios pass (the fatal stop at 0.46 s, 0.47 s
-  before the new screen).
+- **Drawing and the clock.** The charge time limits used to count control passes, so a screen that drew too much made them late. The
+  first version of the empty-port static did; the simulator caught it, and the drawing was made cheap (the static 7 rows a visit and
+  rarely, the big icons only when they change). Since 0.2-beta.2 the limits count real time, so this is no longer what keeps them
+  right; short waits and the 0.5 s fatal stop still count passes.
 - **The tone timer is hardware only.** Melodies use Timer 3 and its interrupt, which the simulator does not have. A wrong register would
   most likely show as no sound, or as an interrupt storm that starves the watchdog: a reset loop at first boot (below).
-- **Stack.** One byte more in the deepest screen-drawing frame; check STACK on page 1 while charging (below).
+- **Stack.** The big sprites add a few bytes to the deepest screen-drawing chain; measured 48, then 45 bytes free while charging one
+  cell. STACK on page 1 shows only the deepest point reached so far, not the worst case: check it after a full run (below).
 
 ## Check your own charger
 
+- **After installing 0.2-beta.2 every setting is back to its default** (0.3 A, 4.20 V, 4.35 V not allowed): set yours again.
 - **First boot:** the splash plays once with its jingle and the main screen comes up. A splash every few seconds means a reset loop
   (most likely the tone timer): reinstall the previous build (hold the left button while plugging in USB-C) and report it.
 - **Multimeter (the important one):** charge a cell to full, let it rest 5 minutes, measure it at the cell. 4.17 to 4.23 V for 4.20 V,
   4.32 to 4.38 V for 4.35 V. Outside that, stop and report it with a photo of diagnostics page 1.
 - **Diagnostics page 1** (menu, DIAGNOSTICS): VCC between 4.45 and 4.95 V (the range the correction was tested over); `STACK` after a
-  long charge with the web page connected, 15 or more; `BYP ON` on USB-C alone, `BYP OFF` on the XT60 alone; `THERM` about 2000 to
+  long charge with several cells and the finale and summary shown, with the web page connected, 15 or more; `BYP ON` on USB-C alone, `BYP OFF` on the XT60 alone; `THERM` about 2000 to
   2300 in a room.
 - **Outputs off:** with no cells in, after a charge, the ports read near 0 V on page 2.
-- **Downloads:** `sha256sum -c SHA256SUMS`, and `gh attestation verify openws3.html -R Pogaldock/ws3-unlocked`.
+- **Downloads:** `sha256sum -c SHA256SUMS` (a damaged download), and the proof that GitHub built it from this repository's workflow:
+  `gh attestation verify openws3.html -R Pogaldock/ws3-unlocked --signer-workflow Pogaldock/ws3-unlocked/.github/workflows/rot-build.yml`.
 
 ## Still open (for anyone who wants to be sure)
 
-- **Measure a rested cell with a multimeter after a 4.35 V charge** (above). Then measure the port voltage divider and the reference
-  on several units, and add a per-unit calibration from a multimeter reading.
+- **Measure a rested cell with a multimeter after a 4.35 V charge** (above). Then compare the rail and each port with a multimeter on
+  several units, and add a per-unit calibration from those readings (the biggest open assumption above).
+- Find out what the loader answers to its erase commands, then check those answers in the installer and `isp.py`.
+- Show the average control-pass length on diagnostics page 1, and count the short fault waits on real time too.
+- Compute the worst-case stack statically in CI (STACK on page 1 only shows the paths that have run).
+- Restore a unit to VIFLY's firmware once, with VIFLY's own tool, and document how (or confirm it cannot be done).
+- A capacity cap per fill, and a check that the voltage rises as charge goes in (a cell that takes charge without rising is damaged).
 - Calibrate the thermistor against a thermometer, and decide the stop temperature from it.
 - Watch the power-path pins and the rail with an oscilloscope from power-up to the first instruction, and after a watchdog reset.
 - Measure what the XT60 path does when USB-C is higher (does it conduct backwards into a pack?).
 - Measure the stack under every interrupt with USB telemetry running during a full six-port charge.
 - Run long soak tests: six ports, every supply, days.
-- Have a human who knows battery chargers review `src/chg.c`, `src/sup.c` and `src/adc.c` (all review so far was by AI agents).
+- Have a human who knows battery chargers review `src/chg.c`, `src/sup.c`, `src/adc.c` and `src/app.c` (all review so far, both rounds,
+  was by AI agents).
 - Read the flash back after installing, in the installer.
 - Run `app.c`, `adc.c`, `sup.c` and `limits.c` on the simulated 8051 too, not only on the PC.
 - Offer the *(upstream too)* fixes back to OpenWS3.

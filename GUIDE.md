@@ -3,8 +3,9 @@
 How to use a WhoopStor V3 charger running WS3 Unlocked (or OpenWS3, which it is based on): reading the screen, starting a charge, and what every setting does.
 All pictures are what the unit's 160 x 80 screen shows; they are drawn by the firmware's own screen code (`make screens`).
 
-> **This firmware is early.** You are charging lithium cells with software that is still being tested. Stay with the
-> charger and use it at your own risk. See `README.md` for the status and for how to install it.
+> **This firmware is early and unofficial.** You are charging lithium cells with software that is still being tested, written
+> largely with an AI assistant and tried on one charger. Stay with the charger, charge in a LiPo bag or on a non-flammable surface,
+> never overnight, and use it at your own risk: no warranty, no responsibility taken. See `README.md` and `SAFETY.md` first.
 
 ## Contents
 
@@ -91,9 +92,14 @@ A port held by a limit shows `LIMIT`, and a port set to `OFF` shows `OFF`; the `
 | Action | Effect |
 |---|---|
 | **B1** tap | charge current +0.1 A: 0.3 A, 0.4 A ... 1.3 A, then back to 0.3 A |
-| **B2** tap | target voltage: 4.20 V, 4.35 V, 3.80 V storage, 3.85 V storage, then back to 4.20 V |
+| menu, CHARGING, **VOLTAGE** | the target voltage: 4.20 V, 3.80 V storage, 3.85 V storage, and 4.35 V only once ALLOW 4.35V is `YES` |
+| **B2** tap | what the cells show (below). It does not change the voltage: that is only in the menu, so a tap can never change it by accident |
 
-The choice is saved a few seconds after your last tap.
+The current is saved a few seconds after your last tap; the voltage when the menu closes.
+
+**4.35 V is off until you allow it.** In the menu, CHARGING, set **ALLOW 4.35V** to `YES`. Do that only if you charge LiHV cells,
+and only after checking your unit: charge a cell on 4.20 V, let it rest 5 minutes and measure it at its connector with a multimeter
+(4.17 to 4.23 V is right). A drone's on-screen voltage is not good enough for this: two drones read the same cell 150 mV apart.
 
 | Target | Use |
 |---|---|
@@ -113,18 +119,18 @@ supply (see [When something is wrong](#when-something-is-wrong)).
 
 ### What the cells show while charging
 
-**Tap B2 while charging** to change what the line under each voltage shows. The middle box names the view for a moment.
+**Tap B2** to change what the line under each voltage shows. The middle box names the view for a moment.
 
 | View | Shows |
 |---|---|
 | `AMPS` | the measured current (the normal view) |
 | `MAH IN` | the charge put into this cell since it was inserted, in mAh |
-| `ETA` | an estimate of the time left, `~12MIN`; `~?MIN` until there is enough to go on (about a minute of charging), `DONE` when full |
-| `HEALTH` | the cell's internal resistance as a grade: `GOOD` (under 90 mOhm), `TIRED` (90 to 150), `RETIRE` (over 150); one second in four the number (`77MR`) |
+| `ETA` | an estimate of the time left, `~12MIN`; `~?MIN` until there is enough to go on (a few minutes of charging: 5 % of the cell, and the resistance reading, or 60 s without one on a limited supply), `DONE` when full. Close to the end it shows about a minute for the whole final taper |
+| `HEALTH` | the cell's internal resistance as a grade: `GOOD` (under 90 mOhm), `TIRED` (90 to 150), `RETIRE` (over 150); one second in four the number (`77MR`); `--` when it could not be measured (the current never held steady, on a limited supply) |
 
 These numbers are estimates and do not change how the cell is charged. The resistance includes the lead and connector, so compare
 cells on the same lead; a cell that reads `TIRED` on every lead is getting old. The time to full assumes a typical LiPo or LiHV
-cell and leaves a 25 % margin.
+cell and leaves a 25 % margin. The grades are rules of thumb, not a measurement of capacity: don't throw a pack away on them alone.
 
 | mAh in | Time to full | Health |
 |---|---|---|
@@ -136,7 +142,10 @@ Each charging cell has an eye that looks around faster the more current flows. A
 
 When every cell is full, the charger plays its finale (the logo burns in through static, with a fanfare), then a summary: how many
 packs, how long the run took, the total mAh and the cell with the highest resistance. Any key returns to the main screen; the run
-carries on guarding the cells.
+carries on guarding the cells. A cell that sags a little and is topped up does not play it again; a new cell does.
+
+**If a port is in fault (`ERR`), there is no finale, summary or storage offer** while it is: the red cell stays in view. Take the
+faulted cell out (or stop the run) and look at it before charging it again.
 
 | Summary | Storage offer |
 |---|---|
@@ -144,7 +153,9 @@ carries on guarding the cells.
 
 **Storage reminder.** Full LiPos should not sit at 4.20 or 4.35 V for days. If the cells have been full for 2 hours and the run is
 still on, the charger beeps and offers storage voltage: **B2** stops the run, sets 3.80 V (3.85 V after a 4.35 V charge) and starts
-again, so the cells are discharged to storage; **B1** keeps them full. It asks at most three times, 10 minutes apart.
+again, so the cells are discharged to storage; **B1** keeps them full. It asks at most three times, 10 minutes apart. The storage
+target is for that run only: when you stop the run (or the power goes), your own target comes back. The summary then says
+`ALL STORED`.
 
 ## Per-port settings
 
@@ -192,7 +203,8 @@ While you edit, the item is marked orange and the bottom row changes to `< -`, `
 
 | Category | Item | What it does |
 |---|---|---|
-| **CHARGING** | VOLTAGE | the target voltage, as the right button does on the main screen |
+| **CHARGING** | VOLTAGE | the target voltage (the only place it is set): 4.20 V, 3.80 V or 3.85 V storage, and 4.35 V once allowed |
+| | ALLOW 4.35V | `NO` (default) or `YES`: whether 4.35 V (LiHV) can be chosen. Back to `NO` takes a 4.35 V target back to 4.20 V |
 | | CURRENT | the charge current, 0.3 to 1.3 A in 0.1 A steps |
 | **LIMITS** | MAX IN AMPS | a ceiling on the current taken from the input: `OFF`, or 0.5 to 3.0 A in 0.1 A steps, then 0.5 A steps up to 10 A |
 | | MIN IN VOLTS | a floor for the input voltage: `OFF`, or 4.80 to 5.00 V in 0.05 V steps, up to 6.0 V in 0.1 V steps, then 0.5 V steps up to 25 V |
@@ -311,11 +323,13 @@ PREFERENCES, SOUND: `ON`, `HEARTBEAT` (as `ON`, plus the heartbeat) or `OFF` (mu
 
 ## Default settings
 
-A unit with nothing saved starts with these values:
+A unit with nothing saved starts with these values. Installing 0.2-beta.2 over an earlier build also brings them back (the settings
+layout changed, so that no old value could switch 4.35 V on):
 
 | Setting | Default |
 |---|---|
 | VOLTAGE | 4.20 V |
+| ALLOW 4.35V | NO |
 | CURRENT | 0.3 A |
 | MAX IN AMPS | OFF |
 | MIN IN VOLTS | 4.90 V |

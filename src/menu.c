@@ -6,7 +6,7 @@
 #include "cfg.h"
 
 /* items are numbered category by category; CAT_FIRST[c] .. CAT_FIRST[c + 1] - 1 belong to category c (diagnostics is an action, no items) */
-enum { IT_VOLT, IT_CURRENT, IT_ILIM, IT_VMIN, IT_VCUT, IT_LMODE, IT_SOUND, IT_USBOFF, NITEMS };
+enum { IT_VOLT, IT_CURRENT, IT_HV, IT_ILIM, IT_VMIN, IT_VCUT, IT_LMODE, IT_SOUND, IT_USBOFF, NITEMS };
 enum { CAT_CHARGE, CAT_LIMITS, CAT_PREFS, CAT_DIAG, NCATS };
 static const uint8_t CAT_FIRST[NCATS + 1] = { IT_VOLT, IT_ILIM, IT_SOUND, NITEMS, NITEMS };
 
@@ -15,20 +15,26 @@ static char XD rowtxt[ROW_COLS + 1];
 static char XD tmp[12];
 
 static const char *const CAT_LABEL[NCATS] = { "CHARGING", "LIMITS", "PREFERENCES", "DIAGNOSTICS" };
-static const char *const LABEL[NITEMS] = { "VOLTAGE", "CURRENT", "MAX IN AMPS", "MIN IN VOLTS", "BELOW MIN", "REGULATION", "SOUND", "DISABLE USB POWER" };
+static const char *const LABEL[NITEMS] = { "VOLTAGE", "CURRENT", "ALLOW 4.35V", "MAX IN AMPS", "MIN IN VOLTS", "BELOW MIN", "REGULATION", "SOUND", "DISABLE USB POWER" };
 
 /* the setting each item edits, and the largest value of the plain choices (the current and the two limits step by their own rules) */
-static uint8_t XD *const CODE SLOT[NITEMS] = { &settings.volt, &settings.cur, &settings.ilim, &settings.vmin, &settings.vcut, &settings.lmode, &settings.sound, &settings.usb_off };
-static const CODE uint8_t MAX[NITEMS] = { NVOLTS - 1, 0, 0, 0, 1, LM_NMODES - 1, 2, 1 };
+static uint8_t XD *const CODE SLOT[NITEMS] = { &settings.volt, &settings.cur, &settings.hv, &settings.ilim, &settings.vmin, &settings.vcut, &settings.lmode, &settings.sound, &settings.usb_off };
+static const CODE uint8_t MAX[NITEMS] = { NVOLTS - 1, 0, 1, 0, 0, 1, LM_NMODES - 1, 2, 1 };
 
-static uint8_t is_locked(uint8_t it) { return running && (it == IT_VOLT || it == IT_CURRENT || it == IT_USBOFF); }
+static uint8_t is_locked(uint8_t it) { return running && (it == IT_VOLT || it == IT_CURRENT || it == IT_HV || it == IT_USBOFF); }
 
 void menu_open(uint8_t run) { level = cat = cursor = 0; editing = 0; running = run; }
-void menu_context(uint8_t run) { running = run; }
 uint8_t menu_editing(void) { return editing; }
 
 static uint8_t count(void) { return level ? (uint8_t)(CAT_FIRST[cat + 1] - CAT_FIRST[cat]) : NCATS; }
 static uint8_t item(void) { return (uint8_t)(CAT_FIRST[cat] + cursor); }
+
+/* a run started while a locked item (the voltage, ...) is being edited: the edit is undone, so the value cannot be changed mid-run */
+void menu_context(uint8_t run)
+{
+    running = run;
+    if (editing && level && is_locked(item())) { *SLOT[item()] = backup; editing = 0; }
+}
 
 static void step(uint8_t it, uint8_t up)
 {
@@ -42,6 +48,8 @@ static void step(uint8_t it, uint8_t up)
     case IT_VMIN: *v = vmin_step(*v, up); break;
     default: if (up) { if (*v < MAX[it]) (*v)++; } else if (*v) (*v)--;
     }
+    if (it == IT_VOLT && *v == VOLT_4_35 && !settings.hv) { if (up) (*v)++; else (*v)--; }   /* 4.35 V is skipped until it is allowed */
+    if (it == IT_HV && !*v && settings.volt == VOLT_4_35) settings.volt = VOLT_4_20;     /* not allowed any more: back to 4.20 V */
 }
 
 uint8_t menu_event(uint8_t ev)
@@ -82,6 +90,7 @@ static void value(uint8_t it)
     case IT_VOLT: rb_right(sup_volt_name(v), ROW_COLS - 1); break;
     case IT_CURRENT: fmt_a1(tmp, cal_set_to_ma(v)); rb_right(tmp, ROW_COLS - 1); break;
     case IT_SOUND: rb_right(v == 2 ? "HEARTBEAT" : v ? "ON" : "OFF", ROW_COLS - 1); break;
+    case IT_HV:
     case IT_USBOFF: rb_right(v ? "YES" : "NO", ROW_COLS - 1); break;
     case IT_ILIM:
         if (v) { fmt_a1(tmp, (uint16_t)(v * 100u)); rb_right(tmp, ROW_COLS - 1); }

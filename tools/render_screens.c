@@ -84,7 +84,7 @@ void lcd_noise_row(uint8_t y, uint16_t seed, const uint8_t *bits, uint8_t bx, ui
     for (i = 0; i < LCD_PX_W; i++) {
         s = LCD_LFSR(s);
         c = LCD_STATIC(s);
-        if (bits && i >= bx && i - bx < bw && LCD_SURFACE(bits, i - bx, s, keep)) c = fg;
+        if (bw && i >= bx && i - bx < bw && LCD_SURFACE(bits, i - bx, s, keep)) c = fg;
         if (y < LCD_PX_H) fb[y][i] = c;
     }
 }
@@ -133,7 +133,7 @@ static void draw_main(const ui_state_t *s)
 {
     uint8_t i;
     ui_main_init();
-    for (i = 0; i < 3 + NPORTS * 3 + 3; i++) ui_main_step(s);
+    for (i = 0; i < 3 * (3 + NPORTS * 3); i++) ui_main_step(s);   /* three rounds: the empty-port static is drawn over two visits */
 }
 
 static ui_state_t idle_state(void)
@@ -288,7 +288,7 @@ static void rot_screens(void)
     s = charging_state(); draw_main(&s); save("rot_charging");
     s.state[2] = PS_FAULT; s.blink = 1; s.state[4] = PS_BLEED; draw_main(&s); save("rot_fault");
     s = idle_state(); s.ps = 1; s.sel = 1; draw_main(&s); save("rot_ports_select");
-    settings.theme = TH_ROT; menu_open(0); keys(2, EV_B2); keys(1, EV_OK); keys(1, EV_B2); draw_menu(); save("rot_menu");
+    menu_open(0); keys(2, EV_B2); keys(1, EV_OK); keys(1, EV_B2); draw_menu(); save("rot_menu");
 }
 
 int main(int argc, char **argv)

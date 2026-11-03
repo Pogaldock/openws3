@@ -43,12 +43,16 @@ typedef struct {
     uint8_t  t_chg_div;          /* ... and passes into the current second */
     uint8_t  pre;                /* charging at I_PRE (the cell is below V_PRE) */
     uint16_t t_pre_s;            /* seconds charged below V_PRE in this fill (T_PRE_MAX_S) */
+    uint16_t t_bleed_s;          /* seconds bled in this fill (T_BLEED_MAX_S) */
+    uint8_t  i0;                 /* the current reading with the output off (the sense input's offset), subtracted while charging */
 } port_t;
 
 static port_t XD P[NPORTS], W;
 
 /* the pass inputs, for the state functions below (limits.h style: shared globals, no parameters, direct RAM is full) */
 static const chg_in_t XD *IN;
+static uint16_t XD IC;                 /* CHARGE: the current less the port's offset (W.i0) */
+static uint8_t XD LT;                  /* 1 + the passes the last one lost (chg_in_t.late): what the time limits add this pass */
 static uint8_t XD K;
 static uint8_t XD *EV;
 
@@ -61,7 +65,7 @@ static void p_reset(port_t XD *p, uint8_t iset)
     p->t_over = p->oc = 0;
     p->t_gone = 0;               /* a removed cell is noticed afresh next time */
     p->announced = 0;
-    p->t_chg_s = 0; p->t_chg_div = 0; p->pre = 0; p->t_pre_s = 0;   /* a new fill: its own time limits */
+    p->t_chg_s = 0; p->t_chg_div = 0; p->pre = 0; p->t_pre_s = 0; p->t_bleed_s = 0;   /* a new fill: its own time limits */
 }
 
 void chg_init(void)
@@ -145,6 +149,7 @@ static uint8_t go_fault(void)
 /* probe and rest: where the resting cell is decides */
 static uint8_t classify(void)
 {
+    W.i0 = W.i > I_ZERO_MAX ? I_ZERO_MAX : (uint8_t)W.i;   /* the output has been off: what the current reads now is its offset */
     if (W.v < V_REFUSE) return go_fault();         /* over-discharged: charging it is the risk, it stays off until removed */
     if (in_full_window()) return go_full();
     if (above_window()) return to_bleed();
@@ -170,10 +175,14 @@ static uint8_t st_charge(void) REENT
     /* time limits: a cell that never tapers (a damaged one) is not held at full voltage for ever, and one that stays below V_PRE
        (shorted inside) is not fed for long.  Time the limits hold the port with no current does not count; held with current flowing
        it does (several ports sharing a tight budget are all held all the time: not counting that let a bad cell charge for ever) */
-    if ((!W.t_held || W.i > I_OPEN) && ++W.t_chg_div >= PASSES_PER_S) {
-        W.t_chg_div = 0;
-        if (++W.t_chg_s >= T_CHG_MAX_S) return go_fault();
-        if (W.pre && ++W.t_pre_s >= T_PRE_MAX_S) return go_fault();
+    IC = W.i > W.i0 ? W.i - W.i0 : 0;
+    if (!W.t_held || IC > I_OPEN) {
+        W.t_chg_div += LT;               /* passes, and those a long pass lost: real time */
+        if (W.t_chg_div >= PASSES_PER_S) {
+            W.t_chg_div -= PASSES_PER_S;
+            if (++W.t_chg_s >= T_CHG_MAX_S) return go_fault();
+            if (W.pre && ++W.t_pre_s >= T_PRE_MAX_S) return go_fault();
+        }
     }
     /* a deeply discharged cell starts at 0.1 A; at V_PRE it goes up to its setting through the soft ramp, not in one jump */
     if (W.v < V_PRE) { W.pre = 1; if (W.iset > I_PRE) W.iset = I_PRE; }
@@ -181,23 +190,25 @@ static uint8_t st_charge(void) REENT
     W.want = W.iset;
     /* current limit supervision: 2*Iset + 7 for 200 passes, Iset being I_PRE while the cell is below V_PRE */
     if (W.i >= (uint16_t)(2u * (W.pre ? I_PRE : IN->iset[K]) + 7u)) {
-        if (++W.oc >= T_OC) { W.oc = 0; return go_fault(); }
+        W.oc += LT;
+        if (W.oc >= T_OC) { W.oc = 0; return go_fault(); }
     } else if (W.oc) W.oc--;
 
     /* a cell pulled while charging: the loop winds the duty up, the pin follows the rail and nothing flows, which looks like the end
        of a taper.  A real cell past its soft ramp always draws something; look at the pin with the output off (the rest test).  A port
        the limits hold down may draw nothing at all */
-    if (!W.t_held && !W.ramp && W.i <= I_OPEN) {
+    if (!W.t_held && !W.ramp && IC <= I_OPEN) {
         if (++W.t_open >= T_OPEN) { W.t_open = 0; return to_rest(); }
     } else W.t_open = 0;
 
     if (W.v > IN->rail + RAIL_MARGIN) {
-        if (++W.t_over >= T_OVER && W.v > IN->tgt + V_OVER) { W.t_over = 0; return go_fault(); }
+        if (W.t_over < T_OVER) W.t_over += LT;          /* capped: it waits there for V > target + V_OVER */
+        if (W.t_over >= T_OVER && W.v > IN->tgt + V_OVER) { W.t_over = 0; return go_fault(); }
     } else {
         if (W.t_held) {
             /* held by the limits: the current says nothing about the cell, so the tail timer stands still */
         } else if (W.v < IN->tgt - WIN_LO) W.t_tail = 0;
-        else if (W.i > I_TAIL) { if (W.t_tail) W.t_tail--; }
+        else if (IC > I_TAIL) { if (W.t_tail) W.t_tail--; }
         else if (++W.t_tail >= T_TAIL) { W.t_tail = 0; return to_rest(); }
         if (W.t_over) W.t_over--;
     }
@@ -228,9 +239,9 @@ static uint8_t st_full(void)
         if (W.v < IN->tgt) {
             /* a top-up of the same cell: the time already spent charging it stays, so a cell that keeps sagging (a damaged one
                leaking inside) reaches the limit across its top-ups.  Only removing it or stopping the run starts the count again */
-            uint16_t s = W.t_chg_s, sp = W.t_pre_s;
+            uint16_t s = W.t_chg_s, sp = W.t_pre_s, sb = W.t_bleed_s;
             uint8_t st = to_probe();
-            W.t_chg_s = s; W.t_pre_s = sp;
+            W.t_chg_s = s; W.t_pre_s = sp; W.t_bleed_s = sb;
             return st;
         }
         return to_bleed();
@@ -242,6 +253,8 @@ static uint8_t st_bleed(void)
 {
     W.duty = 0;
     if (W.v >= V_FAULT) return go_fault();
+    W.t_chg_div += LT;                   /* the bleed time limit, on real time like the charge limits */
+    if (W.t_chg_div >= PASSES_PER_S) { W.t_chg_div -= PASSES_PER_S; if (++W.t_bleed_s >= T_BLEED_MAX_S) return go_fault(); }
     /* the load pulls the reading below the cell's own voltage by the series drop, and the cell springs back when it ends: measure
        the drop once the reading has settled and end the bleed when the cell itself is down to the target, so the rest test finds
        it in the window and does not bleed again */
@@ -263,7 +276,7 @@ static uint8_t st_fault(void)
 /* works on W, a copy of the port: fixed addresses are much cheaper on the 8051 than access through a pointer */
 static void one_port(const chg_in_t XD *in, uint8_t k, uint8_t XD *ev)
 {
-    IN = in; K = k; EV = ev;
+    IN = in; K = k; EV = ev; LT = (uint8_t)(1u + in->late);
 
     /* measurement filters: V = (V + 3*adc)/4 twice per pass, I = (I + adc)/2 */
     W.v = (uint16_t)((W.v + 3u * in->v_now[k]) >> 2);

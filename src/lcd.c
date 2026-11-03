@@ -266,7 +266,7 @@ void lcd_noise_row(uint8_t y, uint16_t seed, const CODE uint8_t *bits, uint8_t b
     for (i = 0; i < LCD_PX_W; i++) {
         s = LCD_LFSR(s);
         c = LCD_STATIC(s);
-        if (bits && i >= bx && (uint8_t)(i - bx) < bw && LCD_SURFACE(bits, (uint8_t)(i - bx), s, keep)) c = fg;
+        if (bw && i >= bx && (uint8_t)(i - bx) < bw && LCD_SURFACE(bits, (uint8_t)(i - bx), s, keep)) c = fg;   /* bw 0: no image (SDCC 4.6 folds a null test of a __code pointer to true) */
         tx(c >> 8); tx(c & 0xFF);
     }
     CS = 1;

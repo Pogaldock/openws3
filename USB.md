@@ -10,7 +10,8 @@ needed. The report descriptor uses a vendor-defined usage page, so the host does
   the buttons, so the power path is never touched from interrupt context. There is no raw PWM or pin access: OpenWS3's developer
   mode (commands 7–9) is removed in WS3 Unlocked.
 * ISP is unaffected: hold the button while plugging USB-C to flash as before, or send command 6 (`fwmon.py isp`).
-* The 0.5 ms tick interrupt has higher priority than USB. A report costs about 0.4 ms of CPU every 10 ms.
+* The 0.5 ms tick interrupt and the USB interrupt have the same priority, so they never nest (stack). A report costs about 0.4 ms of
+  CPU every 10 ms.
 
 ## Units
 
@@ -83,9 +84,9 @@ The screen open on the LCD (menu, port settings or a diagnostics page) is in byt
 | Cmd | Argument | Effect |
 |---|---|---|
 | 1 | – | stop charging (staggered, like the button). Always allowed |
-| 2 | – | start charging. Refused if already running, if a supervisor stop or a fatal condition is active, and before the rail self-test has passed |
+| 2 | – | start charging. Refused if already running, if a supervisor stop or a fatal condition is active, before the rail self-test has passed, and while an item is being edited in the menu on the unit |
 | 3 | current in iu (21, 28 … 91) | set the charge current, stored in EEPROM. Refused while running or if not a valid step |
-| 4 | voltage 0..3 | set the target voltage (0 = 4.20 V, 1 = 4.35 V, 2 = 3.80 V storage, 3 = 3.85 V storage), stored in EEPROM. Refused while running |
+| 4 | voltage 0..3 | set the target voltage (0 = 4.20 V, 1 = 4.35 V, 2 = 3.80 V storage, 3 = 3.85 V storage), stored in EEPROM. Refused while running, and 1 (4.35 V) unless ALLOW 4.35V is YES on the unit |
 | 5 | – | ping |
 | 6 | – | reboot into the USB ISP loader, so the next flash needs no button. Refused while running. `fwmon.py flash FILE` does this and then writes the image |
 | 7, 8, 9 | – | OpenWS3's developer mode (enter, set the outputs, leave). Removed in WS3 Unlocked: answered as an unknown command (result 2), nothing changes |

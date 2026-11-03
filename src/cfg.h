@@ -7,13 +7,14 @@
 #include "board.h"
 
 #define CFG_ADDR     0x0800
-#define CFG_LAYOUT   0xB5             /* change it whenever cfg_t or the page changes: an old page then loads the defaults (0xB5: check byte added) */
+#define CFG_LAYOUT   0xB6             /* change it whenever cfg_t or the page changes: an old page then loads the defaults (0xB5: check byte
+                                         added; 0xB6: the theme byte became hv, so no old value can switch 4.35 V on) */
 
 typedef struct {
     uint8_t cur;                      /* charge current, iu: 21..91 (0.3..1.3 A) */
     uint8_t volt;                     /* target voltage, sup.h VOLT_* */
     uint8_t sound;                    /* 0 off, 1 on, 2 on with a heartbeat while charging */
-    uint8_t theme;                    /* theme.h TH_* */
+    uint8_t hv;                       /* 1 = the 4.35 V (LiHV) target may be chosen; 0 (default) = it is skipped and refused */
     uint8_t ilim, vmin, vcut, lmode;  /* input limits, limits.h lim_cfg_t */
     uint8_t ch_cur[NPORTS];           /* a current per port, 0 = the global one */
     uint8_t ch_off;                   /* bit k set: port k sits the run out */
@@ -29,7 +30,7 @@ uint8_t cfg_valid_buzzer(uint8_t raw);        /* 0 off, 2 on with a heartbeat wh
 uint8_t cfg_valid_ilim(uint8_t raw);          /* 0 (off) or 5..100 (0.1 A), else 0 */
 uint8_t cfg_valid_vmin(uint8_t raw);          /* 0 (off) or 96..230 (limits.h VMIN_MV), else 4.90 V */
 uint8_t cfg_valid_lmode(uint8_t raw);         /* a limits.h LM_* regulation mode, else LM_BY_CH */
-uint8_t cfg_valid_theme(uint8_t raw);         /* always TH_ROT: one look */
+uint8_t cfg_valid_hv(uint8_t raw);            /* 1 = 4.35 V allowed, else 0 */
 uint8_t cfg_valid_ch_cur(uint8_t raw);        /* 21, 28 ... 91, else 0 (same as the global setting) */
 uint8_t cfg_valid_ch_off(uint8_t raw);        /* one bit per port, else (erased flash) none */
 uint8_t cfg_valid_usb_off(uint8_t raw);       /* 1 = USB power disabled, else 0 */

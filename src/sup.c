@@ -37,9 +37,10 @@ const char *sup_volt_name(uint8_t volt)
 
 static uint16_t div_cnt, nr_cnt;
 static uint8_t  ov_cnt, vh_cnt, st_cur, st_cnt;
-static uint8_t  rail_alarm, fan, hot;
+static uint8_t  rail_alarm, fan, hot, ok_cnt;
+#define RAIL_OK_PASSES   222     /* back in band this many passes in a row (1 s) before the rail alarm clears */
 
-void sup_reset(void) { div_cnt = 0; nr_cnt = 0; ov_cnt = 0; vh_cnt = 0; st_cur = 0; st_cnt = 0; rail_alarm = 0; fan = 0; hot = 0; }
+void sup_reset(void) { div_cnt = 0; nr_cnt = 0; ov_cnt = 0; vh_cnt = 0; st_cur = 0; st_cnt = 0; rail_alarm = 0; fan = 0; hot = 0; ok_cnt = 0; }
 
 void sup_pass(const sup_in_t XD *in, sup_out_t XD *o)
 {
@@ -63,7 +64,9 @@ void sup_pass(const sup_in_t XD *in, sup_out_t XD *o)
        does not make one overshoot fatal */
     if (in->rail_sat && in->bandgap < VCC_STOP) { if (++ov_cnt >= RAIL_CUT_PASSES) { ov_cnt = RAIL_CUT_PASSES; o->fatal = SF_RAIL_OVER; } }
     else if (ov_cnt) ov_cnt--;
-    if (rail_alarm && in->rail + RAIL_OK_BAND >= S && in->rail <= S + RAIL_OK_BAND) { rail_alarm = 0; div_cnt = 0; }
+    if (rail_alarm && in->rail + RAIL_OK_BAND >= S && in->rail <= S + RAIL_OK_BAND) {
+        if (++ok_cnt >= RAIL_OK_PASSES) { rail_alarm = 0; div_cnt = 0; ok_cnt = 0; }   /* in band for a second, not one lucky pass */
+    } else ok_cnt = 0;
     if (rail_alarm && o->stop == STOP_NONE) o->stop = STOP_RAIL;   /* out of regulation for long; a low input or VCC is the cause, and is said first */
     /* never up although the input and VCC are fine: the buck stage or its sense is broken (a low input is the waiting STOP_VIN) */
     if (!o->rail_up && in->vin >= VIN_MIN && in->bandgap < VCC_STOP) { if (nr_cnt < NO_RAIL_PASSES) nr_cnt++; } else nr_cnt = 0;

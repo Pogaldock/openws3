@@ -19,7 +19,7 @@
 
 static void fresh(uint8_t run)
 {
-    settings.volt = 0; settings.cur = 21; settings.sound = 1; settings.theme = TH_ROT; settings.ilim = 0; settings.vmin = 0; settings.vcut = 0; settings.lmode = LM_EQUAL; settings.usb_off = 0;
+    settings.volt = 0; settings.cur = 21; settings.sound = 1; settings.hv = 0; settings.ilim = 0; settings.vmin = 0; settings.vcut = 0; settings.lmode = LM_EQUAL; settings.usb_off = 0;
     menu_open(run);
 }
 static void down(int n) { while (n--) menu_event(RIGHT_SHORT); }
@@ -47,9 +47,9 @@ static void t_nav(void)
 
     fresh(0);
     CHECK(menu_event(OK) == MA_CHANGED);                      /* open CHARGING */
-    CHECK(has(menu_text(0), "CHARGING") && has(menu_text(0), "1/2") && has(menu_text(0), "HOLD:BACK"));
-    CHECK(has(menu_text(1), "VOLTAGE") && has(menu_text(2), "CURRENT") && menu_text(3)[0] == 0x20 && !has(menu_text(3), "M"));
-    menu_event(LEFT_SHORT); CHECK(has(menu_text(0), "2/2"));  /* wraps inside the category too */
+    CHECK(has(menu_text(0), "CHARGING") && has(menu_text(0), "1/3") && has(menu_text(0), "HOLD:BACK"));
+    CHECK(has(menu_text(1), "VOLTAGE") && has(menu_text(2), "CURRENT") && has(menu_text(3), "ALLOW 4.35V") && has(menu_text(3), "NO"));
+    menu_event(LEFT_SHORT); CHECK(has(menu_text(0), "3/3"));  /* wraps inside the category too */
     CHECK(menu_event(BACK) == MA_CHANGED);                    /* back to the categories, the cursor on CHARGING */
     CHECK(has(menu_text(0), "MENU") && has(menu_text(0), "1/4") && menu_text(1)[0] == '>');
     CHECK(menu_event(BACK) == MA_EXIT);                       /* BACK at the top closes the menu */
@@ -70,16 +70,34 @@ static void t_edit(void)
 {
     fresh(0); go(C_CHARGE, 0);
     CHECK(menu_event(OK) == MA_CHANGED && menu_editing());                         /* edit the target voltage */
-    more(2);
-    CHECK(settings.volt == 2 && has(menu_text(1), "3.80V"));                         /* live */
-    less(1); CHECK(settings.volt == 1);
+    more(1);                                                                       /* 4.35 V is not allowed: skipped */
+    CHECK(settings.volt == VOLT_3_80 && has(menu_text(1), "3.80V"));                 /* live */
+    more(1); CHECK(settings.volt == VOLT_3_85);
+    more(1); CHECK(settings.volt == VOLT_3_85);                                      /* values stop at the ends */
+    less(2); CHECK(settings.volt == VOLT_4_20);                                      /* 4.35 V skipped going down too */
+    more(1);
     cancel();                                                                      /* cancel: back to what it was, still in the category */
     CHECK(settings.volt == 0 && !menu_editing() && has(menu_text(0), "CHARGING"));
     edit(); more(1); confirm();                                                    /* confirm */
-    CHECK(settings.volt == 1 && !menu_editing());
+    CHECK(settings.volt == VOLT_3_80 && !menu_editing());
     edit(); less(3);
-    CHECK(settings.volt == 0);                                                       /* values stop at the ends */
+    CHECK(settings.volt == 0);
     cancel();
+
+    /* ALLOW 4.35V: then the voltage steps through 4.35 V; switching it off again takes a 4.35 V target back to 4.20 V */
+    fresh(0); go(C_CHARGE, 2);
+    edit(); more(1); confirm(); CHECK(settings.hv == 1 && has(menu_text(3), "YES"));
+    fresh(0); settings.hv = 1; go(C_CHARGE, 0);
+    edit(); more(1); confirm(); CHECK(settings.volt == VOLT_4_35);
+    down(2); edit(); less(1); confirm(); CHECK(settings.hv == 0 && settings.volt == VOLT_4_20);
+
+    /* a run starts while the voltage is being edited (a USB host, say): the edit is undone, the target is the one from before */
+    fresh(0); go(C_CHARGE, 0);
+    edit(); more(1); CHECK(settings.volt == VOLT_3_80 && menu_editing());
+    menu_context(1); CHECK(settings.volt == VOLT_4_20 && !menu_editing());
+    CHECK(menu_event(OK) == MA_LOCKED);                                            /* and it cannot be opened again while charging */
+    fresh(0); go(C_PREFS, 0); edit(); less(1);                                     /* an item that is not locked stays in its edit */
+    menu_context(1); CHECK(menu_editing() && settings.sound == 0); cancel();
 
     /* current: steps of 0.1 A within [0.3 A, 1.3 A] */
     fresh(0); go(C_CHARGE, 1);

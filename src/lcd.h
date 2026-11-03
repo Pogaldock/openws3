@@ -21,7 +21,7 @@ void lcd_text(uint8_t x, uint8_t y, const char *s, uint8_t sx, uint8_t sy, uint1
 #define LCD_LFSR(s)   ((uint16_t)(((s) >> 1) ^ (((s) & 1) ? 0xB400u : 0u)))
 #define LCD_STATIC(s) (((s) & 7) < 5 ? 0x0000 : ((s) & 7) == 5 ? 0x2945 : ((s) & 7) == 6 ? 0x6B4D : 0xD69A)
 void lcd_noise(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t seed) REENT;
-/* One full-width row of static at y.  If bits is not 0 it is one row of a 1-bit image, bw pixels wide, placed at bx: each of its lit
+/* One full-width row of static at y.  If bw is not 0, bits is one row of a 1-bit image, bw pixels wide, placed at bx: each of its lit
  * pixels shows in fg with a chance of keep/256 (0: never, 255: almost always), so the image surfaces through the static. */
 void lcd_noise_row(uint8_t y, uint16_t seed, const CODE uint8_t *bits, uint8_t bx, uint8_t bw, uint8_t keep, uint16_t fg) REENT;
 #define LCD_SURFACE(bits, i, s, keep) (((bits)[(i) >> 3] & (0x80 >> ((i) & 7))) && (uint8_t)((s) >> 8) < (keep))

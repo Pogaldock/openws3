@@ -18,6 +18,9 @@ charge statistics (mAh, time to full, cell resistance), a storage reminder, and 
   changes, the tests and these documents were written with an AI coding assistant (Claude), directed and checked by me. That is
   exactly why the rest of this section exists: so you can see what was done to check it, and judge for yourself.
 - **It has run on one charger.** Everything else is simulation, automated tests and review.
+- **Going back to VIFLY's firmware may not be possible.** No restore package has been tested, and the old firmware cannot be read out
+  before installing. Treat installing as one-way.
+- **It is a beta.** An independent audit of this version found real bugs (now fixed, listed in SAFETY.md). There will be more.
 
 ### What I did to make it as safe as I could
 - **Audited the charging code** before changing it, and found that OpenWS3's voltage readings drift with the charger's internal supply:
@@ -29,33 +32,43 @@ charge statistics (mAh, time to full, cell resistance), a storage reminder, and 
   on a collapsing supply.
 - **Protected what is plugged into the charger:** a guard so that a pack on the XT60 cannot be fed backwards into a laptop or phone
   charger on the USB-C port.
-- **Built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and ran the real firmware against it in 38
+- **Built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and ran the real firmware against it in 43
   scenarios: full charges, shorts, dead cells, cells that never fill, overheating, stuck hardware, supply faults, a hostile USB host.
 - **Ran the tests on a simulated copy of the chip**, with the same compiler, because the chip does arithmetic differently from a PC.
   That caught a real bug the PC tests could not: the rail-fault alarm never sounded (also present in OpenWS3).
 - **Had the code reviewed** by four separate AI review agents, one per area, each without my conclusions. They found real defects
   (a way for a USB program to push a cell to 4.45 V, a time limit that never fired, a hole in my own USB-C guard, and more). Every one
   was reproduced in the simulator, then fixed and given a test. These were AI reviewers, not people: a human expert has not reviewed it.
-- **Broke each safety check on purpose** (mutation testing) to prove the tests notice: 19 of 20 planted bugs are caught.
+- **Had the whole project audited again** before 0.2-beta.2, by four new AI reviewers who were told to question the assumptions too.
+  They found, among others: the sound code able to corrupt a cell-voltage reading from inside an interrupt, the time limits running
+  slow when the screen was busy, over-voltage protection blind at a low chip supply, a way to change the voltage mid-run, and 4.35 V
+  one tap away. All fixed, each with a test; the full list, and what was not fixed and why, is in SAFETY.md.
+- **Broke each safety check on purpose** (mutation testing) to prove the tests notice: the result of the run on this code is being filled in.
 - **Measured it on my charger**: supply, input reading, rail, stack, temperature sensor, the USB-C guard on a laptop port.
 - **Made the build checkable**: GitHub builds it only if every test passes, and publishes checksums and a signed build record.
 - Everything above, with numbers, is in [SAFETY.md](SAFETY.md).
 
 ### What is still risky
 - **The voltage accuracy of your unit.** Resistor tolerance and the chip's reference vary between units. Worst case without a check:
-  about plus or minus 3 %, up to **4.48 V on the 4.35 V setting**. Check a full cell with a multimeter before you trust it (SAFETY.md).
+  about plus or minus 3 %, up to **4.33 V on the 4.20 V setting and 4.48 V on 4.35 V**. Check a rested full cell with a multimeter
+  before you trust it (SAFETY.md). That is why **4.35 V is hidden until you allow it** in the menu: allow it only after that check.
+- **On the tested unit itself the 4.35 V accuracy is not confirmed yet**: a rested LiHV cell read 4.33 V on the charger, 4.40 V and
+  4.25 V on two drones. Until a multimeter settles it, I charge on 4.20 V.
 - **One unit tested.** Another hardware revision may behave differently.
 - **No cell temperature sensing.** The board measures its own temperature, not the cells'.
 - **The over-temperature stop is an estimate.** The sensor is not calibrated.
 - **Hardware faults** (a transistor that fails on, a damaged cell) are beyond what firmware can stop.
-- **No human expert review yet.**
+- **No human expert review yet.** Both review rounds were AI agents.
+- **What the firmware cannot see:** the cells' temperature, a transistor failing on, a cell damaged inside. Only you watching can.
 - The full list of assumptions and open items is in SAFETY.md.
 
 ### No responsibility
-This firmware is provided as is, without any warranty (see `LICENSE`). I have done my best and documented all of it, but I cannot
-take any responsibility for damage, fire, injury or loss arising from installing or using it. If you install it, you accept that
-risk. Supervise every charge, on a non-flammable surface, never unattended and never overnight. If you are not comfortable judging
-the information above, do not install it.
+This firmware is provided as is, without any warranty of any kind (see `LICENSE`), including fitness for any purpose. I have done
+my best and documented all of it, but I cannot take any responsibility for damage, fire, injury or loss of any kind arising from
+installing or using it, including to your charger, your cells, your property or anyone around them. If you install it, you accept
+that risk entirely. Charge in a LiPo bag or fireproof box, on a non-flammable surface, supervise every charge, never leave it
+unattended and never charge overnight. Do not charge swollen, damaged or punctured cells. If you are not comfortable judging the
+information above, do not install it. The installer asks you to confirm the main points before it writes anything.
 
 ### Help make it better
 If you know chargers, firmware or batteries: check it, test it, break it. Open an [issue](https://github.com/Pogaldock/ws3-unlocked/issues)
@@ -92,7 +105,7 @@ Everything not listed here is OpenWS3's, unchanged.
 - **Reactive charging screen**: a charging eye's gaze speeds up with the current; an empty port is static with a sleeping eye that
   opens now and then; when a cell goes in, finishes or faults, every eye looks toward that port; a cell that finishes or faults
   bursts into static first.
-- **Charging views** (B2 while charging): per cell the current, the mAh put in, the time to full (an estimate, shown with `~`) or the
+- **Cell views** (B2 on the main screen; it no longer changes the voltage, which is set in the menu only): per cell the current, the mAh put in, the time to full (an estimate, shown with `~`) or the
   cell's health (GOOD / TIRED / RETIRE from its measured resistance).
 - **Finale and run summary**: when every cell is full, the logo burns in through static with a fanfare, then a summary (packs, minutes,
   total mAh, the weakest cell).
@@ -159,14 +172,18 @@ Everything not listed here is OpenWS3's, unchanged.
   [`rot-latest`](https://github.com/Pogaldock/ws3-unlocked/releases/tag/rot-latest), the newest build, less tried),
   open it in Chrome or Edge, press Connect and follow the steps. A charger that runs the VIFLY firmware is put into its loader by
   holding the left button while plugging in USB-C; one that runs OpenWS3 or WS3 Unlocked restarts into it by itself.
-- **Going back:** the VIFLY firmware can be put back with VIFLY's own update package; OpenWS3 from its own releases.
+- **Going back:** OpenWS3 can be installed from its own releases, and an earlier WS3 Unlocked from this repository's releases (hold the
+  left button while plugging in USB-C, then install). **No way back to VIFLY's firmware has been tested**: treat installing as one-way.
+- **After installing 0.2-beta.2** every setting is back to its default (0.3 A, 4.20 V, 4.35 V not allowed): set yours again.
 - **First charges:** follow the checklist in SAFETY.md (a multimeter check of a full cell, diagnostics page 1).
 
 ### Check what you downloaded
-- `sha256sum -c SHA256SUMS` next to the downloaded files: they are the files GitHub built.
-- `gh attestation verify openws3.html -R Pogaldock/ws3-unlocked`: GitHub signed that this file was built by this repository's workflow, from
-  the commit named in the release.
-- The page itself shows the SHA-256 of the firmware it holds and refuses to install it if it does not match.
+- `sha256sum -c SHA256SUMS` next to the downloaded files: the download is not damaged. (It does not prove where the files came from:
+  anyone who changes a file can change the checksum too.)
+- `gh attestation verify openws3.html -R Pogaldock/ws3-unlocked --signer-workflow Pogaldock/ws3-unlocked/.github/workflows/rot-build.yml`:
+  the proof of origin. GitHub signed that this file was built by this repository's build workflow, from the commit named in the
+  release. It says where the file came from, not that the firmware is correct.
+- The page itself shows the SHA-256 of the firmware it holds and refuses to install it if it does not match (again: damage, not origin).
 - To be independent of GitHub's build: build it yourself (below) with SDCC 4.6.0 and compare `build/fw.bin`.
 
 ## Build and test
@@ -206,11 +223,12 @@ The menu has four categories; **OK** opens one and **BACK** returns to the list 
 
 | Category | Item | Setting |
 |---|---|---|
-| CHARGING | VOLTAGE | 4.20 V / 4.35 V / 3.80 V storage / 3.85 V storage (not while charging) |
+| CHARGING | VOLTAGE | 4.20 V / 4.35 V (only once ALLOW 4.35V is YES) / 3.80 V storage / 3.85 V storage (not while charging). The only place the target is set |
 | | CURRENT | charge current, 0.3 to 1.3 A in 0.1 A steps (not while charging) |
+| | ALLOW 4.35V | `NO` (default) or `YES`: whether the 4.35 V LiHV target can be chosen at all. Set `YES` only for LiHV cells, after checking your unit with a multimeter. Switching it back to `NO` takes a 4.35 V target back to 4.20 V (not while charging) |
 | LIMITS | MAX IN AMPS | limit on the estimated input current: off, 0.5 to 3.0 A in 0.1 A steps, then 0.5 A steps up to 10 A. The ports are limited smoothly |
 | | MIN IN VOLTS | minimum input voltage: off, 4.80 to 5.00 V in 0.05 V steps, to 6.0 V in 0.1 V steps, then 0.5 V steps up to 25 V |
-| | BELOW MIN | what happens when the input is below that minimum: `LIMIT` reduces the charge current smoothly until the input recovers; `STOP RUN` stops charging after a second and shows `V LIMIT` |
+| | BELOW MIN | what happens when the input is below that minimum: `LIMIT` reduces the charge current smoothly until the input recovers; `STOP RUN` stops charging after a second and shows `V LIM!` |
 | | REGULATION | how the limits share the budget over the ports: `EQUAL`, `CH1 FIRST`, `HIGH V FIRST` (below) |
 | PREFERENCES | SOUND | `ON`, `OFF`, or `HEARTBEAT` (a soft beat about every 4 s while charging) |
 | | DISABLE USB POWER | `YES` keeps the USB-C input switched off for good (the XT60 powers the unit, USB is data only); `NO` (default) switches it on at start when the board straps it so |

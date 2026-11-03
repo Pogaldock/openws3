@@ -530,7 +530,7 @@ static void s_store(void)
 {
     sim_attach(0, 4.30, 300);
     S.usb_host = 1;
-    cfg_load(); settings.volt = 1; cfg_save();
+    cfg_load(); settings.hv = 1; settings.volt = 1; cfg_save();   /* 4.35 V, allowed in the menu */
     boot(); start(); run_for(600);
     tap(1);                                                                    /* the summary: any key back */
     run_for(2 * 3600);
@@ -539,6 +539,86 @@ static void s_store(void)
     tap(2); run_for(3600);
     printf(", B2: target index %u, cell now %.3f V\n", settings.volt, sim_cell_v(0));
     CHECK(settings.volt == 3 && sim_cell_v(0) < 3.95);
+}
+
+/* a storage run gives the user's target back when it stops, and never saves the storage target */
+static void s_store_back(void)
+{
+    sim_attach(0, 4.30, 300);
+    S.usb_host = 1;
+    cfg_load(); settings.hv = 1; settings.volt = 1; cfg_save();
+    boot(); start(); run_for(600); tap(1);
+    run_for(2 * 3600); tap(2); run_for(600);                       /* storage accepted, running at 3.85 V */
+    printf("  storage run: target index %u", settings.volt);
+    CHECK(settings.volt == 3);
+    hold(1); run_for(5);                                           /* stopped */
+    printf(", after stop %u", settings.volt);
+    CHECK(settings.volt == 1);
+    cfg_load();
+    printf(", saved %u (1 = 4.35 V)\n", settings.volt);
+    CHECK(settings.volt == 1);
+}
+
+/* one full cell and one faulted one: no finale or summary over the red cell, no storage offer (whose restart would clear the fault) */
+static void s_fault_full(void)
+{
+    int k, seen = 0;
+    sim_attach(0, 4.10, 300); sim_attach(1, 2.30, 300);
+    S.usb_host = 1;
+    boot(); start();
+    for (k = 0; k < 2 * 3600 + 1200; k += 5) { run_for(5); if ((usb_tx[12] >> 4) == SCR_SUMMARY) seen = 1; }
+    printf("  a full cell and a faulted one, 2.3 h: ports %u %u (4 full, 6 fault), summary or storage offer ever shown: %s\n",
+           stats_in.state[0], stats_in.state[1], seen ? "YES" : "no");
+    CHECK(stats_in.state[1] == 6 && !seen);
+}
+
+/* a cell that sags a little after full and is topped up: the finale once, then the storage offer after 2 h (not a finale per top-up) */
+static void s_sag_finale(void)
+{
+    int k, shown = 0, was = 0;
+    sim_attach(0, 4.10, 300);
+    S.cell[0].leak = 0.004;                                        /* 4 mA inside: a top-up now and then */
+    S.usb_host = 1;
+    boot(); start();
+    for (k = 0; k < 3 * 3600; k += 5) {
+        int now;
+        run_for(5);
+        now = (usb_tx[12] >> 4) == SCR_SUMMARY;
+        if (now && !was) { shown++; tap(1); }                      /* each time it opens: count it, close it (B1: keep them full) */
+        was = (usb_tx[12] >> 4) == SCR_SUMMARY;
+    }
+    printf("  a cell that sags after full (4 mA leak), 3 h: the summary screen opened %d times (the finale, then the storage offer: 2)\n", shown);
+    CHECK(shown == 2);
+}
+
+/* a cell over 4.4 V at a low chip supply: the reading is at the top of the ADC's range; it must count as over-voltage */
+static void s_saturated(void)
+{
+    sim_attach(0, 4.46, 300);
+    S.vcc = 4.42;                                                  /* the port's full scale about 4.37 V: the cell reads at the top */
+    S.usb_host = 1;
+    boot(); start(); run_for(20);
+    printf("  4.46 V cell, VCC 4.42 V (port full scale about 4.37 V): port state %u (6 = fault), PWM %u, bleed %u\n",
+           stats_in.state[0], S.pwm[0], S.sw[0]);
+    CHECK(stats_in.state[0] == 6 && !S.pwm[0] && !S.sw[0]);
+}
+
+/* the voltage being edited in the menu when a host starts the run: the start is refused, the target cannot change mid-run */
+static void s_menu_edit_start(void)
+{
+    static const uint8_t go[] = { 2, 0, 5 };
+    sim_attach(0, 3.9, 120);
+    S.usb_host = 1;
+    boot();
+    both(0.12); both(0.12);                                        /* the menu, CHARGING */
+    both(0.12); tap(2);                                            /* editing VOLTAGE: 3.80 V (4.35 V is skipped) */
+    usb(go, 3); run_for(1);
+    printf("  host start while VOLTAGE is being edited: result %u (1 = refused), charging: %s", usb_tx[17], S.pwm[0] ? "YES" : "no");
+    CHECK(usb_tx[17] == 1 && !S.pwm[0]);
+    both(0.12); both(1.0); both(1.0); run_for(1);                  /* OK (the edit confirmed), back, back (menu closed, saved) */
+    usb(go, 3); run_for(5);
+    printf("; after closing the menu: result %u, port active %s at target index %u\n", usb_tx[17], S.pwm[0] || S.sw[0] ? "yes" : "NO", settings.volt);
+    CHECK(usb_tx[17] == 0 && S.global && (S.pwm[0] || S.sw[0]) && settings.volt == 2);   /* running at 3.80 V: the 3.9 V cell bleeds */
 }
 
 typedef struct { const char *name; void (*fn)(void); } scen_t;
@@ -551,7 +631,8 @@ static const scen_t SC[] = {
     { "menu_lock", s_menu_lock }, { "rail_pause", s_rail_pause }, { "vcc_fatal", s_vcc_fatal }, { "selftest_fail", s_selftest_fail },
     { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
     { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot }, { "no_dev", s_no_dev },
-    { "stats", s_stats }, { "store", s_store },
+    { "stats", s_stats }, { "store", s_store }, { "store_back", s_store_back }, { "fault_full", s_fault_full },
+    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start },
     { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
     { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
    

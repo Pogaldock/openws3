@@ -49,6 +49,8 @@ jobs:
 
   publish:
     needs: test
+    # only the main branch or a version tag publishes: a run on another branch (by hand) tests and builds, nothing more
+    if: github.ref == 'refs/heads/rot-theme' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions: { contents: write, id-token: write, attestations: write }
     steps:
@@ -69,12 +71,15 @@ jobs:
           press Connect, follow the install steps. Unofficial firmware that replaces VIFLY's: read SAFETY.md, supervise charging."
           ver="$INPUT_VERSION"; [ "$GITHUB_REF_TYPE" = tag ] && ver="$GITHUB_REF_NAME"
           if [ -n "$ver" ]; then                         # a version: its own release, kept; a "-beta" or "-rc" version is a pre-release
-            case "$ver" in v[0-9]*) ;; *) echo "not a version: $ver"; exit 1 ;; esac
+            num() { sed -n "s/^#define $1 *\([0-9]*\).*/\1/p" src/version.h; }
+            want="v$(num FW_MAJOR).$(num FW_MINOR).0"; [ "$(num FW_PRE)" != 0 ] && want="$want-beta.$(num FW_PRE)"
+            if [ "$ver" != "$want" ]; then echo "error: version $ver, but src/version.h says $want (what the charger reports)"; exit 1; fi
+            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$ver" >/dev/null 2>&1; then echo "error: release $ver exists already; it is never replaced"; exit 1; fi
             pre=""; case "$ver" in *-*) pre=--prerelease ;; esac
-            gh release create "$ver" out/fw.bin out/openws3.html out/SHA256SUMS --target "$GITHUB_SHA" $pre \
+            gh release create "$ver" out/fw.bin out/openws3.html out/SHA256SUMS LICENSE --target "$GITHUB_SHA" $pre \
               --title "WS3 Unlocked $ver" --notes-file RELEASE_NOTES.md
             exit 0
           fi
           gh release delete rot-latest --yes --cleanup-tag || true
-          gh release create rot-latest out/fw.bin out/openws3.html out/SHA256SUMS --target "$GITHUB_SHA" --prerelease \
+          gh release create rot-latest out/fw.bin out/openws3.html out/SHA256SUMS LICENSE --target "$GITHUB_SHA" --prerelease \
             --title "WS3 Unlocked, latest build ($short)" --notes "$notes"

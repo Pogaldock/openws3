@@ -13,7 +13,11 @@ fw, page, out = sys.argv[1:4]
 # the id the firmware reports over USB: src/version.h (release) and build/version_build.h (commit, tree had changes)
 num = lambda path, name: int(re.search(r'#define %s\s+(\w+)' % name, open(path).read()).group(1).rstrip('UL'), 0)
 build_h = os.path.join(os.path.dirname(fw), 'version_build.h')
-image = open(fw, 'rb').read().rstrip(b'\xff')      # the flash padding is not part of the image
+CODE_LIMIT = 0xF400                                 # the chip's settings area starts here (Makefile CODE_LIMIT): nothing may be written there
+whole = open(fw, 'rb').read()
+if any(b != 0xFF for b in whole[CODE_LIMIT:]):
+    sys.exit('error: %s has data at or above 0x%04X, in the chip\'s settings area: not bundled' % (fw, CODE_LIMIT))
+image = whole.rstrip(b'\xff')                      # the flash padding is not part of the image
 meta = dict(major=num('src/version.h', 'FW_MAJOR'), minor=num('src/version.h', 'FW_MINOR'), pre=num('src/version.h', 'FW_PRE'), build=num(build_h, 'FW_BUILD'),
             dirty=num(build_h, 'FW_DIRTY'), built=datetime.date.today().isoformat(), size=len(image), sha256=hashlib.sha256(image).hexdigest())
 html = open(page).read()

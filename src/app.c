@@ -59,6 +59,12 @@ static tele_ctx_t XD tctx;                    /* what the telemetry reads (tele.
 #define STORE_ASKS      3                     /* ... this many times at most */
 #define FINALE_PASSES   12                    /* ROT: a frame of the end-of-run animation every this many passes (ui.h) */
 static uint8_t  XD view, done, store_asks, sum_mode, sum_frame, sum_div;   /* sum_mode: 0 run summary, 1 storage offer */
+static uint8_t  XD fin_packs;                 /* stats.packs when the finale played: a new cell gets its own, a top-up does not */
+static uint8_t  XD store_on, store_prev;      /* a storage run: the target it replaced, put back when the run stops (never saved) */
+static uint8_t  XD view_lbl_on;               /* the view's name is in the input box (until view_lo) */
+static uint16_t XD pass_prev, pass_d;          /* the tick count at the last pass start; ticks since */
+static uint8_t  XD pass_acc;                   /* ticks not yet counted as whole passes */
+#define LATE_MAX        30                     /* a pass longer than this many passes (135 ms) is counted as this: no runaway after a stall */
 static uint32_t XD now_ms;                    /* hal_ms() once a pass */
 static uint16_t XD last_lo, view_lo;          /* its low 16 bits: the previous pass; when the view's name goes */
 static uint16_t XD now_s, run_s, done_s, ask_s, el_s;    /* "seconds" of 1.024 s (hal_ms >> 10): 16 bits, plain compares */
@@ -97,6 +103,7 @@ static void soft_stop(void)
 static void stop_run(uint8_t why)
 {
     run = 0; stop_reason = why;
+    if (store_on) { settings.volt = store_prev; store_on = 0; }   /* the storage run is over: the user's own target again */
     tele_event(EV_STOPPED, why);
     chg_abort();
     soft_stop();
@@ -215,7 +222,7 @@ void app_boot(void)
     ui_main_init();
     adc_prime();
     bg_ref = adc_get(ADC_BANDGAP); lcd_cnt = 0; bg_quiet = 0;
-    t_next = hal_ticks();
+    t_next = hal_ticks(); pass_prev = (uint16_t)t_next;
     run = 0; stop_reason = 0; alarm_ui = 0; screen = 0;
     fatal_code = cond = msg_code = 0; test_ok = test_tries = 0; test_at = 0;
     lim_reset();
@@ -225,13 +232,23 @@ void app_boot(void)
 
 /* ------------------------------------------------------------------------------------------------------------- */
 /* main-screen changes: written once, a while after the last tap or when charging starts */
-static void save_main(void) { save_at = 0; cfg_save(); }
+/* save the settings; during a storage run, with the target it replaced (a storage target is never kept across a power cycle) */
+static void save_cfg(void)
+{
+    static uint8_t XD v;
+    v = settings.volt;
+    if (store_on) settings.volt = store_prev;
+    cfg_save();
+    settings.volt = v;
+}
+static void save_main(void) { save_at = 0; save_cfg(); }
 static void save_later(void) { save_at = hal_ms() + SAVE_DELAY_MS; if (!save_at) save_at = 1; }
 
 static uint8_t start_run(void)
 {
     if (save_at) save_main();
     if (run || sout.stop != STOP_NONE || fatal_code || !test_ok) return 0;
+    if (screen == SCR_MENU && menu_editing()) return 0;   /* an edit open: finish it first (the voltage must not change mid-run) */
     run = 1; stop_reason = 0; chg_init(); lim_reset();
     stats_start(); done = 0; store_asks = 0; run_s = now_s;
     return 1;
@@ -258,7 +275,7 @@ static void usb_service(void)
         settings.cur = c[1]; save_later();         /* written once the host stops changing it: flash wear */
         break;
     case 4:                                                                            /* set the target voltage, not while running */
-        if (run || c[1] >= NVOLTS) { res = 1; break; }
+        if (run || c[1] >= NVOLTS || (c[1] == VOLT_4_35 && !settings.hv)) { res = 1; break; }   /* 4.35 V only once allowed */
         settings.volt = c[1]; save_later();
         break;
     case 5: break;                                                                     /* ping */
@@ -281,7 +298,7 @@ static void menu_enter(void)
 /* close: the values were applied live, now they are saved (the page is written only when something changed) */
 static void menu_leave(void)
 {
-    cfg_save();
+    save_cfg();
     screen = 0;
     ui_main_init();
 }
@@ -301,12 +318,12 @@ static void menu_key(uint8_t ev)  { mode_result(menu_event(ev), diag_open, menu_
 
 /* the port settings mode on the main screen: drawn over it, saved when it closes */
 static void ports_enter(void) { portset_open(run); screen = SCR_PORTS; ui_main_init(); }
-static void ports_leave(void) { cfg_save(); screen = 0; ui_main_init(); }
+static void ports_leave(void) { save_cfg(); screen = 0; ui_main_init(); }
 
 static void ports_key(uint8_t ev) { mode_result(portset_event(ev), 0, ports_leave); }
 
 /* the end of a run (every cell full): its summary, or the offer to take the cells down to the storage voltage */
-static char XD sum_l2[22], sum_big[8], sum_small[24];
+static char XD sum_l2[22], sum_big[10], sum_small[24];
 static void summary_text(void)
 {
     static uint8_t XD n;
@@ -327,7 +344,7 @@ static void summary_part(uint8_t part)
     if (!part) {
         ui_msg_later = 1;
         if (sum_mode) ui_message(R_WARN, "STORE THEM?", "FULL FOR 2 HOURS", settings.volt == VOLT_4_35 ? "3.85V" : "3.80V", "B2 STORAGE   B1 KEEP");
-        else ui_message(R_GOOD, "ALL FULL", sum_l2, sum_big, sum_small);
+        else ui_message(R_GOOD, store_on ? "ALL STORED" : "ALL FULL", sum_l2, sum_big, sum_small);
         ui_msg_later = 0;
     }
     ui_message_part(part);
@@ -346,9 +363,9 @@ static void summary_key(uint8_t ev)
 {
     if (sum_mode && ev == EV_B2) {                   /* storage: the same run again at the storage voltage (bleed or charge to it) */
         if (run) stop_run(STOP_USER);
+        store_prev = settings.volt;
         settings.volt = settings.volt == VOLT_4_35 ? VOLT_3_85 : VOLT_3_80;
-        save_later();
-        start_run();
+        if (start_run()) store_on = 1; else settings.volt = store_prev;
         store_asks = STORE_ASKS;
     } else if (sum_mode) store_asks = STORE_ASKS;    /* keep them full: not asked again in this run */
     buzz_play(PAT_KEY);
@@ -387,16 +404,11 @@ static void handle_buttons(void)
             break;
         case EV_OK: menu_enter(); buzz_play(PAT_KEY); break;
         case EV_B2_LONG: ports_enter(); buzz_play(PAT_KEY); break;
-        case EV_B2:
-            if (run) {                                   /* charging: what the cells show (current, mAh, time to full, health) */
-                view = (uint8_t)((view + 1) & 3);
-                view_lo = (uint16_t)now_ms; view_lo += VIEW_LABEL_MS;
-                buzz_play(PAT_KEY);
-            } else {                                     /* no voltage change while charging */
-                settings.volt = (uint8_t)((settings.volt + 1) % NVOLTS);
-                buzz_play(PAT_KEY);
-                save_later();
-            }
+        case EV_B2:                                  /* what the cells show (current, mAh, time to full, health).  Not the voltage: that is
+                                                        in the menu, so a tap meant for the views can never change the target */
+            view = (uint8_t)((view + 1) & 3);
+            view_lo = (uint16_t)now_ms; view_lo += VIEW_LABEL_MS; view_lbl_on = 1;
+            buzz_play(PAT_KEY);
             break;
         }
     }
@@ -426,22 +438,26 @@ static void fatal_pass(void)
    One plain step per statement with external-RAM values: the direct RAM is full. */
 static void end_of_run(void)
 {
-    static uint8_t XD k, busy_ports, full;
+    static uint8_t XD k, busy_ports, full, fault;
     static uint16_t XD dt;
     memcpy(&stats_in, &cout, sizeof cout);
     dt = (uint16_t)now_ms; dt -= last_lo; last_lo = (uint16_t)now_ms;
     stats_pass(cin.tgt, settings.volt, dt);
     if (!run) return;
-    busy_ports = 0; full = 0;
+    busy_ports = 0; full = 0; fault = 0;
     for (k = 0; k < NPORTS; k++) {
         if (cout.state[k] == PS_FULL) full++;
         else if (cout.state[k] == PS_CHARGE) busy_ports |= 0x80;
+        else if (cout.state[k] == PS_FAULT) fault++;
         if (cout.state[k] != PS_IDLE && cout.state[k] != PS_FAULT && cout.state[k] != PS_FULL) busy_ports++;
     }
     if (settings.sound == 2 && (busy_ports & 0x80) && !buzz_busy() && (now_ms & 0xFFF) < 8) buzz_play(PAT_HEART);   /* about every 4 s */
-    if (!full || (busy_ports & 0x7F)) { done = 0; return; }
+    /* a port in fault: no finale, no summary over its red cell, no storage offer (a storage restart would clear the fault) */
+    if (fault) { if (screen == SCR_SUMMARY) summary_close(); return; }
+    if (done && stats.packs != fin_packs) done = 0;  /* a new cell went in: when all are full again, a finale of their own */
+    if (!full || (busy_ports & 0x7F)) return;        /* a top-up of a cell that sagged keeps `done`: no replay, the 2 h go on */
     if (!done) {                                     /* every cell is full: the finale and the summary */
-        done = 1; done_s = now_s; ask_s = now_s;
+        done = 1; fin_packs = stats.packs; done_s = now_s; ask_s = now_s;
         buzz_play(PAT_FINALE);
         if (!screen && !cond) summary_open(0);
         return;
@@ -462,8 +478,15 @@ void app_pass(void)
 
     while ((int32_t)(hal_ticks() - t_next) < 0) ;
     hal_wdt_feed();                                  /* every pass: a firmware that stops passing is reset within 2.5 s (hal.h) */
-    t_next += PASS_TICKS;
-    if ((int32_t)(hal_ticks() - t_next) > 4 * PASS_TICKS) t_next = hal_ticks();       /* fell behind: do not burst */
+    /* the passes a long one lost (a full repaint, a settings write): the charge time limits count them (chg.h `late`), so they run on
+       real time even when the screen is slow.  Whole passes of 9 ticks, the remainder kept for the next; the schedule starts again
+       from now, so no burst of quick passes follows to count the same time twice */
+    pass_d = (uint16_t)hal_ticks(); pass_d -= pass_prev; pass_prev += pass_d;
+    pass_d += pass_acc; cin.late = 0;
+    while (pass_d >= 2 * PASS_TICKS && cin.late < LATE_MAX) { pass_d -= PASS_TICKS; cin.late++; }
+    pass_acc = pass_d >= PASS_TICKS ? (uint8_t)(pass_d - PASS_TICKS) : 0;
+    if (cin.late) t_next = hal_ticks() + PASS_TICKS;  /* the lost time is counted: the next pass is a normal pass from now, no catch-up */
+    else t_next += PASS_TICKS;
 
     adc_scan();
     now_ms = hal_ms(); now_s = S_OF(now_ms);
@@ -506,7 +529,6 @@ void app_pass(void)
         } else if (++lcd_cnt == LCD_RECONFIG_PASSES - 2) {
             lcd_wake();                              /* the settings follow two passes (9 ms) later: no busy wait */
         } else if (lcd_cnt >= LCD_RECONFIG_PASSES) {
-        if (settings.usb_off) hal_profile(0);        /* DISABLE USB POWER takes effect at once; turning it off again waits for the next start */
             lcd_cnt = 0;
             lcd_reconfig();
         }
@@ -534,7 +556,12 @@ void app_pass(void)
     cin.lim = lim_out.on; cin.rise = lim_out.rise; cin.cut = lim_out.cut; cin.excess = lim_out.excess;
 
     /* ---- charge control ---- */
-    for (k = 0; k < NPORTS; k++) { cin.v_now[k] = adc_now(port_v_ch(k)); cin.i_now[k] = adc_now(port_i_ch(k)); }
+    for (k = 0; k < NPORTS; k++) {
+        cin.v_now[k] = adc_now(port_v_ch(k)); cin.i_now[k] = adc_now(port_i_ch(k));
+        /* a port reading at the top of the ADC's range: the cell is beyond what can be measured (at a low VCC that is close to 4.4 V).
+           It counts as far over the target, so the over-voltage faults fire instead of seeing a capped value */
+        if (adc_saturated(port_v_ch(k))) cin.v_now[k] = V_SATURATED;
+    }
     cin.rail = adc_get(ADC_RAIL);
     cin.tgt = sup_target(settings.volt); cin.setpoint = sup_setpoint(settings.volt); cin.run = run;
     for (k = 0; k < NPORTS; k++) { cin.iset[k] = ch_iset(k); cin.en[k] = !(settings.ch_off & (1u << k)); }
@@ -560,8 +587,9 @@ void app_pass(void)
     ui.blink = (uint8_t)((hal_ms() >> 9) & 1);
     ui.tphase = (uint8_t)(((hal_ms() >> 10) & 3) == 3);
     ui.usb_off = settings.usb_off;
-    ui.view = run ? view : 0;
-    el_s = view_lo; el_s -= (uint16_t)now_ms; ui.view_lbl = run && el_s <= VIEW_LABEL_MS;
+    ui.view = view;
+    if (view_lbl_on) { el_s = view_lo; el_s -= (uint16_t)now_ms; if (el_s > VIEW_LABEL_MS) view_lbl_on = 0; }   /* once, not every 65 s */
+    ui.view_lbl = view_lbl_on;
     ui.ps = screen != SCR_PORTS ? 0 : portset_editing() ? 2 : 1; ui.sel = portset_port(); ui.locked = portset_locked(); ui.mixed = 0;
     for (k = 0; k < NPORTS; k++) {
         ui.state[k] = cout.state[k]; ui.v[k] = cout.v[k]; ui.i[k] = cout.i[k]; ui.parked[k] = (uint8_t)(cout.held[k] == 2);
@@ -604,7 +632,6 @@ void app_pass(void)
     } else {
         if (msg_code) { msg_code = 0; ui_main_init(); }              /* the condition is over: the main screen again */
         ui_main_step(&ui);                               /* one element per pass: at the bus rate a big one takes ~5 ms */
-    ui.usb_off = settings.usb_off;
     }
 
     tele_pass(PH_RUN);

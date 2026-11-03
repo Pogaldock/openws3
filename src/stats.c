@@ -24,7 +24,7 @@ static const CODE uint16_t OCV[2][11] = {
 typedef struct {
     uint16_t acc;                     /* charge not yet counted as a whole mAh, 4 iu.ms */
     uint16_t v0, soc0;                /* resting voltage before the fill (mV) and its state of charge (per mille, 0 = not started) */
-    uint16_t rt;                      /* resistance: passes in the current phase */
+    uint16_t rt, tt;                  /* resistance: passes the current has been stable; passes spent trying (R_GIVE_UP) */
     uint16_t sec_ms, secs;            /* ms into the current second; seconds since the fill started */
     uint8_t  prev, ron, full;
 } pst_t;
@@ -99,7 +99,7 @@ void stats_pass(uint16_t tgt, uint8_t volt, uint16_t dt_ms)
         if (st == PS_PROBE) w.v0 = cal_port_mv(v);                          /* the output is off: the cell's resting voltage */
         if (w.prev == PS_PROBE && st == PS_CHARGE && !w.soc0) {             /* the first charge of the fill, from rest */
             w.soc0 = stats_soc(w.v0, lihv); if (!w.soc0) w.soc0 = 1;
-            w.ron = !r; w.rt = 0; w.secs = 0;
+            w.ron = !r; w.rt = 0; w.tt = 0; w.secs = 0;
         }
         if (st == PS_CHARGE) {
             u = i > 255 ? 255 : i; u *= s_dt; w.acc += (u + 2u) / 4u;      /* charge put in, rounded to the nearest unit */
@@ -109,13 +109,13 @@ void stats_pass(uint16_t tgt, uint8_t volt, uint16_t dt_ms)
                 if (i >= R_MIN_I && mv >= ma && !held) {
                     if (++w.rt >= R_STABLE) {
                         mv = cal_port_mv(v); ma = cal_port_ma(i) / 10u;
-                        r = 1;
+                        r = 0;                /* no rise under load: no reading (not "1 mOhm, GOOD") */
                         if (mv > w.v0) { mv -= w.v0; if (mv > 655) mv = 655; r = mv * 100u / ma; }    /* mV x 1000 / mA */
                         if (r > 999) r = 999;
                         w.ron = 0;
                     }
-                } else if (++w.rt >= R_GIVE_UP) w.ron = 0;
-                else if (w.rt < R_STABLE) w.rt = 0;
+                } else w.rt = 0;              /* not stable: the second starts again */
+                if (w.ron && ++w.tt >= R_GIVE_UP) w.ron = 0;    /* no stable second in 60 s (a limited supply): no reading this fill */
             }
             w.sec_ms += s_dt;
             if (w.sec_ms >= 1000) { w.sec_ms -= 1000; if (w.secs < 0xFFFF) w.secs++; estimate(s_tgt); }

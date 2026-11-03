@@ -161,8 +161,10 @@ progress { width: 100%; height: 10px; margin-top: 10px; accent-color: var(--acce
       read <a href="https://github.com/Pogaldock/ws3-unlocked/blob/rot-theme/SAFETY.md" target="_blank" rel="noopener">what was tested and what was not</a> first.</p>
     <ul>
       <li><b>Supervise the charger</b> the whole time it charges. Never leave it charging unattended or overnight.</li>
-      <li>Charge only cells in good condition, and pick the target voltage for the cell: 4.35 V is for high-voltage (HV) cells only.</li>
+      <li>Charge only cells in good condition, and pick the target voltage for the cell. 4.35 V is for high-voltage (HV) cells only, and is
+        hidden until you switch it on in the menu (CHARGING, ALLOW 4.35V): do that only after the multimeter check below.</li>
       <li>Check a full cell with a multimeter after your first charges: rested 5 minutes it should read the target (4.17 to 4.23 V for 4.20 V, 4.32 to 4.38 V for 4.35 V).</li>
+      <li><b>Going back to VIFLY's firmware may not be possible</b>: no restore package has been tested. Only this page and OpenWS3 are known to install on it.</li>
       <li>It is made for the <b>WhoopStor V3</b> charger only. See the <a href="https://github.com/Pogaldock/ws3-unlocked/blob/rot-theme/GUIDE.md" target="_blank" rel="noopener">user guide</a> for how to use it.</li>
     </ul>
   </section>
@@ -273,6 +275,17 @@ sudo udevadm control --reload-rules</pre>
   <section class="card fwcard" id="fwcard">
     <h2>Firmware</h2>
     <div class="kv wide" id="fwKv"></div>
+    <div class="check" id="ack">
+      <p><b>Before installing, tick each of these.</b> Installing stays off until all are ticked.</p>
+      <label><input type="checkbox"> This charger is a VIFLY <b>WhoopStor V3</b>.</label><br>
+      <label><input type="checkbox"> I will <b>supervise every charge</b>, on a non-flammable surface, never unattended or overnight.</label><br>
+      <label><input type="checkbox"> I will check a rested full cell with a <b>multimeter</b> (or a cell checker I trust) before relying on the
+        voltages, and keep the 4.35 V setting off until it reads right.</label><br>
+      <label><input type="checkbox"> I understand this is <b>unofficial firmware, written largely with an AI assistant and tested on one charger</b>,
+        and that going back to VIFLY's firmware may not be possible.</label><br>
+      <label><input type="checkbox"> I install it <b>at my own risk</b>: there is no warranty, and its author takes no responsibility for damage,
+        fire or injury.</label>
+    </div>
     <div class="actions" style="margin-top:10px">
       <button id="bFlash" class="primary" disabled>Install firmware</button>
       <button id="bCheck" disabled>Check the unit</button>
@@ -543,11 +556,14 @@ function chipRows() {                                // the status packet the lo
   return [
     ['Chip', 'boot loader ' + (chip[16] >> 4) + '.' + (chip[16] & 15) + '.' + (chip[21] & 15) + String.fromCharCode(chip[17]),
       'clock ' + (u32(0) / 1e6).toFixed(2) + ' MHz, bandgap ' + u16(34) + ' mV, made 20' + two(bcd(chip[36])) + '-' + two(bcd(chip[37])) + '-' + two(bcd(chip[38]))],
-    ['Settings area', size >= 512 ? (size / 1024).toFixed(1) + ' KB' : 'none',
-      size >= 512 ? 'the charger keeps its settings here' : 'nothing can be stored: flash it once with an EEPROM size of 1K',
-      size >= 512 ? 'OK' : 'No storage', size >= 512 ? 'ok' : 'upd']
+    ['Settings area', size ? (size / 1024).toFixed(1) + ' KB' : 'none',
+      size >= EE_MIN ? 'the charger keeps its settings here' : 'too small for the settings (they sit at offset 2 KB): set an EEPROM size of 3K in STC-ISP and flash once',
+      size >= EE_MIN ? 'OK' : 'Too small', size >= EE_MIN ? 'ok' : 'upd']
   ];
 }
+const CODE_LIMIT = 0xF400;                           // the firmware must end below this, whatever the chip reports (Makefile CODE_LIMIT)
+const TESTED_EE_BASE = 0xF400;                       // where the tested unit's settings area starts (3 KB): another value asks first
+const EE_MIN = 0x0A00;                               // the firmware keeps its settings at offset 0x0800 of that area: it needs 2.5 KB at least
 async function ispWrite(image, progress) {          // erase and program the whole image; the loader then starts the application
   const blocks = [];
   for (let i = 0; i < image.length; i += 128) { const b = new Uint8Array(128).fill(255); b.set(image.subarray(i, i + 128)); blocks.push(b); }
@@ -560,7 +576,11 @@ async function ispWrite(image, progress) {          // erase and program the who
   }
   if (!ok) throw new Error('the loader does not answer');
   const eeBase = chip && chip.length > 15 ? chip[15] * 256 : 0;   // where the settings area starts (0: none)
+  if (blocks.length * 128 > CODE_LIMIT) throw new Error('the image (' + blocks.length * 128 + ' bytes) is larger than the firmware area (' + CODE_LIMIT + ' bytes): not written');
   if (eeBase && blocks.length * 128 > eeBase) throw new Error('the image (' + blocks.length * 128 + ' bytes) would reach the settings area at ' + eeBase + ': not written');
+  if (eeBase !== TESTED_EE_BASE && !confirm('This unit does not look like the one WS3 Unlocked was tested on: its settings area ' +
+      (eeBase ? 'starts at ' + eeBase + ' (' + ((0x10000 - eeBase) / 1024).toFixed(1) + ' KB)' : 'is missing') + ', the tested unit\'s starts at ' + TESTED_EE_BASE +
+      ' (3.0 KB). It may be another hardware revision or another board.\nInstall anyway?')) throw new Error('stopped: the unit differs from the tested one');
   await ispCmd(0x01, [0, 0, 0, 0, 0, 0, 0x80]);
   await ispCmd(0x05, [0, 0, 0x5a, 0xa5]);
   await ispCmd(0x03, [0, 0, 0x5a, 0xa5]);
@@ -651,8 +671,10 @@ $('bCheck').onclick = async () => {                  // read the chip's identity
   } catch (e) { fwStatus('Check failed: ' + e.message + '.', true); }
   busy = false; fwShow();
 };
+const ackOk = () => [...document.querySelectorAll('#ack input')].every(c => c.checked);
 $('bFlash').onclick = async () => {
   if (busy || !fw) return;
+  if (!ackOk()) { fwStatus('Tick the five boxes above the button first.', true); $('ack').scrollIntoView({ block: 'center' }); return; }
   let hash = '';
   try { hash = await sha256hex(fw.data); } catch (e) { fwStatus('Could not compute the SHA-256 of the image: open the page in Chrome or Edge.', true); return; }
   if (BUNDLED && fw.name === 'WS3 Unlocked ' + bundledText() && hash !== BUNDLED.sha256) { fwStatus('The image does not match its SHA-256: not written.', true); return; }

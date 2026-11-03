@@ -231,9 +231,14 @@ static void t_cfg(void)
     CHECK(cfg_valid_buzzer(0) == 0); CHECK(cfg_valid_buzzer(1) == 1);
     CHECK(cfg_valid_usb_off(1) == 1 && cfg_valid_usb_off(0) == 0 && cfg_valid_usb_off(0xFF) == 0);
     memset(&settings, 0xFF, sizeof settings); cfg_validate();                     /* erased page: the defaults */
-    CHECK(settings.cur == 21 && settings.volt == 0 && settings.sound == 1 && settings.theme == TH_ROT);
+    CHECK(settings.cur == 21 && settings.volt == 0 && settings.sound == 1 && settings.hv == 0);
     CHECK(settings.ilim == 0 && settings.vmin == 98 && settings.vcut == 0 && settings.lmode == LM_BY_CH);
     CHECK(settings.ch_cur[0] == 0 && settings.ch_cur[NPORTS - 1] == 0 && settings.ch_off == 0 && settings.usb_off == 0);
+    /* 4.35 V only once it is allowed: a stored 4.35 V target without the permission loads as 4.20 V; any value but 1 is "not allowed" */
+    CHECK(cfg_valid_hv(1) == 1 && cfg_valid_hv(0) == 0 && cfg_valid_hv(0xFF) == 0 && cfg_valid_hv(4) == 0);
+    settings.volt = VOLT_4_35; settings.hv = 0; cfg_validate(); CHECK(settings.volt == VOLT_4_20);
+    settings.volt = VOLT_4_35; settings.hv = 1; cfg_validate(); CHECK(settings.volt == VOLT_4_35);
+    settings.volt = VOLT_3_80; settings.hv = 0; cfg_validate(); CHECK(settings.volt == VOLT_3_80);
 }
 
 /* run the melody engine for `ms` ticks (0.5 ms): ticks with a note sounding, note changes, ticks busy */
@@ -332,6 +337,17 @@ static void t_stats(void)
     CHECK(stats.eta_s[0] == 0 && stats.packs == 1 && stats.weak == 0 && stats.total_mah == stats.mah[0]);
     st_feed(PS_IDLE, 0, 0, 2); st_feed(PS_PROBE, 3700, 0, 2);           /* a new cell: its own numbers */
     CHECK(stats.mah[0] == 0 && stats.r_mohm[0] == 0);
+    /* a port held below its working current (a limited supply): no resistance reading, but after 60 s it gives up waiting for one
+       and the time to full comes from the default resistance instead of staying blank all charge */
+    st_feed(PS_CHARGE, 3740, 30, 13000);                                /* 0.44 A of 0.6 A: never 90 % of it */
+    CHECK(stats.r_mohm[0] == 0);
+    st_feed(PS_CHARGE, 3740, 30, 1000);                                 /* past 60 s */
+    st_feed(PS_CHARGE, 4000, 30, 4000);
+    CHECK(stats.r_mohm[0] == 0 && stats.eta_s[0] != ETA_UNKNOWN);
+    /* the voltage under load not above the resting one: no reading (not "1 mOhm, GOOD") */
+    st_feed(PS_IDLE, 0, 0, 2); st_feed(PS_PROBE, 3800, 0, 4);
+    st_feed(PS_CHARGE, 3790, 41, 300);
+    CHECK(stats.r_mohm[0] == 0 && stats_grade(stats.r_mohm[0]) == RG_NONE);
 }
 
 static void t_dbg(void)
@@ -389,7 +405,7 @@ static void t_theme(void)
     for (k = 0; k < 6; k++) CHECK(th(R_BADGE0 + k) != th(R_BG));
     CHECK(th(R_FULLTX) != th(R_FULL) && th(R_FULL) != th(R_BOX) && th(R_FULL) != th(R_BG));     /* a full cell stands out, its text reads */
     CHECK(th(R_DOT0) != th(R_BOX) && th(R_DOT0 + PS_FAULT) == th(R_BAD));                    /* a shut eye shows; a fault is red */
-    CHECK(th_get() == TH_ROT && cfg_valid_theme(0) == TH_ROT && cfg_valid_theme(0xFF) == TH_ROT);
+    CHECK(th_get() == TH_ROT);
 }
 
 /* VCC correction: a 4.20 V cell must read 4.20 V whatever VCC is, within the counts' rounding */

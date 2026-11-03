@@ -31,6 +31,7 @@ typedef struct {
     chg_out_t out;
     double amps[NPORTS];
     int ovr_v[NPORTS], ovr_i[NPORTS];      /* >0: force the sense reading (fault injection) */
+    int i_off[NPORTS];                     /* the current sense input's offset: added to every current reading, output off too */
 } bench_t;
 
 static void bench_init(bench_t *b, int volt, int iset)
@@ -59,7 +60,7 @@ static void step(bench_t *b)
     int p;
     for (p = 0; p < NPORTS; p++) {
         double a = 0, v;
-        if (!b->present[p]) { b->in.v_now[p] = 0; b->in.i_now[p] = 0; if (b->ovr_v[p]) b->in.v_now[p] = (uint16_t)b->ovr_v[p]; continue; }
+        if (!b->present[p]) { b->in.v_now[p] = 0; b->in.i_now[p] = (uint16_t)b->i_off[p]; if (b->ovr_v[p]) b->in.v_now[p] = (uint16_t)b->ovr_v[p]; continue; }
         if (b->out.sw[p]) a = -0.15;                         /* bleed load */
         else {
             double want = b->k_amp_per_duty * b->out.duty[p];
@@ -70,7 +71,7 @@ static void step(bench_t *b)
         b->cell[p].q += a * 0.0045;
         v = ocv(&b->cell[p]) + a * b->cell[p].r;
         b->in.v_now[p] = (uint16_t)(v / VPC);
-        b->in.i_now[p] = (uint16_t)(fabs(a) / IPC);
+        b->in.i_now[p] = (uint16_t)(fabs(a) / IPC) + (uint16_t)b->i_off[p];
     }
     for (p = 0; p < NPORTS; p++) {
         if (b->ovr_v[p]) b->in.v_now[p] = (uint16_t)b->ovr_v[p];
@@ -241,8 +242,13 @@ static void t_sup(void)
     for (k = 0; k < 249; k++) sup_pass(&in, &o);
     CHECK(o.stop == STOP_NONE);
     sup_pass(&in, &o); CHECK(o.stop == STOP_RAIL);
-    in.rail = 3836 + 20; for (k = 0; k < 222; k++) sup_pass(&in, &o);
-    CHECK(o.stop == STOP_NONE);
+    in.rail = 3836 + 20; for (k = 0; k < 150; k++) sup_pass(&in, &o);
+    CHECK(o.stop == STOP_RAIL);                                    /* back in band for less than a second: still stopped */
+    in.rail = 3700; sup_pass(&in, &o); in.rail = 3836 + 20;        /* one pass out again: the second starts over */
+    for (k = 0; k < 150; k++) sup_pass(&in, &o);
+    CHECK(o.stop == STOP_RAIL);
+    for (k = 0; k < 500; k++) sup_pass(&in, &o);
+    CHECK(o.stop == STOP_NONE);                                    /* a second in band (plus the display's hold): resumes */
     /* rail over-voltage (the ADC at full scale): cut after 50 passes; a high reading below full scale is not one */
     sup_reset(); in = si(); in.rail = 4080; for (k = 0; k < 200; k++) { sup_pass(&in, &o); CHECK(o.fatal != SF_RAIL_OVER); }
     sup_reset(); in = si(); in.rail = 4095; in.rail_sat = 1;
@@ -326,6 +332,33 @@ static void t_gate(void)
 
 /* a cell pulled while charging: the loop winds the duty up and the pin follows it to the rail with no current; with the output off the
  * pin collapses.  It must be released within a couple of seconds, not after the 36 s tail timer */
+/* a current sense offset of 4 counts (58 mA, more than the 29 mA "no current" and close to the 73 mA end of charge): measured with the
+   output off and subtracted, so the charge still ends at the tail and a pulled cell is still found */
+static void t_offset(void)
+{
+    bench_t b; int k, full_at = -1, n;
+    bench_init(&b, 0, 21); b.i_off[0] = 4;
+    attach(&b, 0, 3.95, 12, 0.1);
+    for (k = 0; k < 60000 && full_at < 0; k++) { step(&b); if (b.out.state[0] == PS_FULL) full_at = k; }
+    CHECK(full_at > 0 && ocv(&b.cell[0]) < 4.26);
+    bench_init(&b, 0, 21); b.i_off[0] = 4; attach(&b, 0, 3.7, 400, 0.1);
+    run(&b, 4000);
+    CHECK(b.out.state[0] == PS_CHARGE);
+    b.present[0] = 0;
+    for (n = 0; n < 2000 && b.out.state[0] != PS_IDLE; n++) { b.ovr_v[0] = b.out.duty[0] > 0 ? 3830 : 0; step(&b); }
+    CHECK(b.out.state[0] == PS_IDLE && n < 800);
+}
+
+/* the time limits count the passes a long control pass lost (chg_in_t.late): a 3 h charge limit is 3 h of real time */
+static void t_late(void)
+{
+    bench_t b; int k;
+    bench_init(&b, 0, 21); attach(&b, 0, 3.7, 40000, 0.1);    /* a cell that never fills */
+    b.in.late = 3;                                              /* every pass is 4 passes long */
+    for (k = 0; k < (int)(T_CHG_MAX_S * 222L / 4) + 4000 && b.out.state[0] != PS_FAULT; k++) step(&b);
+    CHECK(b.out.state[0] == PS_FAULT && k < (int)(T_CHG_MAX_S * 222L / 4) + 2000 && k > (int)(T_CHG_MAX_S * 222L / 4) - 2000);
+}
+
 static void t_pulled(void)
 {
     bench_t b; int n;
@@ -492,6 +525,6 @@ static void t_time_limit(void)
 int main(void)
 {
     t_refuse(); t_precharge(); t_time_limit();
-    t_sup(); t_idle_and_probe(); t_cc(); t_classify(); t_full_charge(); t_faults(); t_cut(); t_independent(); t_gate(); t_pulled(); t_per_port(); t_storage(); t_full_hold(); t_bleed(); t_bleed_series();
+    t_sup(); t_idle_and_probe(); t_cc(); t_classify(); t_full_charge(); t_faults(); t_cut(); t_independent(); t_gate(); t_offset(); t_late(); t_pulled(); t_per_port(); t_storage(); t_full_hold(); t_bleed(); t_bleed_series();
     return check_report("chg");
 }

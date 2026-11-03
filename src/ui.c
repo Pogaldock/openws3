@@ -106,13 +106,11 @@ static void thorns(void)
 /* ROT splash: static, a black band with barbed edges, the wordmark between two skulls, the version on its own strip */
 static void rot_splash(void) REENT
 {
-    uint8_t lx = (uint8_t)((LCD_PX_W - LOGO_W) / 2), sw = spr_w[SPR_SKULL], sh = spr_h[SPR_SKULL];
     lcd_noise(0, 0, LCD_PX_W, LCD_PX_H, 0x5EED);
     lcd_fill(0, 9, LCD_PX_W, 50, th(R_BG));
     tn_x = 0; tn_w = LCD_PX_W; tn_len = 2; tn_step = 6; tn_c = th(R_DIM);
     tn_y = 9; tn_dir = -1; thorns();
     tn_y = 58; tn_dir = 1; thorns();
-    (void)lx; (void)sw; (void)sh;
     lcd_fill(0, 68, LCD_PX_W, 10, th(R_BG));
 }
 
@@ -176,7 +174,7 @@ void ui_finale_frame(uint8_t n)
     lcd_bitmap(lx, (uint8_t)(18 + y), LOGO_W, (uint8_t)(LOGO_H - y < 6 ? LOGO_H - y : 6), logo_bits + y * LOGO_STRIDE, UI_C_NEON, th(R_BG));
 }
 
-static char XD mbig[8];                              /* the big line of the message on the screen */
+static char XD mbig[10];                              /* the big line of the message on the screen */
 
 /* A message screen in parts: 0-3 clear the screen in four strips of 20 rows, 4 the title, 5 the line under it, 6 the big line, 7 the
  * small one.  Each part is under 40 ms on the panel, so a screen drawn one part per control pass never stalls the control loop
@@ -371,13 +369,13 @@ static void header_icon(const ui_state_t *s, uint8_t e, uint16_t bg) REENT
 }
 
 /* ROT: the 2-pixel strip between the header and the cells (y 20-21) is a charge bar for the whole charger: how close the cells are
- * to the target on average (a full cell counts as there; 0.9 V away counts as nothing), green while running with a white spark
- * running along it, grey when stopped.  Redrawn on each visit of the target box, about 3 ms. */
+ * to the target on average (a full cell counts as there; 0.9 V away counts as nothing), green while running,
+ * grey when stopped.  Redrawn on each visit of the target box, about 3 ms. */
 #define BAR_Y     20
 #define BAR_SPAN  900                            /* mV from the target that counts as an empty cell */
 static void charge_bar(const ui_state_t *s) REENT
 {
-    uint8_t p, n = 0, w, k;
+    uint8_t p, n = 0, w;
     uint16_t tgt = cal_port_mv(s->tgt), v, d;
     uint32_t sum = 0;
     for (p = 0; p < NPORTS; p++) {
@@ -391,10 +389,6 @@ static void charge_bar(const ui_state_t *s) REENT
     w = n ? (uint8_t)(sum * (LCD_PX_W - 2) / ((uint32_t)n * BAR_SPAN)) : 0;
     lcd_fill(1, BAR_Y, w, 2, s->run ? UI_C_NEON : th(R_DIM));
     lcd_fill((uint8_t)(1 + w), BAR_Y, (uint8_t)(LCD_PX_W - 2 - w), 2, th(R_BOX));
-    if (s->run && w > 4) {
-        k = (uint8_t)((anim >> 2) % (w - 3));
-        lcd_fill((uint8_t)(1 + k), BAR_Y, 3, 2, th(R_TEXT));
-    }
 }
 
 /* "0.5A", the current a port charges at */
@@ -605,7 +599,8 @@ static void saver_strip(void) REENT
     for (r = 0; r < 4; r++) {
         y = (uint8_t)(saver_row * 4 + r);
         lcd_noise_row(y, (uint16_t)(anim * 13u + y * 101u),
-                      y >= ly && y < ly + LOGO_H ? logo_bits + (y - ly) * LOGO_STRIDE : 0, lx, LOGO_W, (uint8_t)keep, UI_C_NEON);
+                      y >= ly && y < ly + LOGO_H ? logo_bits + (y - ly) * LOGO_STRIDE : logo_bits, lx,
+                      y >= ly && y < ly + LOGO_H ? LOGO_W : 0, (uint8_t)keep, UI_C_NEON);          /* width 0: a row with no logo */
     }
     if (++saver_row == LCD_PX_H / 4) saver_row = 0;
     /* three small skulls drift across at their own speeds; static fills in behind them */

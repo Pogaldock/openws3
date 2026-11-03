@@ -138,11 +138,13 @@ def chip_info(d):
     print(f'[i] bandgap {int.from_bytes(d[34:36], "big")} mV, made 20{bcd(d[36]):02d}-{bcd(d[37]):02d}-{bcd(d[38]):02d}')
     base = d[15] * 256                                  # option byte: where the EEPROM area starts in the 64 KB flash (0: none)
     size = 0x10000 - base if base else 0
-    if size >= 512:
+    if size >= 0x0A00:
         print(f'[i] EEPROM area {size} bytes at flash {base:#06x} (IAP offsets 0x0000..{size - 1:#06x})')
     else:
-        print('[!] no EEPROM area: the charger has nowhere to keep its settings')
-        print('    set the EEPROM size when flashing (STC-ISP: 1K), then flash again')
+        print(f'[!] EEPROM area {size} bytes: too small for the settings (they sit at offset 0x0800)')
+        print('    set the EEPROM size when flashing (STC-ISP: 3K), then flash again')
+    if base != CODE_LIMIT:
+        print(f'[!] the settings area starts at {base:#06x}; the tested unit\'s starts at {CODE_LIMIT:#06x}: another revision or board?')
 
 def handshake(isp):
     r = isp.cmd(0x00, b'')
@@ -161,6 +163,7 @@ def main():
     ap.add_argument('--addr', type=lambda x: int(x, 0), default=0)
     ap.add_argument('--erase', action='store_true')
     ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--force', action='store_true', help='write past the settings-area boundary (0xF400); never needed for WS3 Unlocked')
     a = ap.parse_args()
 
     dev = a.dev
@@ -179,11 +182,17 @@ def main():
 
     if not a.file:
         print('write needs a file'); return 1
-    return write(dev, open(a.file, 'rb').read(), a.addr, a.erase, a.dry_run)
+    return write(dev, open(a.file, 'rb').read(), a.addr, a.erase, a.dry_run, a.force)
 
-def write(dev, data, addr=0, erase=False, dry_run=False):
+CODE_LIMIT = 0xF400      # the chip's settings area starts here (Makefile CODE_LIMIT): an image must not write there
+
+def write(dev, data, addr=0, erase=False, dry_run=False, force=False):
     """program `data` at `addr` through the loader at `dev`; returns 0 on success"""
     print(f'[i] image {len(data)} bytes at {addr:#06x}')
+    end = addr + len(data.rstrip(b'\xff'))
+    if end > CODE_LIMIT and not force:
+        print(f'[-] the image reaches {end:#06x}, past {CODE_LIMIT:#06x} where the settings area starts: not written (--force to override)')
+        return 1
     blocks = [data[i:i+128] for i in range(0, len(data), 128)]
     if len(blocks[-1]) < 128:
         blocks[-1] = blocks[-1] + b'\xff' * (128 - len(blocks[-1]))
