@@ -403,7 +403,8 @@ Each line: what is assumed, how well it is supported, what happens if it is wron
 
 ## Check your own charger
 
-- **After installing 0.2-beta.2 every setting is back to its default** (0.3 A, 4.20 V, 4.35 V allowed): set yours again.
+- **Coming from 0.2-beta.2 or older, every setting is back to its default after installing** (0.3 A, 4.20 V, 4.35 V allowed): set
+  yours again. From 0.2-beta.3 they are kept.
 - **First boot:** the splash plays once with its jingle and the main screen comes up. A splash every few seconds means a reset loop
   (most likely the tone timer): install OpenWS3 from its own releases (hold the left button while plugging in USB-C) and report it.
   Not a WS3 Unlocked older than 0.2.0-beta.2: those predate the audit fixes.
