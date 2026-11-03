@@ -29,8 +29,12 @@ jobs:
           echo "f6b929c62ed3082a26087885e0f1f9bf41878602ef1f57e40b11b4a01bf4f366  sdcc.tar.bz2" | sha256sum -c -
           tar xjf sdcc.tar.bz2 -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/sdcc-4.6.0/bin" >> "$GITHUB_PATH"
-      - name: Unit tests (charge logic, limits, menu, themes)
+      - name: Unit tests (charge logic, limits, menu, settings) and the requirements check
         run: make test
+      - name: Static analysis (cppcheck; findings kept by hand are in tools/cppcheck.supp with their reasons)
+        run: |
+          sudo apt-get install -y -qq cppcheck >/dev/null
+          tools/cppcheck.sh
       - name: Whole-firmware safety scenarios on a simulated board
         run: make sim
       - name: Fuzzer, a short batch (random events, the safety rules checked every pass; the long run is the Fuzz workflow)
@@ -54,8 +58,20 @@ jobs:
           sudo apt-get install -y -qq sdcc-ucsim >/dev/null      # s51, the 8051 simulator; this job holds no write token
           make check-8051
 
+  coverage:      # beside "test": which lines the unit tests and the simulation never run; the safety files must stay at 98 % or more
+    runs-on: ubuntu-24.04
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: Line coverage
+        run: |
+          pip install --break-system-packages -q gcovr==8.4
+          tools/coverage.sh
+          { echo '```'; cat build/cov/coverage.txt build/cov/branches.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
   publish:
-    needs: test
+    needs: [test, coverage]
     # only the main branch or a version tag publishes: a run on another branch (by hand) tests and builds, nothing more
     if: github.ref == 'refs/heads/rot-theme' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04

@@ -879,6 +879,95 @@ static void s_usb_stop_burst(void)
     CHECK(a && b && c);
 }
 
+/* the host commands the scenarios above never sent successfully: a voltage and a port value when stopped (taken), the same while
+   charging (refused), the loader reboot while charging (refused) and stopped (everything off first) */
+static void s_usb_commands(void)
+{
+    static const uint8_t v380[] = { 4, 2, 41 }, v420[] = { 4, 0, 42 }, p3off[] = { 10, 2, 43, 0 }, p3auto[] = { 10, 2, 44, 1 },
+                         isp1[] = { 6, 0, 45 }, isp2[] = { 6, 0, 46 };
+    int a, b, c, d, e, f;
+    sim_attach(0, 3.7, 300); sim_attach(2, 3.7, 300); S.usb_host = 1;
+    boot();
+    usb(v380, 3); a = usb_tx[17] == 0 && settings.volt == 2;                       /* stopped: the target is set */
+    usb(v420, 3); usb(p3off, 4); b = usb_tx[17] == 0 && settings.ch_cur[2] == 0 && (settings.ch_off & 4);   /* port 3 sits out */
+    start(); run_for(5);
+    c = S.pwm[0] > 0 && !S.pwm[2];                                                 /* port 3 left out of the run */
+    usb(v380, 3); d = usb_tx[17] == 1 && settings.volt == 0;                       /* charging: refused, unchanged */
+    usb(p3auto, 4); e = usb_tx[17] == 1 && (settings.ch_off & 4);
+    usb(isp1, 3); f = usb_tx[17] == 1 && !S.reboot_isp;                            /* no reboot while charging */
+    hold(1); run_for(2);
+    usb(isp2, 3);
+    printf("  host commands: voltage taken %s, port value taken %s and honoured %s; while charging refused: voltage %s, port %s, "
+           "loader %s; stopped, loader reboot %s with outputs off %s\n", a ? "yes" : "NO", b ? "yes" : "NO", c ? "yes" : "NO",
+           d ? "yes" : "NO", e ? "yes" : "NO", f ? "yes" : "NO", S.reboot_isp ? "yes" : "NO", all_off() ? "yes" : "NO");
+    CHECK(a && b && c && d && e && f && S.reboot_isp && all_off());
+}
+
+/* the rail never comes up although the input is fine (a dead buck stage): a fatal stop after 10 s, nothing driven */
+static void s_no_rail(void)
+{
+    sim_attach(0, 3.7, 300); S.usb_host = 1;
+    S.rail_stuck = 0.3;
+    app_boot(); S.booted = 1; run_for(15);
+    hold(1); run_for(2);
+    printf("  rail never up: fatal 0x%02x (0x%02x = NO RAIL), outputs ever driven: %s\n", usb_tx2[54], SF_NO_RAIL, any_pwm() ? "YES" : "no");
+    CHECK(usb_tx2[54] == SF_NO_RAIL && all_off());
+    S.rail_stuck = 0;
+}
+
+/* a full cell whose voltage rises above its window (a cell swapped for a fuller one at the same moment, a wrong reading that
+   corrects itself): it is bled back down to the target, not left over it */
+static void s_full_rises(void)
+{
+    int bled = 0;
+    uint64_t end;
+    sim_attach(0, 4.10, 120);
+    boot(); start();
+    end = S.ticks + SEC(3600);
+    while (S.ticks < end && S.pwm[0] + S.amps[0] > 0.01) pass();
+    run_for(60);
+    S.cell[0].q += 0.03 * S.cell[0].cap_c;                                         /* 3 % more charge than full: about 4.25 V */
+    end = S.ticks + SEC(1800);
+    while (S.ticks < end) { pass(); if (S.sw[0]) bled = 1; }
+    printf("  a full cell pushed to %.3f V: bled %s, now %.3f V at rest\n", S.max_cell_v[0], bled ? "yes" : "NO", rested(0));
+    CHECK(bled && rested(0) < 4.215);
+}
+
+/* a PD charger at 20 V and a 4S pack (16.8 V) on the XT60, then the PD source falls back to 5 V (a PD reset): the pack is now the
+   higher supply and must not feed the USB-C source through the bypass (found by the fuzzer: it did, for a second) */
+static void s_pd_drop_pack(void)
+{
+    double fed;
+    S.vin = 20.0; S.xt60_v = 16.8;
+    boot(); run_for(5);
+    fed = S.backfeed_s;
+    S.vin = 5.15; run_for(5);
+    printf("  PD 20 V with a 16.8 V pack, PD back to 5 V: USB-C side fed for %.3f s\n", S.backfeed_s - fed);
+    CHECK(S.backfeed_s - fed < 0.06);
+    S.xt60_v = 0;
+}
+
+/* not a check: a charge described by the environment (tools/simcompare.py), printed as "R time volts amps state", to put the
+   simulation beside a charge logged on a real charger (fwmon.py log).  REPLAY_V0 (rested volts at the start), REPLAY_CAP (mAh),
+   REPLAY_R (ohms, the cell plus its lead), REPLAY_CUR (current setting, iu), REPLAY_VOLT (target index), REPLAY_HOURS */
+static void s_replay(void)
+{
+    double v0 = getenv("REPLAY_V0") ? atof(getenv("REPLAY_V0")) : 3.7, cap = getenv("REPLAY_CAP") ? atof(getenv("REPLAY_CAP")) : 300;
+    double r = getenv("REPLAY_R") ? atof(getenv("REPLAY_R")) : 0, h = getenv("REPLAY_HOURS") ? atof(getenv("REPLAY_HOURS")) : 3.5;
+    int cur = getenv("REPLAY_CUR") ? atoi(getenv("REPLAY_CUR")) : 21, volt = getenv("REPLAY_VOLT") ? atoi(getenv("REPLAY_VOLT")) : 0;
+    uint64_t t0;
+    cfg_load(); settings.cur = (uint8_t)cur; settings.volt = (uint8_t)volt; settings.hv = 1; cfg_save();
+    sim_attach(0, v0, cap); if (r > 0) S.cell[0].r = r;
+    S.usb_host = 1;
+    boot(); start(); t0 = S.ticks;
+    while (S.ticks - t0 < SEC(h * 3600)) {
+        run_for(1);
+        printf("R %.1f %.4f %.4f %u\n", (S.ticks - t0) / 2000.0, term_v_of(0), S.amps[0], usb_tx[18]);
+        if (usb_tx[18] == PS_FULL && S.ticks - t0 > SEC(600) && S.amps[0] < 0.001) break;
+    }
+    cfg_load(); settings.cur = 21; settings.volt = 0; cfg_save();
+}
+
 /* a host toggling a setting and asking for a start that is always refused must not wear the settings flash out */
 static void s_usb_wear(void)
 {
@@ -926,7 +1015,7 @@ static const scen_t SC[] = {
     { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
     { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot }, { "no_dev", s_no_dev },
     { "stats", s_stats }, { "store", s_store }, { "store_back", s_store_back }, { "fault_full", s_fault_full },
-    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale }, { "hv_race", s_hv_race }, { "hv_backstop", s_hv_backstop }, { "usb_wear", s_usb_wear }, { "usb_stop_burst", s_usb_stop_burst }, { "input_limit", s_input_limit }, { "min_in_volts", s_min_in_volts }, { "backfeed_noise", s_backfeed_noise }, { "pre_ir", s_pre_ir }, { "store_saved", s_store_saved }, { "stop_any_screen", s_stop_any_screen }, { "hv_lowvcc", s_hv_lowvcc }, { "never_full_wobble", s_never_full_wobble }, { "rail_stop", s_rail_stop },
+    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale }, { "hv_race", s_hv_race }, { "hv_backstop", s_hv_backstop }, { "usb_wear", s_usb_wear }, { "replay", s_replay }, { "pd_drop_pack", s_pd_drop_pack }, { "usb_commands", s_usb_commands }, { "no_rail", s_no_rail }, { "full_rises", s_full_rises }, { "usb_stop_burst", s_usb_stop_burst }, { "input_limit", s_input_limit }, { "min_in_volts", s_min_in_volts }, { "backfeed_noise", s_backfeed_noise }, { "pre_ir", s_pre_ir }, { "store_saved", s_store_saved }, { "stop_any_screen", s_stop_any_screen }, { "hv_lowvcc", s_hv_lowvcc }, { "never_full_wobble", s_never_full_wobble }, { "rail_stop", s_rail_stop },
     { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
     { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "cfg_damage2", s_cfg_damage2 }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
    

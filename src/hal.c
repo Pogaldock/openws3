@@ -172,7 +172,22 @@ uint32_t hal_ticks(void)
     return t;
 }
 
-uint32_t hal_ms(void) { return hal_ticks() >> 1; }       /* TICK_HZ = 2000 */
+/* ms since boot, all 32 bits: ticks / 2 alone has only 31, so after 2^32 ticks (24.9 days) it would jump back by 2^31 ms and every
+   "is it time yet" comparison would misfire once.  The top bit is carried over each time the tick counter wraps (main loop only:
+   called at least once a pass, so a wrap is never missed). */
+uint32_t hal_ms(void)
+{
+    static uint8_t XD top;
+    static uint32_t XD carry;
+    uint32_t t = hal_ticks();
+    uint8_t b = (uint8_t)(t >> 24) & 0x80;
+    if (top && !b) carry ^= 0x80000000UL;
+    top = b;
+    return (t >> 1) + carry;
+}
+#ifdef HAL_TEST
+void hal_test_set_ticks(uint32_t t) { g_ticks = t; }   /* test/s51/t_hal.c: the clock near its wrap */
+#endif
 
 void hal_delay_ms(uint16_t ms)
 {

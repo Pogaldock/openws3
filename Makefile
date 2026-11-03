@@ -75,6 +75,14 @@ sim: $(BUILD)/sim_app
 check-8051: $(BUILD)/version_build.h
 	test/run_8051.sh
 
+# static analysis: cppcheck (tools/cppcheck.sh)
+cppcheck:
+	tools/cppcheck.sh
+
+# which lines the tests never run (gcc --coverage); the safety files must stay at 98 % or more
+coverage: $(BUILD)/version_build.h
+	tools/coverage.sh
+
 # the real hal.c on the simulated 8051 only (seconds): the register values a fatal stop leaves
 check-hal: $(BUILD)/version_build.h
 	test/hal_8051.sh
@@ -100,5 +108,5 @@ FUZZ_HOURS ?= 6
 fuzz: $(BUILD)/sim_fuzz
 	./$(BUILD)/sim_fuzz -s $(FUZZ_SEED) -n $(FUZZ_SEEDS) -j $(FUZZ_JOBS) -H $(FUZZ_HOURS)
 
-.PHONY: all test screens clean sim fuzz check-8051 check-hal FORCE
+.PHONY: all test screens clean sim fuzz check-8051 check-hal coverage cppcheck FORCE
 FORCE:

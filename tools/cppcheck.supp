@@ -1,0 +1,4 @@
+# cppcheck findings checked by hand and kept, one line each: id:file[:line].  Reasons:
+# - ctl.c: a negative value shifted right. Arithmetic (sign-keeping) on SDCC and on gcc, as the rail loop needs; the 8051 charge
+#   trace (test/chg_trace.c, built by SDCC and by gcc, compared line for line) runs this code on both and they match.
+shiftNegativeLHS:src/ctl.c

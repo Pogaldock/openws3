@@ -23,6 +23,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include "sim.h"
+#include "ports.h"
 #include "adc.h"
 #include "app.h"
 #include "cfg.h"
@@ -46,8 +47,8 @@ static int P(double p) { return U(0, 1) < p; }
 
 /* ---------------------------------------------------------------------------------------------------------------------- */
 /* events */
-enum { E_WAIT, E_BTN, E_USB, E_ATTACH, E_DETACH, E_VIN, E_XT60, E_VCC, E_RAIL, E_SHORT, E_THERM, E_LCD, E_NOISE, E_POWER, E_CFG, NE };
-static const char *const EN[NE] = { "WAIT", "BTN", "USB", "ATTACH", "DETACH", "VIN", "XT60", "VCC", "RAIL", "SHORT", "THERM", "LCD", "NOISE", "POWER", "CFG" };
+enum { E_WAIT, E_BTN, E_USB, E_ATTACH, E_DETACH, E_VIN, E_XT60, E_VCC, E_RAIL, E_SHORT, E_THERM, E_LCD, E_NOISE, E_POWER, E_CFG, E_CAL, NE };
+static const char *const EN[NE] = { "WAIT", "BTN", "USB", "ATTACH", "DETACH", "VIN", "XT60", "VCC", "RAIL", "SHORT", "THERM", "LCD", "NOISE", "POWER", "CFG", "CAL" };
 typedef struct { uint8_t t, a, n; double x[4]; uint8_t b[24]; } ev_t;
 
 #define MAXEV 20000
@@ -66,6 +67,7 @@ static void ev_print(FILE *f, const ev_t *e)
     case E_ATTACH: fprintf(f, " %u %.4f %.1f %.4f %.4f", e->a, e->x[0], e->x[1], e->x[2], e->x[3]); break;
     case E_DETACH: fprintf(f, " %u", e->a); break;
     case E_SHORT: fprintf(f, " %u %.3f", e->a, e->x[0]); break;
+    case E_CAL: fprintf(f, " %.5f %.5f %.5f", e->x[0], e->x[1], e->x[2]); break;
     }
     fprintf(f, "\n");
 }
@@ -90,6 +92,7 @@ static int ev_parse(const char *line, ev_t *e)
     case E_ATTACH: { unsigned a; sscanf(p, "%u %lf %lf %lf %lf", &a, &e->x[0], &e->x[1], &e->x[2], &e->x[3]); e->a = (uint8_t)a; break; }
     case E_DETACH: { unsigned a; sscanf(p, "%u", &a); e->a = (uint8_t)a; break; }
     case E_SHORT: { unsigned a; sscanf(p, "%u %lf", &a, &e->x[0]); e->a = (uint8_t)a; break; }
+    case E_CAL: sscanf(p, "%lf %lf %lf", &e->x[0], &e->x[1], &e->x[2]); break;
     default: sscanf(p, "%lf", &e->x[0]); break;
     }
     return 1;
@@ -242,6 +245,7 @@ static void generate(uint64_t seed, double hours_max)
         e->b[14] = (uint8_t)(P(0.8) ? 0 : RI(0, 63)); e->b[15] = (uint8_t)P(0.1);
     }
     if (P(0.5)) add(E_NOISE)->x[0] = U(0, 4);
+    if (P(0.5)) { ev_t *e = add(E_CAL); e->x[0] = U(-0.01, 0.01); e->x[1] = U(-0.005, 0.005); e->x[2] = U(-0.005, 0.005); }   /* sensor errors */
     add(E_VCC)->x[0] = P(0.85) ? U(4.45, 4.95) : U(4.40, 4.45);
     cur_vin = P(0.8) ? USBC[RI(0, 7)] : 0;
     cur_xt = cur_vin > 0 && P(0.8) ? 0 : PACKS[RI(0, 9)];
@@ -311,7 +315,10 @@ static int res_fd = -1;                    /* a child reports the index of the v
 
 static int booted, fatal_seen, prev_run, prev_evs, sess, sess_volt, sess_hv, sess_cur, sess_choff, sess_chcur[NPORTS];
 static uint64_t user_tick, last_change_tick;
-static double allowed[NPORTS], rail_extra;
+/* a cell's level for its allowance: its voltage, but never below its open-circuit voltage (right after a bleed its voltage is pulled
+   down by polarisation and comes back up by itself: that rise is not charge going in) */
+static double cell_top(int k) { double o = sim_ocv_of(S.cell[k].q / S.cell[k].cap_c); return sim_cell_v(k) > o ? sim_cell_v(k) : o; }
+static double allowed[NPORTS], rail_extra, cal_err;   /* cal_err: the sensors' own error (fraction): what the firmware can't see */
 static int refuse[NPORTS], fault_on[NPORTS], removed[NPORTS], shorted[NPORTS];
 static double t_chg[NPORTS], t_pre[NPORTS], t_bleed[NPORTS];
 static uint64_t empty_since[NPORTS], oc_since[NPORTS], fed_since[NPORTS];
@@ -371,7 +378,7 @@ static void new_session(void)
     tg = TGT_V[sess_volt & 3];
     rail_extra = 0;
     for (k = 0; k < NPORTS; k++) {
-        double v = S.cell[k].present ? sim_cell_v(k) : 0;
+        double v = S.cell[k].present ? cell_top(k) : 0;
         allowed[k] = fmax(v + 0.015, tg + 0.030);
         refuse[k] = S.cell[k].present && v < 2.47;
         fault_on[k] = 0; removed[k] = 0;
@@ -416,8 +423,10 @@ static void check(void)
         int st = usb_tx[18 + k];
         /* the cell's own voltage never above what it came with or its run's target + 30 mV (a port short is a hardware fault the firmware
            cannot stop: the cell's level after it is the new ceiling) */
-        if (c->present && !shorted[k] && sim_cell_v(k) > allowed[k] + rail_extra)
-            violation(I_OVERCHARGE, "port %d cell %.4f V > allowed %.4f V (+%.3f rail fault)", k + 1, sim_cell_v(k), allowed[k], rail_extra);
+        /* with sensor errors injected, the allowance grows by exactly the sensors' error and no more: the firmware must not add any */
+        if (c->present && !shorted[k] && sim_cell_v(k) > allowed[k] + rail_extra + 4.4 * cal_err)
+            violation(I_OVERCHARGE, "port %d cell %.4f V > allowed %.4f V (+%.3f rail fault, +%.4f sensor error)", k + 1, sim_cell_v(k),
+                      allowed[k], rail_extra, 4.4 * cal_err);
         if (run && (sess_choff >> k & 1) && (S.pwm[k] || S.sw[k])) violation(I_PORT_OFF_DRIVEN, "port %d is OFF but pwm %u sw %u", k + 1, S.pwm[k], S.sw[k]);
         if (!c->present && (S.pwm[k] || S.sw[k])) { if (!empty_since[k]) empty_since[k] = S.ticks; else if (S.ticks - empty_since[k] > SEC(3)) violation(I_EMPTY_DRIVEN, "port %d", k + 1); }
         else empty_since[k] = 0;
@@ -526,7 +535,7 @@ static void exec(const ev_t *e)
         sim_attach(k, e->x[0], e->x[1]);
         c->r = e->x[2]; c->r2 = e->x[2] * 0.5; c->leak = e->x[3]; S.amps[k] = 0;
         removed[k] = 1; refuse[k] = e->x[0] < 2.47;
-        allowed[k] = sim_cell_v(k) + 0.015;
+        allowed[k] = cell_top(k) + 0.015;
         if (prev_run) allowed[k] = fmax(allowed[k], TGT_V[sess_volt & 3] + 0.030);
         t_chg[k] = t_pre[k] = t_bleed[k] = 0;
         break;
@@ -543,6 +552,13 @@ static void exec(const ev_t *e)
     case E_THERM: S.therm = (uint16_t)e->x[0]; break;
     case E_LCD: S.lcd_slow = e->x[0]; break;
     case E_NOISE: S.adc_noise = e->x[0]; break;
+    case E_CAL: {                                                   /* the reference off by x0, the rail sensor's gain by x1, the ports' by x2 */
+        int p;
+        S.bg_err = e->x[0]; S.adc_scale[ADC_RAIL] = 1.0 + e->x[1];
+        for (p = 0; p < NPORTS; p++) S.adc_scale[port_v_ch(p)] = 1.0 + e->x[2];
+        cal_err = fabs(e->x[0]) + fabs(e->x[1]) + fabs(e->x[2]);
+        break;
+    }
     case E_POWER: if (booted) power_cycle(e->x[0]); break;
     case E_CFG:
         if (booted) break;                                   /* only as the page found at power-up */
@@ -562,7 +578,7 @@ static int run_events(int n)
     sim_reset(); srand((unsigned)(g_seed * 2654435761u + 7));
     S.usb_host = 1; S.therm = 2150;
     booted = 0; sess = 0; backfeed = 0; backfeed_budget = 0; user_tick = 0; last_change_tick = 0; max_pass = 0;
-    memset(shorted, 0, sizeof shorted); rail_extra = 0; hot_h = 0;
+    memset(shorted, 0, sizeof shorted); rail_extra = 0; cal_err = 0; hot_h = 0;
     for (k = 0; k < NPORTS; k++) allowed[k] = 9;
     for (cur_ev = 0; cur_ev < n; cur_ev++) {
         if (verbose > 0 && EVS[cur_ev].t != E_WAIT) { printf("  [%.1f s] ", TOS(S.ticks)); ev_print(stdout, &EVS[cur_ev]); }

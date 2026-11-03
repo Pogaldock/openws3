@@ -59,12 +59,21 @@ No single check catches everything, so there are several, each looking from a di
   test and still be wrong on the charger. This layer already caught one (an alarm that never sounded, also in OpenWS3).
 - **Planted bugs.** I break each safety check on purpose, one at a time, and the tests must notice. If a broken check passes, the test
   was decoration. When this caught gaps in my own tests, I added the missing tests before releasing.
+- **A random tester (a fuzzer).** Instead of scripted situations, thousands of random ones: buttons, USB commands, cells in and out,
+  supply drops, sensor errors, with every safety rule checked after every step. It finds the situations nobody thought to script; it
+  found a real USB-C bug the scripted tests had missed.
+- **Attackers, not just reviewers.** A red-team round where AI agents were told to break it, any way they could, not to review it.
 - **Independent reviews.** Several rounds of AI reviewers, each given only the code and one area, never my conclusions, so they
   aren't just agreeing with me. I check every finding against the code before acting on it, because reviewers are wrong sometimes too.
 - **Measurements on my charger.** Supply voltage, the input reading, the rail, the stack headroom, the temperature sensor, the
   USB-C guard on a laptop. Simulation says the logic is right; only the hardware says the model is.
 - **The build itself.** GitHub builds the firmware only after every test passes, refuses an image too big for the chip, refuses
   one known kind of code that is unsafe inside an interrupt (the kind the last audit found), and signs a record of what it built.
+- **A written list of promises.** REQUIREMENTS.md says what the charger must always or never do, and names the tests that prove
+  each one. The build fails if a promise has no test, or a test has no promise. It's how the safety-critical world does it (they call
+  it traceability), and it caught a gap the first day: "holding B1 stops the charge" was true on one screen out of five.
+- **Measuring the tests themselves.** Coverage shows which lines and branches no test runs; a static checker reads the code for known
+  bug patterns. Both run on every build, with limits taken from what the functional-safety standards recommend.
 
 Every bug that got found went the same way: reproduce it, fix it, write a test that would have caught it, plant it again as a bug the
 tests must catch. That loop is the most important thing about this project. Not that it's bug-free, but that each bug leaves a test
@@ -102,6 +111,8 @@ If you want to help, these are worth more than another code review:
 
 - **A multimeter reading** on your unit: a rested full cell, and what the charger showed for it. Even a handful of these from
   different units would turn the biggest assumption into data.
+- **A logged charge** (`tools/fwmon.py log`) run through `tools/simcompare.py`: it shows how closely the simulator, which every test
+  rests on, matches a real charger.
 - **An oscilloscope** on the outputs across a reset, and on the rail at power-up.
 - **A thermometer** against the temperature reading at two temperatures.
 - **"Check the unit" output** from the installer page, so we know which hardware is out there.

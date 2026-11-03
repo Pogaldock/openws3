@@ -50,6 +50,12 @@ def main():
         if int(st.group(1)) < STACK_MIN:
             print('error: the fast RAM grew and took room from the stack (see the notes at the top of tools/imgcheck.py)')
             ok = False
+    # the pin set-up at reset (hal.c __sdcc_external_startup) must be the one linked: SDCC 4.3 renamed the hook, and with an older
+    # compiler the library's empty one runs instead and the power-path pins float until hal_init
+    mp = os.path.join(build, 'fw.map')
+    hooks = re.findall(r'^\s*C:\s+[0-9A-F]+\s+(_+sdcc_external_startup)\s+(\S+)', open(mp).read(), re.M) if os.path.exists(mp) else []
+    if not hooks or any(mod != 'hal' for _, mod in hooks):
+        print('error: the reset hook linked is %s, not hal.c\'s (build with SDCC 4.6, README)' % (hooks or 'none')); ok = False
     for m in ISR_MODULES:
         asm = os.path.join(build, m + '.asm')
         if not os.path.exists(asm):

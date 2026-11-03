@@ -56,6 +56,7 @@ void sim_reset(void)
     for (k = 0; k < 16; k++) S.adc_scale[k] = 1.0;
 }
 
+double term_v_of(int p);
 static double term_v(int p)                               /* the voltage at the port's pins */
 {
     sim_cell_t *c = &S.cell[p];
@@ -66,6 +67,8 @@ static double term_v(int p)                               /* the voltage at the 
 /* the input node: a supply on the XT60 reaches it directly; USB-C through the diode, or the bypass when it is on */
 static double vin_open(void) { double u = S.vin <= 0 ? 0 : S.profile ? S.vin : S.vin - 0.6; return S.xt60_v > u ? S.xt60_v : u; }
 static double vin_sensed(void) { double v = vin_open() - S.src_r * S.iin; return v > 0 ? v : 0; }
+
+double term_v_of(int p) { return term_v(p); }
 
 static void plant_tick(void)
 {

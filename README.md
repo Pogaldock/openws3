@@ -15,6 +15,7 @@ Where to go:
 - **Want to know how I think about it, or want to review or break it?** Start with [APPROACH.md](APPROACH.md). It's the
   catch-up: what's known, what's assumed, how it was checked, and where to poke. [REQUIREMENTS.md](REQUIREMENTS.md) is the
   checklist of what the charger must always or never do, each with its tests. [SAFETY.md](SAFETY.md) has every number behind it.
+- **A word you don't know?** [GLOSSARY.md](GLOSSARY.md) explains every term in plain language.
 
 ## Before you install, the honest version
 
@@ -49,7 +50,7 @@ independent shows it isn't. In practice that's several layers, each looking from
 - **I added the protections a charger should have** and OpenWS3 didn't: refusing over-discharged cells, a gentle pre-charge with
   its own time limit, a 3 hour charge limit, a board over-temperature stop, a watchdog, a clean reset on a collapsing supply, and a
   guard so a pack on the XT60 can't feed backwards into a laptop on the USB-C port.
-- **I built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and run the real firmware against it in 60
+- **I built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and run the real firmware against it in 65
   scenarios: shorts, dead cells, cells that never fill, overheating, stuck hardware, supply faults, a hostile USB host.
 - **The tests also run on a simulated copy of the chip**, because it does arithmetic differently from a PC. That caught a bug the PC
   tests couldn't: the rail-fault alarm never sounded (in OpenWS3 too).
@@ -179,11 +180,24 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
 - These numbers only display; nothing in the charge logic reads them.
 
 ### Verification
-- **Whole-firmware simulation** (`test/sim`, `make sim`): the real firmware against a simulated board, cells and supplies, 60 scenarios.
+- **Safety requirements** (`REQUIREMENTS.md`, checked by `tools/reqcheck.py` in `make test`): what the charger must always or never
+  do, each with the code that enforces it and the tests that prove it; the build fails if one has no test.
+- **Whole-firmware simulation** (`test/sim`, `make sim`): the real firmware against a simulated board, cells and supplies, 65 scenarios.
+- **Fuzzer** (`test/sim/fuzz.c`, `make fuzz`): random buttons, USB commands, cells, supplies, faults and sensor errors over simulated
+  hours, the safety rules checked after every control pass. 24 seeds on every build; thousands weekly (Actions, "Deep tests").
 - **Tests on a simulated 8051** (`test/run_8051.sh`, `test/s51`, `test/chg_trace.c`, `make check-8051`): the settings, display,
-  statistics, menu and port-settings unit tests (the charge and limits suites are too slow there) and a charge-logic trace on the chip's own integer sizes, with the compiler the firmware is built with.
+  statistics, menu and port-settings unit tests and a charge-logic trace on the chip's own integer sizes, with the compiler the
+  firmware is built with; the charge and limits suites weekly (Deep tests). And the real `src/hal.c`, which the simulation replaces,
+  on the simulated chip (`test/s51/t_hal.c`, `make check-hal`): the pins at a reset, the watchdog, a failed ADC read, the clock's
+  wrap, what a fatal stop writes into the registers.
 - **New unit tests** in `test/test_pure.c` and `test/test_chg.c`.
 - **Mutation testing** (`test/mutants.py`, and on GitHub: Actions, "Mutation tests"): each safety check broken on purpose, to show the tests above catch it.
+- **Coverage** (`tools/coverage.sh`, `make coverage`, on every build): which lines and branches the tests never run; the safety files
+  must stay at 98 % of their lines and 85 % of their branches.
+- **Static analysis** (`tools/cppcheck.sh`, on every build): cppcheck reads the code for known bug patterns; the findings checked by
+  hand and kept are in `tools/cppcheck.supp`, each with its reason.
+- **The simulator against a real charge** (`tools/simcompare.py`): log a charge with `fwmon.py log`, and it runs the same charge in the
+  simulator and shows the difference, so the model the tests rest on can itself be checked.
 - **An independent review** of the charge logic, the hardware layer, USB / installer / build and the test evidence; what it found and
   what was fixed is in SAFETY.md.
 - **Diagnostics page 1** shows the chip's version and stored reference, the USB-C bypass state and the stack headroom (`src/dbgscr.c`).
@@ -224,7 +238,11 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
 ```bash
 make                 # build/fw.bin and build/openws3.html (SDCC 4.6.0; the chip's internal RAM is full: older versions may not link)
 make test            # unit tests: charge logic, limits, menu, settings (plain C on the PC)
-make sim             # the whole firmware against a simulated board: 60 safety scenarios
+make sim             # the whole firmware against a simulated board: 65 safety scenarios
+make fuzz            # random events, the safety rules checked every pass (FUZZ_SEEDS, FUZZ_HOURS)
+make coverage        # which lines and branches the tests never run
+make cppcheck        # static analysis
+make check-hal       # the real hal.c on the simulated 8051 (seconds; needs s51)
 make check-8051      # most unit tests and a charge-logic trace on a simulated 8051 (needs s51 from sdcc-ucsim; about 16 minutes)
 ```
 

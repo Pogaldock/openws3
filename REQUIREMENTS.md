@@ -27,7 +27,7 @@ Planted bugs (`test/mutants.py`) then show that the tests named here really catc
 - **Enforced in:** `src/chg.c` (constant voltage, over-voltage fault), `src/adc.c` and `src/cal.c` (every reading corrected for the
   chip's supply), `src/sup.c` (the rail band).
 - **Proof:** `sim:nominal` `sim:vcc_low` `sim:vcc_mid` `sim:vcc_high` `sim:vcc_step` `sim:bg_plus` `sim:bg_minus` `sim:noise`
-  `sim:noise_vcc` `unit:test_chg.t_cut` `unit:test_pure.t_cal` `fuzz`
+  `sim:noise_vcc` `sim:full_rises` `unit:test_chg.t_cut` `unit:test_pure.t_cal` `fuzz`
 - **Limit:** sensor errors that shift every reading together (the reference 1 % high and the rail sensor 0.8 % low) are not visible
   to the firmware; the multimeter check finds them (SAFETY.md, "Red team").
 
@@ -51,7 +51,7 @@ Planted bugs (`test/mutants.py`) then show that the tests named here really catc
 - **Requirement:** during a run the target voltage and the charge current stay as they were at the start.
 - **Enforced in:** `src/app.c` (start refused while a menu edit is open; B1, B2 and USB commands 3 and 4 refused while running),
   `src/menu.c` (items locked while running).
-- **Proof:** `sim:menu_lock` `sim:menu_edit_start` `unit:test_menu.t_locked` `fuzz`
+- **Proof:** `sim:menu_lock` `sim:menu_edit_start` `sim:usb_commands` `unit:test_menu.t_locked` `fuzz`
 
 ### SR-V6: a storage run gives your target back
 - **Requirement:** when a storage run ends, by any path, the target is your own again, and the storage target is never saved.
@@ -132,15 +132,19 @@ Planted bugs (`test/mutants.py`) then show that the tests named here really catc
 - **Enforced in:** `src/sup.c`.
 - **Proof:** `sim:rail_pause` `sim:broken_rail` `fuzz`
 
-### SR-S5: a rail that fails its self-test never runs
-- **Requirement:** if the rail can't be regulated at power-up, no run can start.
-- **Enforced in:** `src/app.c` (the rail self-test).
-- **Proof:** `sim:selftest_fail`
+### SR-S5: a rail that fails its self-test, or never comes up, never runs
+- **Requirement:** if the rail can't be regulated at power-up, or never comes up although the input is fine, no run can start and
+  nothing is driven.
+- **Enforced in:** `src/app.c` (the rail self-test), `src/sup.c` (SF_NO_RAIL).
+- **Proof:** `sim:selftest_fail` `sim:no_rail`
 
 ### SR-S6: a pack on the XT60 never feeds the USB-C side
 - **Requirement:** a supply on the XT60 never reaches the USB-C connector, beyond one probe of under 20 ms per change of the input.
 - **Enforced in:** `src/adc.c` (the USB-C guard), `src/hal.c`.
-- **Proof:** `sim:xt60_only` `sim:pack_on_laptop` `sim:pack_on_pd` `sim:pd_steps` `sim:both_at_boot` `sim:backfeed_noise` `fuzz`
+- **Proof:** `sim:xt60_only` `sim:pack_on_laptop` `sim:pack_on_pd` `sim:pd_steps` `sim:pd_drop_pack` `sim:both_at_boot` `sim:backfeed_noise`
+  `fuzz`
+- **Limit:** a PD source that falls back to 5 V while a pack sits less than 2 V below its old level (a 4.5S-like pack on 20 V) is not
+  told apart from load sag by the input reading alone; SAFETY.md, USB-C.
 
 ## Control
 
@@ -185,7 +189,8 @@ Planted bugs (`test/mutants.py`) then show that the tests named here really catc
 - **Requirement:** if the firmware stops running, the watchdog resets the chip within about 2.5 s; nothing in normal running starves
   it.
 - **Enforced in:** `src/hal.c`, `src/app.c` (fed once a pass).
-- **Proof:** `sim:nominal` `fuzz` (every scenario and every fuzz seed fails if the watchdog would have reset the chip)
+- **Proof:** `sim:nominal` `fuzz` (every scenario and every fuzz seed fails if the watchdog would have reset the chip) `s51:hal`
+  (the real hal.c switches the watchdog on at its 2.5 s setting)
 
 ### SR-F3: a USB host can't wear out the settings flash
 - **Requirement:** no sequence of USB commands writes the settings flash more than once per change a person could make.
@@ -206,10 +211,32 @@ Planted bugs (`test/mutants.py`) then show that the tests named here really catc
   reads back what the "all off" function wrote into the rail and port registers. Whether the pin then really drives the rail low is
   hardware: checked on the charger.
 
+### SR-F6: at a reset the power pins are driven low first
+- **Requirement:** the first code to run after a reset drives every pin that can switch power low: the port PWMs and enables, the
+  rail actuator, the global enable, the USB-C bypass and the power switch.
+- **Enforced in:** `src/hal.c` (`__sdcc_external_startup`, the reset hook; SDCC 4.3 and later call it).
+- **Proof:** `s51:hal` (the pins as the hook left them) `build:imgcheck` (the hook linked is hal.c's, not the library's empty one)
+- **Limit:** between power-on and that first instruction the pins float (the chip's own behaviour); what the board does then is
+  hardware, unchecked (SAFETY.md, assumptions).
+
+### SR-F7: a sensor read that fails is read as a fault
+- **Requirement:** an ADC conversion that never finishes (a failed converter) returns full scale, which the supervision treats as an
+  over-voltage, instead of hanging the firmware.
+- **Enforced in:** `src/hal.c` (`hal_adc`).
+- **Proof:** `s51:hal`
+
+### SR-F8: the clock never jumps
+- **Requirement:** the millisecond clock counts on across the tick counter's wrap (every 24.9 days of continuous power), so no
+  time-based decision misfires.
+- **Enforced in:** `src/hal.c` (`hal_ms`).
+- **Proof:** `s51:hal`
+
 ## Other checks
 
 Simulation scenarios that check something other than a safety requirement:
 - `sim:stats`: the mAh, resistance and time-to-full readings against the model, and the end-of-run screens.
 - `sim:fault_full`: no finale or storage offer over a faulted port (that offer's restart used to clear the fault; also SR-V6).
 - `sim:sag_finale` `sim:new_cell_finale`: the finale plays once per cell, not at every top-up.
+- `sim:replay`: not a check; a charge described by `tools/simcompare.py`, to compare the simulation with a charge logged on a real
+  charger.
 - `sim:rail_sense_low` is under SR-V2; `sim:held_never_full` under SR-T1.

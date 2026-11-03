@@ -35,7 +35,7 @@ static uint8_t  XD vg_n, vg_hi, vg_lo, vg_state;   /* probe passes, passes above
 #define VG_RISE_MV       400
 #define VG_HI_PASSES     3
 #define VG_DROP_MV       2000
-#define VG_LO_PASSES     222                    /* 1 s */
+#define VG_LO_PASSES     3                      /* passes: a fall of 2 V is a source change, never load or noise */
 #define VG_FALL_PASSES   22                     /* about 0.1 s */
 
 static void vg_learn(void) { vg_state = VG_LEARN; vg_tj = hal_ms(); vg_off = vg_mv; }
@@ -60,8 +60,9 @@ static void vin_guard(void) REENT                 /* reentrant: its 32-bit time 
         break;
     case VG_OK:
         if (vg_mv > vg_ref + VG_RISE_MV) { if (++vg_hi >= VG_HI_PASSES) vg_learn(); } else vg_hi = 0;
-        /* far below the level for a second: not load (that sags by tenths of a volt) but a new USB-C level (a PD source reset to 5 V):
-           learnt again, so a supply plugged in afterwards is measured against the level that is really there */
+        /* far below the level: not load (that sags by tenths of a volt) but a new USB-C level (a PD source reset to 5 V).  Bypass off at
+           once and learnt again: with a pack on the XT60 between the old and the new USB-C level, the pack would otherwise feed the USB-C
+           source through the bypass (found by the fuzzer: 20 V PD, a 16.8 V pack, the PD source back to 5 V, fed for a second) */
         if (vg_mv + VG_DROP_MV < vg_ref) { if (++vg_lo >= VG_LO_PASSES) { vg_lo = 0; vg_learn(); } } else vg_lo = 0;
         break;
     default:                                    /* VG_HOLD: a higher reading is still the XT60 supply; a fall may mean it has gone */

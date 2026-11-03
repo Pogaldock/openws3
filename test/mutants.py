@@ -66,6 +66,11 @@ M = [
  ("src/app.c", "static void apply_limits(void) { lim_cfg.ilim = settings.ilim;", "static void apply_limits(void) { lim_cfg.ilim = 0;", "input_limit"),
  ("src/app.c", "lim_cfg.vmin = settings.vmin;", "lim_cfg.vmin = 0;", "min_in_volts"),
  ("src/app.c", "    if (c[2] && c[2] == usb_seq) return;", "    ;", "usb_stop_burst"),
+ ("src/hal.c", "    P2 = 0x00;                 /* PWM pins + two enables low */", "    P2 = 0xFF;", "HAL"),
+ ("src/hal.c", "void hal_wdt_feed(void) { WDT_CONTR = 0x37; }", "void hal_wdt_feed(void) { WDT_CONTR = 0x17; }", "HAL"),
+ ("src/hal.c", "if (++n == 0) return 4095;", "if (++n == 0) return 0;", "HAL"),
+ ("src/hal.c", "    if (top && !b) carry ^= 0x80000000UL;", "    ;", "HAL"),
+ ("src/adc.c", "#define VG_LO_PASSES     3 ", "#define VG_LO_PASSES     222 ", "pd_drop_pack"),
 ]
 
 def main():

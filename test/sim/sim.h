@@ -61,7 +61,8 @@ void   sim_reset(void);
 void   sim_advance(uint32_t ticks);
 int    sim_usb_send(const uint8_t *c, int n);   /* 1: taken; 0: dropped (one was already waiting) */
 void sim_ee_flip(uint16_t a, uint8_t mask);  /* damage one stored bit pattern (settings page) */
-double sim_cell_v(int p);                     /* the cell's own voltage (open circuit + polarisation) */
+double sim_cell_v(int p);
+double term_v_of(int p);                       /* the voltage at the port's pins (what the charger reads) */                     /* the cell's own voltage (open circuit + polarisation) */
 void   sim_attach(int p, double v0, double cap_mah);
 double sim_ocv_of(double frac);
 #endif

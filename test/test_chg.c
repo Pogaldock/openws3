@@ -166,6 +166,15 @@ static void t_faults(void)
     b.ovr_i[0] = 80;
     for (k = 0; k < 400; k++) step(&b);
     CHECK(b.out.state[0] == PS_FAULT);
+    /* boundary: an over-current shorter than the 200-pass window (an inrush when a cell goes in) does not fault; the count
+       winds back down while the current is normal, so two short spikes close together still do not; a long one always does */
+    bench_init(&b, 0, 21); attach(&b, 0, 3.7, 400, 0.1); run(&b, 20);
+    b.ovr_i[0] = 80; run(&b, 150); b.ovr_i[0] = 0; run(&b, 300);
+    CHECK(b.out.state[0] == PS_CHARGE);
+    b.ovr_i[0] = 80; run(&b, 150); b.ovr_i[0] = 0; run(&b, 10);
+    CHECK(b.out.state[0] == PS_CHARGE);
+    b.ovr_i[0] = 80; run(&b, 250);
+    CHECK(b.out.state[0] == PS_FAULT);
     /* stop: everything idles, outputs off */
     bench_init(&b, 0, 21); attach(&b, 0, 3.7, 400, 0.1); run(&b, 500);
     b.in.run = 0; run(&b, 3);

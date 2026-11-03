@@ -13,7 +13,10 @@ jobs:
         with: { fetch-depth: 0, persist-credentials: false }
       - name: Planted bugs
         run: |
-          sudo apt-get install -y -qq sdcc >/dev/null || true       # the hal.c planted bug runs on the simulated 8051 (s51)
+          # the hal.c planted bugs run on the simulated 8051 (s51), built by SDCC 4.6 as the firmware is (4.3+ calls hal.c's reset hook)
+          curl -fsSL -o sdcc.tar.bz2 https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.6.0/sdcc-4.6.0-amd64-unknown-linux2.5.tar.bz2/download
+          echo "f6b929c62ed3082a26087885e0f1f9bf41878602ef1f57e40b11b4a01bf4f366  sdcc.tar.bz2" | sha256sum -c -
+          tar xjf sdcc.tar.bz2 -C "$RUNNER_TEMP"; export PATH="$RUNNER_TEMP/sdcc-4.6.0/bin:$PATH"
           sudo apt-get install -y -qq sdcc-ucsim >/dev/null
           python3 test/mutants.py | tee mutants.txt
           { echo '```'; cat mutants.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

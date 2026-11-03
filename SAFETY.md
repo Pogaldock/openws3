@@ -122,13 +122,17 @@ bypass conducts both ways: a pack plugged into the XT60 afterwards would be fed 
 - **Guard (WS3 Unlocked, `src/adc.c`):** at start the bypass stays off while the input settles; then it is switched on for about
   18 ms. If USB-C is the highest supply the input rises by the diode's drop (0.6 V) and the bypass stays on; if a pack is higher,
   nothing changes and it stays off. While on, the input rising 0.4 V above the USB-C level means a second supply arrived: off at once,
-  then the same test again. A lasting fall of 2 V (a PD source back at 5 V) is learnt again.
+  then the same test again. A fall of 2 V (a PD source back at 5 V) turns it off at once (3 passes, about 14 ms) and is learnt again.
+- **A PD source falling back under a pack (found by the fuzzer, fixed after 0.2-beta.4):** USB-C at 20 V, a 16.8 V pack on the XT60,
+  then the PD source back at 5 V: the guard waited a second before believing the 3.2 V fall, and the pack fed the USB-C side for that
+  second. Now 3 passes (a 2 V fall is never load or noise); simulated 0.03 s (scenario `pd_drop_pack`).
 - **Simulated:** a 16.8 V or 25.2 V pack plugged in while on a laptop or a PD charger reaches the USB-C side for 31 ms (the detection,
   then one test); a 2S, 4S or 6S pack already in at power-up for 4 ms; a pack lower than the USB-C supply never; no false cut on a PD
   start (5 V, then 20 V) or a PD reset.
 - **The first version of this guard had a hole** (found by review): it learnt a 2S to 5S pack present at start-up as the USB level and
   back-fed it for the whole session. The redesign above is what replaced it.
-- **Not covered:** a pack less than 0.4 V above the USB-C supply (little current can flow), and whatever the hardware does in the
+- **Not covered:** a PD source falling back to 5 V while a pack sits less than 2 V below its old level (the input reading alone
+  cannot tell that from load sag); a pack less than 0.4 V above the USB-C supply (little current can flow), and whatever the hardware does in the
   first milliseconds before the firmware runs. **Setting DISABLE USB POWER = YES** (menu) keeps the bypass off for good and removes
   the question when you power the charger from the XT60.
 
@@ -173,7 +177,7 @@ real-time, current-offset, rail-alarm, 4.35 V switch, menu-lock and statistics t
 The real firmware (`src/app.c` and every module it calls; only the register layer is replaced) runs on the PC against a model of the
 board: the supply and its USB-C / XT60 paths, the inverted rail with sag, six ports, cells with an open-circuit curve, internal
 resistance, polarisation and optional leakage, an ADC referenced to VCC with noise, gain errors and reference spread, the display's bus
-time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 60 scenarios:
+time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 65 scenarios:
 - full charges at VCC 4.45 to 4.95 V, reference spread plus or minus 1 %, ADC noise, combined worst case
 - user stop, input lost, cell pulled mid-charge, short circuit and its latch, storage voltage, power cycle mid-charge
 - dead cell, deeply discharged cell, internally shorted cell, cell that never fills, leaking cell, never-full cells under MAX IN AMPS
@@ -218,7 +222,33 @@ the model is caught).
 `int` is 16 bits on the chip and 32 on a PC, so overflow bugs can pass on the PC. The settings, display, statistics, menu and port
 settings unit tests run again in the s51 simulator, built with the same compiler (SDCC 4.6.0) and the same memory model as the firmware,
 and the charge logic runs one scenario on both, whose traces must match line for line (161 lines, every port state). The input-limits
-suite and the charge-logic unit tests are left out: they take too long in the simulator (the trace covers the charge logic instead).
+suite and the charge-logic unit tests take hours there: they run weekly (GitHub Actions, "Deep tests", `test/s51_suite.sh`).
+
+### The hardware layer on the simulated 8051 (after 0.2-beta.4) - `make check-hal`
+The whole-firmware simulation replaces `src/hal.c` (the code that writes the chip's registers) with a model, so that file was checked
+by reading only. Now the real file, built by the firmware's compiler, runs on s51, and a test reads back what it wrote
+(`test/s51/t_hal.c`): the power pins driven low by the reset hook, the watchdog on at 2.5 s, a conversion that never finishes read as
+full scale, the clock counting on across its 24.9-day wrap (a bug, fixed: it jumped back), and a fatal stop leaving the rail at its
+lowest. The planted bug that used to survive by design (the fatal-stop rail value) is now caught. Writing this test also showed that
+SDCC 4.3 renamed the reset hook: with an older compiler the pin set-up silently never runs, so the build now checks which hook is linked.
+
+### Coverage (after 0.2-beta.4) - `make coverage`
+Which lines and which branches (each way an `if` can go) the unit tests and the simulation actually run. IEC 61508-3, the standard for
+safety software, highly recommends statement and branch coverage at its middle integrity level; the safety files are held at 98 % of
+their lines and 85 % of their branches on every build (at the time of writing: 99 % of lines, 88 % of branches; the branches left are
+mostly defensive, a counter at its cap or an out-of-range index). The first run found three paths no test took (USB commands that
+succeed, the rail never coming up, a full cell rising): each now has a scenario.
+
+### Static analysis (after 0.2-beta.4) - `make cppcheck`
+cppcheck reads the code for known bug patterns on every build; warnings fail the build. It found no defect; one finding is kept on
+purpose (a signed shift in the rail loop, the same on SDCC and on the PC, shown by the 8051 trace), listed with its reason in
+`tools/cppcheck.supp`. MISRA C checking is not included: its rule texts are not free.
+
+### The simulator itself - `tools/simcompare.py`
+Every test above rests on the simulator's model of the cells and the board. To check the model: log a charge on a real charger
+(`fwmon.py log`), then `tools/simcompare.py` estimates the cell (starting voltage, resistance, capacity), runs the same charge in the
+simulator and shows the differences in time to full, charge put in, final voltage and the curves. A final voltage that differs by more
+than 25 mV points at the charger's calibration: measure that cell with a multimeter. Not run on a real log yet.
 
 ### Independent review
 Four separate AI review agents (not people) read the code, each with one area and without the author's conclusions: the charge logic, the hardware
@@ -434,8 +464,11 @@ Each line: what is assumed, how well it is supported, what happens if it is wron
 - Have a human who knows battery chargers review `src/chg.c`, `src/sup.c`, `src/adc.c` and `src/app.c` (all review so far, both rounds,
   was by AI agents).
 - Read the flash back after installing, in the installer.
-- Run `app.c`, `adc.c`, `sup.c` and `limits.c` on the simulated 8051 too, not only on the PC.
-- Offer the *(upstream too)* fixes back to OpenWS3.
+- Run `app.c` and `adc.c` on the simulated 8051 too, not only on the PC (`sup.c` and `limits.c` run there weekly, Deep tests).
+- Offer the *(upstream too)* fixes back to OpenWS3: written up, ready, in UPSTREAM.md.
+- Log a real charge (`fwmon.py log`) and compare it with the simulator (`tools/simcompare.py`): it checks the model the tests rest on.
+- The USB-C guard's last blind spot: a PD source falling back to 5 V while a pack sits less than 2 V below its old level (re-testing
+  the source now and then would close it; it needs checking on a charger first).
 
 ## Reporting a problem
 

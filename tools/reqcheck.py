@@ -21,6 +21,7 @@ def main():
     used = set()
     n = 0
     for sec in sections:
+        sec = sec.split('\n## ', 1)[0]                # a section ends at the next "##" heading too
         title = sec.splitlines()[0]
         m = re.match(r'(SR-[A-Z]\d+)', title)
         if not m:

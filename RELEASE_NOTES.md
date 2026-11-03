@@ -3,6 +3,19 @@ It replaces VIFLY's firmware and decides the voltage and current that go into yo
 assistant, directed and checked by me) and has run on one charger. Going back to VIFLY's firmware may not be possible. Charge in a LiPo bag or on a non-flammable
 surface, supervise every charge, never overnight. No warranty, no responsibility taken: you install it at your own risk.
 
+### 0.2.0-beta.5: more of the charger tested, two bugs fixed
+- **USB-C guard (found by the fuzzer):** with a pack on the XT60 and a USB-C PD charger at 20 V, a PD charger falling back to 5 V let
+  the pack feed it for about a second. Now the bypass goes off within about 14 ms.
+- **The clock no longer jumps after 24.9 days of continuous power** (a pending settings save or the USB-C guard's wait could misfire).
+- **A short current spike no longer counts against a port forever:** unchanged behaviour, now tested at its boundary.
+- **More is tested:** the real hardware layer (`hal.c`) runs on a simulated copy of the chip (the pins at a reset, the watchdog, a
+  failed sensor read, the fatal stop); the USB command slot is shared code tested on its own; coverage and static analysis run on every
+  build; the fuzzer injects sensor errors; the slow tests run weekly.
+- **New documents:** GLOSSARY.md (every term in plain words), REQUIREMENTS.md (what the charger must always or never do, each with its
+  tests), UPSTREAM.md (the fixes that apply to OpenWS3 too).
+- **Tools:** `tools/simcompare.py` compares a charge logged on your charger with the simulator.
+- Settings are kept from beta.3 and beta.4.
+
 ### 0.2.0-beta.4: two gaps closed (replaces beta.3)
 - **A USB stop can't be lost.** The installer page and `fwmon.py` resend a command that isn't acknowledged; the unit runs each
   command number once, so a resend never does anything twice (USB.md has the rule for other programs).

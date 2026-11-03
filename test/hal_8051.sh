@@ -8,7 +8,7 @@ W=build/s51h; mkdir -p $W
 CF="-mmcs51 --model-large -Isrc -Ibuild -Itest"
 sdcc $CF -c test/s51/runner.c -o $W/runner.rel
 sdcc $CF -c test/s51/io.c -o $W/io.rel
-sdcc $CF -c src/hal.c -o $W/hal.rel
+sdcc $CF -DHAL_TEST -c src/hal.c -o $W/hal.rel
 sdcc $CF -c src/buzz_pure.c -o $W/buzz_pure.rel
 sdcc $CF -Dmain=test_main -c test/s51/t_hal.c -o $W/t_hal.rel
 sdcc $CF --xram-size 65536 --code-size 65536 $W/runner.rel $W/t_hal.rel $W/io.rel $W/hal.rel $W/buzz_pure.rel -o $W/t_hal.ihx >/dev/null
