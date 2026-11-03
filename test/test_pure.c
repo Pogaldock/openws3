@@ -296,6 +296,10 @@ static void t_dbg(void)
     CHECK(!strncmp(dbg_text(1, 6), "THERM 2345  FAN ON", 18));
     dbg_view.chip_id = 0;                                                               /* version A: no CHIPID block */
     CHECK(!strncmp(dbg_text(1, 7), "CHIP A  NO STORED REF", 21));
+    dbg_view.strap = 0; dbg_view.stack = 45;
+    dbg_view.byp = 1; CHECK(!strncmp(dbg_text(1, 8), "STRAP 0  BYP ON  STACK 45", 25));
+    dbg_view.byp = 2; CHECK(!strncmp(dbg_text(1, 8), "STRAP 0  BYP CUT  STACK 45", 26));       /* 26 characters: the full row */
+    dbg_view.byp = 0;
     CHECK(!strncmp(dbg_text(1, 9), "UP 123s ", 8));
     dbg_view.chip_id = 1; dbg_view.chip_bgv = 1187;                                     /* version B: its measured reference */
     dbg_view.chip_date[0] = 0x23; dbg_view.chip_date[1] = 0x05; dbg_view.chip_date[2] = 0x14;

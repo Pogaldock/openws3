@@ -23,6 +23,7 @@ typedef struct {
     uint8_t  state[NPORTS], sw[NPORTS];
     uint16_t rail, rail_duty, vin, bandgap;  /* rail, vin: filtered readings; bandgap: counts */
     uint8_t  run, stop, alarm, strap, rail_hold, fan, usb;
+    uint8_t  byp;                                            /* input bypass: 0 off, 1 on, 2 held off by the input guard (adc.c) */
     uint8_t  held[NPORTS];                                   /* chg_out_t.held */
     uint8_t  stack;                                          /* bytes of stack never used since boot */
     uint8_t  chip_id;                                        /* the CHIPID block is there (STC8H8K64U version B) */

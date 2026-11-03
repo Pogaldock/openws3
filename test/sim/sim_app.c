@@ -327,7 +327,7 @@ static void s_selftest_fail(void)
 static void dev_drive(int rail_duty, double secs)
 {
     static const uint8_t enter[] = { 7, 9, 1 };
-    uint8_t set[19] = { 8, 0x11, 2, 0, 0, 0, 0x01, 0x90 };          /* P5.2 on + rail raw, port 1 duty 400 */
+    uint8_t set[19] = { 8, 0x15, 2, 0, 0, 0, 0x01, 0x90 };          /* P5.2 on + input bypass + rail raw, port 1 duty 400 (a host keeps the bypass as reported, else USB-C power drops by the diode) */
     int k;
     set[4] = (uint8_t)(rail_duty >> 8); set[5] = (uint8_t)rail_duty; set[18] = 9;
     usb(enter, 3);
@@ -344,7 +344,7 @@ static void s_dev_top(void)
 
 static void s_dev_mode(void)
 {
-    uint8_t set[19] = { 8, 0x11, 2, 0, 0, 137, 0, 0, 0x01, 0x90 };  /* port 2 duty 400, rail raw 137 */
+    uint8_t set[19] = { 8, 0x15, 2, 0, 0, 137, 0, 0, 0x01, 0x90 };  /* port 2 duty 400, rail raw 137 */
     double t;
     sim_attach(0, 4.10, 120); sim_attach(1, 4.10, 120);
     boot();
@@ -360,6 +360,65 @@ static void s_dev_mode(void)
     CHECK(t >= 0 && t < 0.8);
 }
 
+static int prof_off(void) { return !S.profile; }
+static int prof_on(void)  { return S.profile; }
+
+/* a pack on the XT60 alone: strap high, the bypass never comes on */
+static void s_xt60_only(void)
+{
+    S.vin = 0; S.xt60_v = 19.0;
+    sim_attach(0, 3.70, 300);
+    boot(); start(); run_for(30);
+    printf("  XT60 only at 19 V: bypass ever on: %s, charging: %s\n", S.profile_ever ? "YES" : "no", any_pwm() ? "yes" : "NO");
+    CHECK(!S.profile_ever && any_pwm());
+}
+
+/* started on USB-C, then a pack is plugged into the XT60 and later unplugged */
+static void plug_pack(const char *src, double usb, double pack, int keeps_running)
+{
+    double t;
+    S.vin = usb;
+    sim_attach(0, 3.70, 300);
+    boot(); start(); run_for(10);
+    CHECK(S.profile);                                               /* on USB-C the bypass is on, as on the stock firmware */
+    S.xt60_v = pack;
+    t = time_until(prof_off, 1.0);
+    run_for(10);
+    printf("  %s, %.1f V pack plugged in: bypass off after %.4f s (fed backwards %.4f s), charging: %s\n", src, pack, t, S.backfeed_s, any_pwm() ? "yes" : "NO");
+    CHECK(t >= 0 && S.backfeed_s < 0.02);
+    CHECK(any_pwm());
+    S.xt60_v = 0;                                                   /* unplugged, USB-C still in */
+    t = time_until(prof_on, 2.0);
+    run_for(5);
+    printf("  ... pack unplugged: bypass back on after %.3f s, charging: %s\n", t, any_pwm() ? "yes" : "no (input low, start again)");
+    CHECK(t >= 0 && t < 1.0);
+    if (keeps_running) CHECK(any_pwm());
+}
+static void s_pack_on_laptop(void) { plug_pack("laptop USB-C 5.0 V", 5.0, 16.8, 0); }
+static void s_pack_on_pd(void)     { plug_pack("PD charger 19.5 V", 19.5, 25.2, 1); }
+
+/* a PD charger that starts at 5 V and moves to 20 V, then drops to 5 V and back (a PD reset) mid-charge: no false cut */
+static void s_pd_steps(void)
+{
+    S.vin = 5.0;
+    sim_attach(0, 3.70, 300);
+    app_boot(); S.booted = 1; run_for(0.6); S.vin = 19.5; run_for(2.0);
+    start(); run_for(10);
+    S.vin = 5.0; run_for(0.3); S.vin = 19.5; run_for(10);
+    printf("  PD 5 V -> 20 V at start, a PD reset mid-charge: bypass on: %s\n", S.profile ? "yes" : "NO");
+    CHECK(S.profile);
+}
+
+/* USB-C and a pack both in at power-up: a pack voltage that is no PD level is caught when the level is learnt */
+static void s_both_at_boot(void)
+{
+    S.vin = 5.0; S.xt60_v = 22.8;                                  /* 6S at storage */
+    sim_attach(0, 3.70, 300);
+    boot(); run_for(5);
+    printf("  laptop and a 22.8 V pack in at power-up: bypass on now: %s, fed backwards %.2f s (the 3 s learning time)\n", S.profile ? "YES" : "no", S.backfeed_s);
+    CHECK(!S.profile && S.backfeed_s <= 3.1);
+}
+
 typedef struct { const char *name; void (*fn)(void); } scen_t;
 static const scen_t SC[] = {
     { "nominal", s_nominal }, { "vcc_low", s_vcc_low }, { "vcc_mid", s_vcc_mid }, { "vcc_high", s_vcc_high },
@@ -368,7 +427,8 @@ static const scen_t SC[] = {
     { "gentle", s_gentle }, { "broken_rail", s_broken_rail }, { "short", s_short }, { "storage", s_storage },
     { "power_cycle", s_power_cycle }, { "never_full", s_never_full }, { "vcc_step", s_vcc_step }, { "leaky", s_leaky },
     { "menu_lock", s_menu_lock }, { "rail_pause", s_rail_pause }, { "vcc_fatal", s_vcc_fatal }, { "selftest_fail", s_selftest_fail },
-    { "dev_top", s_dev_top }, { "dev_mode", s_dev_mode },
+    { "dev_top", s_dev_top }, { "dev_mode", s_dev_mode }, { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
+    { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot },
 };
 
 int main(int argc, char **argv)

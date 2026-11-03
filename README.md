@@ -52,6 +52,7 @@ The Advanced view adds the raw inputs, the limiter, setpoints, an event log and 
 - **Over-discharged cells:** a cell resting below 2.50 V is not charged: the port faults until the cell is removed.
 - **Gentle start:** below 3.00 V a cell charges at 0.1 A whatever the setting, then goes up to its setting through the soft ramp.
 - **Charge time limit:** a port that has charged for 3 hours in one fill (time held by the input limits does not count) faults.
+- **USB-C backfeed guard:** the input bypass (P5.3, on at start when USB-C powers the board) conducts both ways, so a pack plugged into the XT60 / DC jack afterwards would be fed backwards into the USB-C source (a laptop port, a phone charger). The firmware learns the USB-C level in the first 3 s and turns the bypass off within about 15 ms when the input rises 1 V above it; it comes back when the pack is unplugged. A level at start that is no USB PD voltage (a pack and USB-C both in at power-up) keeps it off until the next power-up. Diagnostics page 1 shows `BYP ON / OFF / CUT`. Measured on one unit: STRAP 0 on a Samsung 45 W PD charger (19.5 V), an Apple 61 W (20.0 V) and a laptop port (5.0 V); STRAP 1 on the XT60 alone.
 
 ## Whole-firmware simulation
 

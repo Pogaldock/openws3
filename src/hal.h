@@ -18,6 +18,8 @@ void     hal_global(uint8_t on);                 /* P5.2 */
 void     hal_power(uint8_t on);                  /* P4.7 */
 void     hal_profile(uint8_t on);                /* P5.3: never on before hal_profile_allow() or with DISABLE USB POWER set */
 void     hal_profile_allow(void);                /* the settings are loaded: cfg_load calls it */
+void     hal_bypass_ok(uint8_t ok);              /* adc.c input guard: 0 holds the bypass off whatever is requested */
+uint8_t  hal_profile_on(void);                   /* the pin as driven */
 void     hal_reboot_isp(void);                   /* outputs off, then a software reset into the USB ISP loader; does not return */
 void     hal_all_off(void);                      /* every enable low, every duty 0, P5.2 low */
 

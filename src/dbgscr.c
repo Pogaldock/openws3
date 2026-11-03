@@ -44,7 +44,8 @@ const char *dbg_text(uint8_t page, uint8_t row)
             else if (dbg_view.chip_ram_bgv >= 1100 && dbg_view.chip_ram_bgv <= 1280) { rb_str("CHIP A  RAM REF "); rb_num(dbg_view.chip_ram_bgv, 4); rb_str("mV"); }
             else rb_str("CHIP A  NO STORED REF");
             break;
-        case 8: rb_str("STRAP "); rb_num(dbg_view.strap, 0); rb_str("  STACK FREE "); rb_num(dbg_view.stack, 0); break;
+        case 8: rb_str("STRAP "); rb_num(dbg_view.strap, 0); rb_str(dbg_view.byp == 2 ? "  BYP CUT" : dbg_view.byp ? "  BYP ON" : "  BYP OFF");
+                rb_str("  STACK "); rb_num(dbg_view.stack, 0); break;
         case 9:
             rb_str("UP "); rb_num(dbg_view.ms / 1000, 0); rb_str("s");
             if (dbg_view.chip_id) {                      /* the chip's factory test date, YY-MM-DD */

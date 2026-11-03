@@ -27,4 +27,7 @@ uint16_t adc_get(uint8_t ch);         /* the filtered value */
 uint8_t  adc_saturated(uint8_t ch);   /* the latest counts are at full scale: the input is beyond what the ADC measures */
 void     adc_prime(void);             /* scan everything twice so filtered values start at the real readings */
 
+enum { VG_OK = 0, VG_CUT, VG_LATCHED };       /* input guard (adc.c): bypass allowed / held off while a second supply is in / off until power-up */
+uint8_t  adc_bypass_state(void);
+
 #endif

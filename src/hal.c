@@ -49,6 +49,8 @@ static volatile uint32_t __xdata g_ticks;       /* 0.5 ms ticks since boot */
  *
  * Runs before the C runtime: drive every power-path pin low while they are still quasi-bidirectional
  * (a strong 0 even before the port mode registers are written).  */
+static uint8_t XD profile_req;  /* what the firmware asked for: the pin follows it once the conditions below allow */
+static uint8_t XD byp_ok;       /* 0 while the input guard (adc.c) holds the bypass off */
 static uint8_t XD profile_ok;  /* 1 once the settings are loaded (hal_profile_allow): until then the input bypass cannot be turned on */
 
 static void pin_modes(void)
@@ -66,6 +68,7 @@ unsigned char __sdcc_external_startup(void)
     TH1 = *(__idata uint8_t *)0xEF;
     TL1 = *(__idata uint8_t *)0xF0;
     profile_ok = 0;            /* not left to whatever the RAM holds */
+    byp_ok = 0; profile_req = 0;
     P2 = 0x00;                 /* PWM pins + two enables low */
     P4 = 0x02;                 /* enables, beep, power low; LCD CS (P4.1) idle high */
     P5 = 0x03;                 /* P5.2/P5.3 low; LCD RST/DC idle high */
@@ -117,6 +120,7 @@ uint8_t hal_stack_free(void)
 
 void hal_init(void)
 {
+    byp_ok = 0; profile_req = 0;   /* bypass held off until the input guard has run once (adc_prime) */
     pin_modes();
 
     pwm_init();
@@ -202,7 +206,12 @@ void hal_power(uint8_t on)  { POWER_EN = on; }
    the host. And not before the settings are loaded, so no ordering of the start-up can turn it on first. The bypass conducts backwards, so
    a supply on the XT60 would be fed into the USB-C connector (HARDWARE.md). */
 void hal_profile_allow(void) { profile_ok = 1; }
-void hal_profile(uint8_t on){ PROFILE = on && profile_ok && !settings.usb_off; }
+/* Also never while the input guard (adc.c) has seen a second supply arrive on the XT60 / DC jack: the bypass would feed it backwards
+   into whatever is on the USB-C connector.  The diode under the bypass blocks that path on its own. */
+static void profile_apply(void) { PROFILE = profile_req && profile_ok && !settings.usb_off && byp_ok; }
+void hal_profile(uint8_t on){ profile_req = on ? 1 : 0; profile_apply(); }
+void hal_bypass_ok(uint8_t lo) { byp_ok = lo ? 1 : 0; profile_apply(); }
+uint8_t hal_profile_on(void) { return PROFILE; }
 
 void hal_all_off(void)
 {

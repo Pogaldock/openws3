@@ -85,6 +85,7 @@ int16_t dev_pass(uint8_t supply_stop, uint8_t warm)
     hal_fan((out_flags & DF_FAN) != 0);
     if (settings.usb_off) out_flags &= (uint8_t)~DF_PROFILE;            /* hal_profile keeps the pin off: the report says so too */
     hal_profile((out_flags & DF_PROFILE) != 0);
+    if (!hal_profile_on()) out_flags &= (uint8_t)~DF_PROFILE;          /* held off by the input guard: the report says so */
     return rail_duty;
 }
 

@@ -27,7 +27,9 @@ typedef struct {
 
     /* ---- the board's outputs, as the firmware set them ---- */
     uint16_t pwm[NPORTS], rail_duty;
-    uint8_t sw[NPORTS], global, power, profile, fan;
+    uint8_t sw[NPORTS], global, power, profile, profile_ever, fan;
+    double  xt60_v;                     /* a supply on the XT60 / DC jack, 0 = none; S.vin is USB-C, 0 = none */
+    double  backfeed_s;                 /* time with the bypass on while the XT60 has a supply: fed into the USB-C connector */
 
     /* ---- the plant's state ---- */
     double rail;                /* true rail voltage */

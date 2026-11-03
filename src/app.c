@@ -500,7 +500,7 @@ void app_pass(void)
         }
         dbg_view.rail = cin.rail; dbg_view.rail_duty = (uint16_t)rail_duty; dbg_view.vin = sin.vin; dbg_view.bandgap = sin.bandgap;
         dbg_view.run = run; dbg_view.stop = stop_reason; dbg_view.alarm = alarm_ui;
-        dbg_view.strap = strap; dbg_view.stack = stack_free; dbg_view.rail_hold = rail_hold; dbg_view.fan = sout.fan; dbg_view.usb = usb_configured();
+        dbg_view.strap = strap; dbg_view.byp = hal_profile_on() ? 1 : adc_bypass_state() != VG_OK ? 2 : 0; dbg_view.stack = stack_free; dbg_view.rail_hold = rail_hold; dbg_view.fan = sout.fan; dbg_view.usb = usb_configured();
         for (n = 0; n < NPORTS; n++) dbg_view.held[n] = cout.held[n];
         ui_text_row(text_row, dbg_text(screen, text_row), text_row == 0 ? th(R_INFO) : th(R_TEXT));       /* one row per pass */
         if (++text_row == DBG_ROWS) text_row = 0;

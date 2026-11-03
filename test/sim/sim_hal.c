@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include "sim.h"
+#include "cfg.h"
 #include "hal.h"
 #include "lcd.h"
 #include "usb.h"
@@ -60,10 +61,14 @@ static double term_v(int p)                               /* the voltage at the 
     return sim_cell_v(p) + S.amps[p] * c->r;
 }
 
+/* the input node: a supply on the XT60 reaches it directly; USB-C through the diode, or the bypass when it is on */
+static double vin_sensed(void) { double u = S.vin <= 0 ? 0 : S.profile ? S.vin : S.vin - 0.6; return S.xt60_v > u ? S.xt60_v : u; }
+
 static void plant_tick(void)
 {
     int p;
     double total = 0, top, target;
+    if (S.profile && S.xt60_v > S.vin) S.backfeed_s += 0.0005;        /* one tick: the XT60 supply pushes into the USB-C source */
     for (p = 0; p < NPORTS; p++) {
         sim_cell_t *c = &S.cell[p];
         double a = 0;
@@ -81,7 +86,7 @@ static void plant_tick(void)
         if (S.amps[p] > 0) total += S.amps[p];
         if (sim_cell_v(p) > S.max_cell_v[p]) S.max_cell_v[p] = sim_cell_v(p);
     }
-    top = S.vin - 0.3 < RAIL_TOP ? S.vin - 0.3 : RAIL_TOP;
+    top = vin_sensed() - 0.3 < RAIL_TOP ? vin_sensed() - 0.3 : RAIL_TOP;
     target = !S.power ? 0 : S.rail_stuck > 0 ? S.rail_stuck : top - RAIL_PER * S.rail_duty;
     if (target < 0) target = 0;
     S.rail += (target - S.rail) * DT / 0.002;
@@ -111,10 +116,14 @@ void hal_rail(uint16_t duty) { S.rail_duty = duty; }
 void hal_sw(uint8_t port, uint8_t on) { S.sw[port] = on; }
 void hal_global(uint8_t on) { S.global = on; }
 void hal_power(uint8_t on) { S.power = on; }
-void hal_profile(uint8_t on) { S.profile = on; }
+static uint8_t prof_req, prof_lo;                         /* mirrors hal.c: the pin needs the request and the input guard */
+void hal_profile(uint8_t on) { prof_req = on != 0; S.profile = prof_req && prof_lo && !settings.usb_off; if (S.profile) S.profile_ever = 1; }
+void hal_bypass_ok(uint8_t lo) { prof_lo = lo != 0; hal_profile(prof_req); }
+uint8_t hal_profile_on(void) { return S.profile; }
 void hal_profile_allow(void) {}
 void hal_reboot_isp(void) { S.reboot_isp = 1; }
 void hal_all_off(void) { int k; for (k = 0; k < NPORTS; k++) { S.pwm[k] = 0; S.sw[k] = 0; } S.global = 0; S.rail_duty = 0; }
+
 
 static double noise(void) { return S.adc_noise ? ((double)rand() / RAND_MAX * 2 - 1) * S.adc_noise : 0; }
 static uint16_t counts(double c, int ch)
@@ -130,7 +139,7 @@ uint16_t hal_adc(uint8_t ch)
     int p;
     if (ch == ADC_BANDGAP) return counts(1071.0 * (1 + S.bg_err), ch);
     if (ch == ADC_IIN) return 2000;                          /* thermistor: cool */
-    if (ch == ADC_VIN) return counts(S.vin * 152.5 - 1, ch);
+    if (ch == ADC_VIN) return counts(vin_sensed() * 152.5 - 1, ch);
     if (ch == ADC_RAIL) return counts(S.rail / VPC, ch);
     for (p = 0; p < NPORTS; p++) {
         if (ch == port_v_ch(p)) return counts(term_v(p) / VPC, ch);
@@ -165,7 +174,7 @@ uint16_t hal_ram_bgv(void) { return 0; }
 void hal_tone(uint8_t level) { (void)level; }
 void hal_fan(uint8_t on) { S.fan = on; }
 uint8_t hal_btn(uint8_t n) { return n == 1 ? (uint8_t)S.btn1 : (uint8_t)S.btn2; }
-uint8_t hal_strap(void) { return 0; }
+uint8_t hal_strap(void) { return S.vin > 1.0 ? 0 : 1; }      /* low while USB-C powers the board (measured: Samsung PD, laptop) */
 
 /* ---- lcd.h: nothing is drawn, but the time the bus takes is: 210 clocks per byte at 40 MHz, 2 bytes per pixel, ~11 bytes per window ---- */
 static void lcd_cost(uint32_t pixels, uint32_t windows)
