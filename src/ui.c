@@ -32,6 +32,7 @@ static uint8_t XD pulse[NPORTS];                 /* ROT: visits left with that v
 static uint8_t XD look_p, look_n;                /* ROT: the port that just finished, faulted or got a cell, and rounds left that the eyes look at it */
 static uint8_t XD badge_k[NPORTS];               /* ROT: the port number's colour on screen (BK_*), 0xFF = not drawn */
 static uint8_t XD was_empty[NPORTS];             /* ROT: the port was empty at its last visit */
+static uint8_t XD hdr_icon[3];                   /* the header icon on screen (sprite and colour), 0 = not drawn */
 enum { BK_EMPTY = 0, BK_CELL, BK_FAULT };
 #define UI_C_DKGREEN 0x0AC0                      /* ROT: an empty port's number, and the barbed wire's frame (#0e5a06) */
 #define UI_C_BONE    0xEEF9                      /* ROT: the input skull (#e8dcc8) */
@@ -286,7 +287,7 @@ static void box_draw(uint8_t b, uint16_t bg)
     box_bg[b] = bg;
     if (b < 3) {
         lcd_fill(box_x(b), UI_HDR_Y, UI_BOX_W, UI_HDR_H, bg);
-        shown[b][0] = 0;
+        shown[b][0] = 0; hdr_icon[b] = 0;
         return;
     }
     p = b - 3; x = box_x(p % 3); y = cell_y(p);
@@ -358,11 +359,14 @@ static void header(const ui_state_t *s, uint8_t e, char XD *t) REENT
  * alarm, target: a spike), drawn on every visit at twice its size. */
 static void header_icon(const ui_state_t *s, uint8_t e, uint16_t bg) REENT
 {
-    uint8_t spr;
+    uint8_t spr, k;
     uint16_t c = UI_C_NEON;
     if (e == 0) spr = s->run && ((anim >> 6) & 1) ? SPR_BOLT_SPARK : SPR_BOLT;
     else if (e == 1) { spr = SPR_SKULL5; c = s->alarm ? th(R_BAD) : UI_C_BONE; }
     else spr = SPR_SPIKE5;
+    k = (uint8_t)(spr + (c == UI_C_NEON ? 0x40 : c == UI_C_BONE ? 0x80 : 0xC0));
+    if (hdr_icon[e] == k) return;                    /* only when it changes: the control pass is the charger's clock */
+    hdr_icon[e] = k;
     lcd_sprite2((uint8_t)(box_x(e) + 2), UI_HDR_Y + 3, 10, 14, SPR_BITS(spr), 0, 0, c, bg, 0);    /* twice its size */
 }
 
@@ -477,7 +481,7 @@ static void element(const ui_state_t *s, uint8_t e) REENT
             }
         } else if (burst[p]) return;
         if (emp) {
-            /* an empty port: static with its eye asleep in it.  The static is redrawn half a cell at a time about once a second, the
+            /* an empty port: static with its eye asleep in it.  The static is drawn 7 rows a visit, again only at the slow refresh (about every 6 s), the
              * eye when it changes: the control pass is the charger's clock, so drawing must stay cheap on average. */
             box(3 + p, bg);
             eye(s, p, st);
@@ -489,10 +493,12 @@ static void element(const ui_state_t *s, uint8_t e) REENT
                 }
                 return;
             }
-            if (shown[e][0] != 'S' || --shown[e][1] == 0) {
-                shown[e][0] = 'S'; shown[e][1] = 11;  /* 11 visits of 21 passes: about 1 s */
-                lcd_sprite2((uint8_t)(x + 11), (uint8_t)(y + part * 14), UI_BOX_W - 11, 14, SPR_BITS(eye_spr), 13, (uint8_t)(7 - part * 14),
+            if (shown[e][0] != 'S') {                /* once, and again at the screen's slow refresh (about every 6 s): */
+                static uint8_t XD r7;                 /* 7 rows a visit, so no control pass grows by more than about 4 ms */
+                r7 = shown[e][0] == 'a' ? 7 : 0;
+                lcd_sprite2((uint8_t)(x + 11), (uint8_t)(y + part * 14 + r7), UI_BOX_W - 11, 7, SPR_BITS(eye_spr), 13, (uint8_t)(7 - part * 14 - r7),
                             UI_C_NEON, 0, (uint16_t)(anim * 13u + p * 101u + 1u));
+                shown[e][0] = r7 ? 'S' : 'a';
                 shown[3 + p * 3 + 2][1] = (char)(eye_spr + 1);
             }
             return;

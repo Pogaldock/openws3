@@ -206,8 +206,9 @@ rail, the start-up hole in the USB-C guard, the interrupt nesting and the settin
   longest 41.5 ms).
 - **Drawing is part of the clock.** The charge time limits count control passes, so a screen that draws too much on average makes
   them run slow in real time. The first version of the empty-port static redrew it on every visit; the simulator caught it (the 3 h
-  limit, the 30 min pre-charge limit and the fatal stop all came late). The static is now redrawn about once a second and the eye
-  only when it changes, and the same scenarios pass.
+  limit, the 30 min pre-charge limit and the fatal stop all came late). The static is now drawn 7 rows a visit and again only every few
+  seconds, the big header icons and the eyes only when they change, and the same scenarios pass (the fatal stop at 0.46 s, 0.47 s
+  before the new screen).
 - **The tone timer is hardware only.** Melodies use Timer 3 and its interrupt, which the simulator does not have. A wrong register would
   most likely show as no sound, or as an interrupt storm that starves the watchdog: a reset loop at first boot (below).
 - **Stack.** One byte more in the deepest screen-drawing frame; check STACK on page 1 while charging (below).
