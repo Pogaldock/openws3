@@ -39,6 +39,7 @@ static void boot(void) { app_boot(); S.booted = 1; run_for(2.0); }   /* the rail
 static void tap(int b)  { if (b == 1) S.btn1 = 1; else S.btn2 = 1; run_for(0.12); S.btn1 = S.btn2 = 0; run_for(0.2); }
 static void hold(int b) { if (b == 1) S.btn1 = 1; else S.btn2 = 1; run_for(0.6); S.btn1 = S.btn2 = 0; run_for(0.2); }
 static void start(void) { hold(1); }
+static void both(double s) { S.btn1 = S.btn2 = 1; run_for(s); S.btn1 = S.btn2 = 0; run_for(0.25); }
 static int  all_off(void) { int k; for (k = 0; k < NPORTS; k++) if (S.pwm[k] || S.sw[k]) return 0; return !S.global; }
 static int  any_pwm(void) { int k; for (k = 0; k < NPORTS; k++) if (S.pwm[k]) return 1; return 0; }
 static void set_current(int tenths) { int n; for (n = 3; n < tenths; n++) tap(1); }     /* from the default 0.3 A, +0.1 A per tap */
@@ -197,7 +198,11 @@ static void s_storage(void)
 {
     int p;
     sim_attach(0, 4.15, 120); sim_attach(1, 4.05, 120); sim_attach(2, 3.60, 120);
-    boot(); tap(2); tap(2);                                       /* 4.20 -> 4.35 -> 3.80 V storage */
+    boot();
+    both(0.12); both(0.12); both(0.12); tap(2);                   /* menu, CHARGING, edit VOLTAGE: 4.20 -> 3.80 V storage (B2 on the main
+                                                                     screen no longer changes it; 4.35 V is skipped, not allowed) */
+    both(0.12); both(1.0); both(1.0);                             /* confirm, back, close (saved) */
+    CHECK(settings.volt == 2);
     start(); run_for(30 * 60);
     hold(1); run_for(60);
     printf("  storage 3.80 V: cells at");
@@ -267,7 +272,6 @@ static void s_leaky(void)
     CHECK(faulted);
 }
 
-static void both(double s) { S.btn1 = S.btn2 = 1; run_for(s); S.btn1 = S.btn2 = 0; run_for(0.25); }
 static void usb(const uint8_t *c, int n) { memset(S.usb_cmd, 0, sizeof S.usb_cmd); memcpy(S.usb_cmd, c, (size_t)n); S.usb_pending = 1; pass(); pass(); }
 
 /* the menu while charging: the target voltage and the current must not change, whatever is pressed */
