@@ -213,10 +213,9 @@ a fault removed, a guard bypassed), and the suites run against the broken firmwa
 earlier code: 15 of 29 planted bugs survived at least one suite, among them a disabled charge over-voltage cut, a removed 4.40 V bleed
 fault and developer mode ignoring a lost input. The scenarios added since (the rail sensor reading low, the overcharged cell, developer
 mode rules, the soft ramp after pre-charge) were written to catch exactly those. The runner and its list of planted bugs are in
-`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit, the second review round and the red team it has 50
-planted bugs, one for each fix. On the current code **49 of 50 are caught** (GitHub Actions, "Mutation tests", run 41696444265). The one that survives by design is the fatal-stop rail value in `src/hal.c`:
-the simulator replaces that file with its model, so that line is checked by review and on the charger only (the same change made in
-the model is caught).
+`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit, the second review round, the red team and the work after 0.2-beta.4 it has 55 planted bugs, one for each fix. On
+the current code **all 55 are caught** (GitHub Actions, "Mutation tests", run 41724679624), including the fatal-stop rail value in
+`src/hal.c`, which used to survive by design: that file now runs on the simulated 8051 (`make check-hal`).
 
 ### Tests on a simulated 8051 (WS3 Unlocked) - `make check-8051`
 `int` is 16 bits on the chip and 32 on a PC, so overflow bugs can pass on the PC. The settings, display, statistics, menu and port
@@ -247,8 +246,8 @@ purpose (a signed shift in the rail loop, the same on SDCC and on the PC, shown 
 ### Worst-case stack, from the code (after 0.2-beta.4) - `tools/stackcheck.py`, every build
 STACK on diagnostics page 1 shows only the deepest path that has run. The build now works out the worst case from the compiler's
 assembly: every call the code can make, the bytes each function pushes, the deepest interrupt on top (one priority: never two at
-once). With the 0.2-beta.5 code: 109 of 132 bytes, 23 spare (the measured 45 to 48 never hit that path); the build fails under 16
-spare. Library routines are counted as 6 bytes each, calls through a pointer as the deepest function whose address is taken.
+once). With the 0.2-beta.5 code built by SDCC 4.6: 103 of 132 bytes, 29 spare (the measured 45 to 48 never hit that path); the build fails
+under 16 spare. Library routines are counted as 6 bytes each, calls through a pointer as the deepest function whose address is taken.
 
 ### The simulator itself - `tools/simcompare.py`
 Every test above rests on the simulator's model of the cells and the board. To check the model: log a charge on a real charger

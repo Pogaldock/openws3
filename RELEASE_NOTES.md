@@ -61,8 +61,10 @@ The 4.35 V accuracy on the tested unit is not confirmed by a multimeter yet. No 
 clears a port's fault (SAFETY.md, Not fixed): pull a cell that faulted once.
 
 ### Checked
-60 whole-firmware scenarios, a fuzzer (a short batch on every build), the unit tests on PC and on a simulated 8051, and 49 of 50
-planted bugs caught (the one left can't be reached by the simulator by design). An audit, a review round on the changes, and a red-team round, all by AI agents.
+65 whole-firmware scenarios, a fuzzer (24 seeds on every build, thousands weekly), the unit tests on PC and on a simulated 8051, the
+real hardware layer on the simulated 8051, all 55 planted bugs caught, coverage of the safety files at 98 % of lines and 85 % of
+branches, static analysis, and the worst-case stack worked out from the code (29 bytes spare). An audit, a review round on the
+changes and a red-team round, all by AI agents.
 
 ### Install and check
 Download `openws3.html`, open it in Chrome or Edge, press Connect, follow the steps. `sha256sum -c SHA256SUMS` checks the download

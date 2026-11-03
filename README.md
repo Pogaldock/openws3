@@ -56,9 +56,8 @@ independent shows it isn't. In practice that's several layers, each looking from
   tests couldn't: the rail-fault alarm never sounded (in OpenWS3 too).
 - **A fuzzer** throws random button presses, USB commands, cells, supplies and faults at the simulated charger for simulated hours,
   and checks the safety rules after every control pass. A short batch runs on every build; long runs go on GitHub.
-- **I break the safety checks on purpose** (mutation testing, one planted bug per fix) to prove the tests notice: 49 of 50 planted bugs are
-  caught. The one left is a line the simulator can't reach by design (it replaces that
-  file with its model); it's checked by review and on the charger.
+- **I break the safety checks on purpose** (mutation testing, one planted bug per fix) to prove the tests notice: all 55 planted bugs
+  are caught.
 - **AI reviewers, several rounds**, each given only the code and one area, never my conclusions, so they aren't just agreeing with
   me. They found real defects every round: a way for a USB program to push a cell to 4.45 V, a time limit that never fired, the
   sound code able to corrupt a voltage reading from inside an interrupt, time limits running slow when the screen was busy. Each one

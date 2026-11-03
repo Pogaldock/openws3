@@ -97,15 +97,15 @@ def main():
 if __name__ == '__main__':
     main()
 
-# Result on 2026-11-03, 0.2.0-beta.4,
-# run on GitHub (Actions, "Mutation tests", run 41696444265):
+# Result on 2026-11-03, 0.2.0-beta.5,
+# run on GitHub (Actions, "Mutation tests", run 41724679624):
 #   M0 src/chg.c [rail_sense_low]: killed
 #   M1 src/chg.c [rail_sense_low]: killed
 #   M2 src/chg.c [bleed_over]: killed
 #   M3 src/chg.c [gentle]: killed
 #   M4 src/chg.c [held_never_full]: killed
 #   M5 src/chg.c [pre_short]: killed
-#   M6 src/hal.c [vcc_fatal]: SURVIVED
+#   M6 src/hal.c [HAL]: killed
 #   M7 test/sim/sim_hal.c [vcc_fatal]: killed
 #   M8 src/sup.c [hot]: killed
 #   M9 src/cfg.c [cfg_damage]: killed
@@ -149,4 +149,9 @@ if __name__ == '__main__':
 #   M47 src/app.c [input_limit]: killed
 #   M48 src/app.c [min_in_volts]: killed
 #   M49 src/app.c [usb_stop_burst]: killed
-#   49 of 50 planted bugs caught
+#   M50 src/hal.c [HAL]: killed
+#   M51 src/hal.c [HAL]: killed
+#   M52 src/hal.c [HAL]: killed
+#   M53 src/hal.c [HAL]: killed
+#   M54 src/adc.c [pd_drop_pack]: killed
+#   55 of 55 planted bugs caught
