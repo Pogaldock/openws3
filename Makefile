@@ -48,6 +48,7 @@ $(BUILD)/fw.bin: $(RELS)
 	makebin -p -s 65536 $(BUILD)/fw.ihx $(BUILD)/fw.bin   # the flash is 64 KB; makebin defaults to 32 KB
 	@echo "image: $$(stat -c %s $(BUILD)/fw.bin) bytes"
 	@python3 tools/imgcheck.py $(BUILD) $(CODE_LIMIT) || { rm -f $(BUILD)/fw.bin $(BUILD)/fw.ihx; exit 1; }   # size, interrupt helpers
+	@python3 tools/stackcheck.py $(BUILD) 16 || { rm -f $(BUILD)/fw.bin $(BUILD)/fw.ihx; exit 1; }   # worst-case stack, from the code
 
 $(BUILD)/openws3.html: tools/openws3.html tools/bundle.py $(BUILD)/fw.bin
 	python3 tools/bundle.py $(BUILD)/fw.bin tools/openws3.html $@

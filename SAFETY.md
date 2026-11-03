@@ -244,6 +244,12 @@ cppcheck reads the code for known bug patterns on every build; warnings fail the
 purpose (a signed shift in the rail loop, the same on SDCC and on the PC, shown by the 8051 trace), listed with its reason in
 `tools/cppcheck.supp`. MISRA C checking is not included: its rule texts are not free.
 
+### Worst-case stack, from the code (after 0.2-beta.4) - `tools/stackcheck.py`, every build
+STACK on diagnostics page 1 shows only the deepest path that has run. The build now works out the worst case from the compiler's
+assembly: every call the code can make, the bytes each function pushes, the deepest interrupt on top (one priority: never two at
+once). With the 0.2-beta.5 code: 109 of 132 bytes, 23 spare (the measured 45 to 48 never hit that path); the build fails under 16
+spare. Library routines are counted as 6 bytes each, calls through a pointer as the deepest function whose address is taken.
+
 ### The simulator itself - `tools/simcompare.py`
 Every test above rests on the simulator's model of the cells and the board. To check the model: log a charge on a real charger
 (`fwmon.py log`), then `tools/simcompare.py` estimates the cell (starting voltage, resistance, capacity), runs the same charge in the
@@ -453,7 +459,6 @@ Each line: what is assumed, how well it is supported, what happens if it is wron
   several units, and add a per-unit calibration from those readings (the biggest open assumption above).
 - Find out what the loader answers to its erase commands, then check those answers in the installer and `isp.py`.
 - Show the average control-pass length on diagnostics page 1, and count the short fault waits on real time too.
-- Compute the worst-case stack statically in CI (STACK on page 1 only shows the paths that have run).
 - Restore a unit to VIFLY's firmware once, with VIFLY's own tool, and document how (or confirm it cannot be done).
 - A capacity cap per fill, and a check that the voltage rises as charge goes in (a cell that takes charge without rising is damaged).
 - Calibrate the thermistor against a thermometer, and decide the stop temperature from it.

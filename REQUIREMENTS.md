@@ -199,8 +199,8 @@ Planted bugs (`test/mutants.py`) then show that the tests named here really catc
 
 ### SR-F4: the image, the interrupts and the stack stay within the chip
 - **Requirement:** the firmware never reaches the settings area; interrupt code never calls a shared compiler helper; the stack
-  keeps at least the room it had in 0.2.0-beta.2.
-- **Enforced in:** `Makefile`, `tools/imgcheck.py`, `tools/bundle.py`, `tools/isp.py`, the installer page.
+  keeps at least the room it had in 0.2.0-beta.2, and the worst case worked out from the code leaves at least 16 bytes spare.
+- **Enforced in:** `Makefile`, `tools/imgcheck.py`, `tools/stackcheck.py`, `tools/bundle.py`, `tools/isp.py`, the installer page.
 - **Proof:** `build:imgcheck`
 
 ### SR-F5: a fatal stop leaves the rail at its lowest

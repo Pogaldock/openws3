@@ -460,10 +460,11 @@ static void check(void)
         else if (cool) hot_h = 0;
         if (hot_h && h && S.ticks - hot_since > SEC(2.5) && any_drive()) violation(I_HOT, "therm %u for %.1f s", S.therm, TOS(S.ticks - hot_since));
     }
-    /* VCC over 5.0 V (with margin): fatal within 0.5 s; VCC under 4.4 V: a stop */
-    if (S.vcc >= 5.03) { if (!vcch_since) vcch_since = S.ticks; else if (S.ticks - vcch_since > SEC(0.6) && ph != PH_FATAL) violation(I_VCC_HIGH, "vcc %.3f", S.vcc); }
+    /* VCC over 5.0 V (with margin): fatal within 0.5 s; VCC under 4.4 V: a stop.  The firmware sees VCC through the reference, so a
+       reference error injected (E_CAL) moves both thresholds by that much: the rule is the firmware's, not the sensor's */
+    if (S.vcc >= 5.03 * (1 + fabs(S.bg_err))) { if (!vcch_since) vcch_since = S.ticks; else if (S.ticks - vcch_since > SEC(0.6) && ph != PH_FATAL) violation(I_VCC_HIGH, "vcc %.3f", S.vcc); }
     else vcch_since = 0;
-    if (S.vcc <= 4.38) { if (!vccl_since) vccl_since = S.ticks; else if (S.ticks - vccl_since > SEC(1.5) && any_drive()) violation(I_VCC_LOW, "vcc %.3f", S.vcc); }
+    if (S.vcc <= 4.38 * (1 - fabs(S.bg_err))) { if (!vccl_since) vccl_since = S.ticks; else if (S.ticks - vccl_since > SEC(1.5) && any_drive()) violation(I_VCC_LOW, "vcc %.3f", S.vcc); }
     else vccl_since = 0;
     /* the input below the gate (about 4.59 V; checked at 4.50): a stop within 1.5 s */
     if (vin_sensed() < 4.50) { if (!vinl_since) vinl_since = S.ticks; else if (S.ticks - vinl_since > SEC(1.5) && any_drive()) violation(I_VIN_LOW, "input %.2f V", vin_sensed()); }

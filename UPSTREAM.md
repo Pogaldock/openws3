@@ -4,8 +4,8 @@ WS3 Unlocked is built on [OpenWS3](https://github.com/openws3/openws3). Some of 
 itself (as of commit `b20df96`, the one this fork started from). This file is ready to be offered back: each item says what is wrong,
 how it shows, where the fix is, and the test that proves it, so the OpenWS3 authors can take what they want, in their own way.
 
-Nothing here has been sent yet. Offering it is a post on someone else's project, so it waits for the maintainer of WS3 Unlocked
-(SYMBIOZE) to decide; the plan is one issue per item, each linking to the fix and its test.
+The issue texts, one per fix, are in `upstream/`; `sh upstream/post.sh` opens them on OpenWS3 (needs the GitHub CLI, logged in).
+OpenWS3's main branch was still at `b20df96` when they were written, so every item applies to its current code.
 
 ## Safety
 
