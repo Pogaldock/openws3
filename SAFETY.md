@@ -14,8 +14,7 @@ goes. Items marked *(upstream too)* are defects that are also in OpenWS3 as of c
 - **Tested on one charger.** Everything else is simulation, tests and review. Hardware differs from unit to unit.
 - **Supervise every charge.** Charge on a non-flammable surface, never unattended, never overnight, and only cells in good condition.
 - **The firmware cannot fix hardware.** A failed transistor that stays on, a cracked board or a damaged cell are beyond what it can stop.
-- **Check your unit once** with a multimeter (below) before you rely on it. The 4.35 V (LiHV) setting is hidden until you allow it in
-  the menu; allow it only after that check.
+- **Check your unit once** with a multimeter (below) before you rely on it, especially before trusting the 4.35 V (LiHV) setting.
 - **An independent audit found real bugs, and they were fixed** (section "Independent audit" below). An audit lowers the risk; it does
   not prove the firmware correct. Expect more.
 
@@ -35,11 +34,11 @@ The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades,
   host pulsing a port on and off pushed a cell to **4.45 V** (found by review, reproduced in simulation; a held bleed switch also
   drained a cell to 0 V in an hour). Both were fixed first *(upstream too)*; the mode was then removed altogether, to make room for
   the statistics and because no user needs it. Commands 7 to 9 now get "unknown command" and drive nothing (simulated: `no_dev`).
-- **4.35 V behind a switch (WS3 Unlocked 0.2-beta.2):** the LiHV target is skipped in the menu and refused over USB until CHARGING,
-  ALLOW 4.35V is set to YES; a stored 4.35 V target without it loads as 4.20 V. A LiPo can no longer be put on 4.35 V by one tap.
-- **B2 no longer changes the target (0.2-beta.2):** on the main screen B2 changes what the cells show; the voltage is set in the menu
-  only. Before, B2 changed the views while charging and the voltage when stopped: the habit of tapping it for the views could
-  select 4.35 V for ordinary LiPos the next time (found by the audit).
+- **ALLOW 4.35V (WS3 Unlocked 0.2-beta.2):** a menu switch (CHARGING) for the LiHV target, **on by default**: this charger is for
+  whoop cells, almost all LiHV, and the author chose that over a safer-for-LiPo default. Set to NO, 4.35 V is skipped by the menu and
+  by B2 and refused over USB, and a stored 4.35 V target loads as 4.20 V: for anyone who charges only LiPo. With it on, as in OpenWS3,
+  one B2 tap on the stopped main screen moves the target from 4.20 V to 4.35 V: **check the target shown in the header before you
+  start.** A LiPo charged to 4.35 V is overcharged by 150 mV.
 - **The target cannot change mid-run (0.2-beta.2):** a run started (by a USB host, say) while the voltage was being edited in the
   menu kept the edit going, and the target could be stepped mid-run, to 4.35 V on a LiPo run among others (found by the audit,
   reproduced in simulation). Now a run cannot start during such an edit, and a run that starts undoes it (simulated: `menu_edit_start`;
@@ -223,7 +222,7 @@ one is wrong. Their claims were checked against the code before anything was cha
   - the interrupt calling a shared multiply routine (above); a build check now forbids it
   - "ALL FULL" with a faulted port, and the storage offer restarting the run and clearing the fault
   - a run starting mid-edit, so the voltage could change mid-run
-  - B2 changing the voltage when stopped; 4.35 V one tap away
+  - 4.35 V one tap away: an ALLOW 4.35V switch, for LiPo-only users (on by default: the author's choice, above)
   - time limits counting passes instead of time
   - over-voltage blind at the top of the ADC's range
   - the current sense offset near the end-of-charge threshold
@@ -270,7 +269,7 @@ Each line: what is assumed, how well it is supported, what happens if it is wron
   gives 4.157 to 4.247 V on a 4.20 V setting. Version B chips store a factory measurement (diagnostics page 1); version A, like the
   tested unit, does not, so it is not used yet. If wrong: as above, all channels together.
 - **Worst case of the two without a multimeter check: about plus or minus 3 %**, up to about 4.33 V on 4.20 V and 4.48 V on 4.35 V.
-  This is why 4.35 V is hidden until allowed, and why the multimeter check matters.
+  This is why the multimeter check matters, before 4.35 V above all.
 - **The rail and the six ports read alike.** Support: none measured. The cell's final voltage is set by the rail sensor; "full", the
   over-voltage faults and the bleed are judged by the port sensors. If they differ by about 0.7 % or more: a cell never reads "full"
   and is held at full voltage until the 3 h fault, or false over-voltage faults. Check: compare the rail and each port with a
@@ -299,7 +298,7 @@ Each line: what is assumed, how well it is supported, what happens if it is wron
   cells; the resistance includes the lead and connector. If wrong: the estimate is off by minutes, and good packs read "RETIRE".
   These only display; nothing charges by them.
 - **Users read the warnings, own a multimeter and supervise.** Support: none; many will not. That is why the installer asks for five
-  boxes to be ticked, 4.35 V is off by default, and the defaults are the safe ones. Supervision remains the only backup for what the
+  boxes to be ticked and the default target is 4.20 V. Supervision remains the only backup for what the
   firmware cannot see (a failing transistor, a cell heating up).
 - **VIFLY's firmware can be put back.** Not supported: no restore package has been tested, and the loader cannot read the old firmware
   out first. Treat installing as possibly one-way.
@@ -341,7 +340,7 @@ Each line: what is assumed, how well it is supported, what happens if it is wron
 
 ## Check your own charger
 
-- **After installing 0.2-beta.2 every setting is back to its default** (0.3 A, 4.20 V, 4.35 V not allowed): set yours again.
+- **After installing 0.2-beta.2 every setting is back to its default** (0.3 A, 4.20 V, 4.35 V allowed): set yours again.
 - **First boot:** the splash plays once with its jingle and the main screen comes up. A splash every few seconds means a reset loop
   (most likely the tone timer): reinstall the previous build (hold the left button while plugging in USB-C) and report it.
 - **Multimeter (the important one):** charge a cell to full, let it rest 5 minutes, measure it at the cell. 4.17 to 4.23 V for 4.20 V,

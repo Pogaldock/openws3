@@ -162,7 +162,8 @@ progress { width: 100%; height: 10px; margin-top: 10px; accent-color: var(--acce
     <ul>
       <li><b>Supervise the charger</b> the whole time it charges. Never leave it charging unattended or overnight.</li>
       <li>Charge only cells in good condition, and pick the target voltage for the cell. 4.35 V is for high-voltage (HV) cells only, and is
-        hidden until you switch it on in the menu (CHARGING, ALLOW 4.35V): do that only after the multimeter check below.</li>
+        available by default; if you charge only LiPo, switch it off in the menu (CHARGING, ALLOW 4.35V = NO). Check the target on the
+        screen before every start.</li>
       <li>Check a full cell with a multimeter after your first charges: rested 5 minutes it should read the target (4.17 to 4.23 V for 4.20 V, 4.32 to 4.38 V for 4.35 V).</li>
       <li><b>Going back to VIFLY's firmware may not be possible</b>: no restore package has been tested. Only this page and OpenWS3 are known to install on it.</li>
       <li>It is made for the <b>WhoopStor V3</b> charger only. See the <a href="https://github.com/Pogaldock/ws3-unlocked/blob/rot-theme/GUIDE.md" target="_blank" rel="noopener">user guide</a> for how to use it.</li>
@@ -280,7 +281,7 @@ sudo udevadm control --reload-rules</pre>
       <label><input type="checkbox"> This charger is a VIFLY <b>WhoopStor V3</b>.</label><br>
       <label><input type="checkbox"> I will <b>supervise every charge</b>, on a non-flammable surface, never unattended or overnight.</label><br>
       <label><input type="checkbox"> I will check a rested full cell with a <b>multimeter</b> (or a cell checker I trust) before relying on the
-        voltages, and keep the 4.35 V setting off until it reads right.</label><br>
+        voltages, and check the target voltage on the screen before every start.</label><br>
       <label><input type="checkbox"> I understand this is <b>unofficial firmware, written largely with an AI assistant and tested on one charger</b>,
         and that going back to VIFLY's firmware may not be possible.</label><br>
       <label><input type="checkbox"> I install it <b>at my own risk</b>: there is no warranty, and its author takes no responsibility for damage,

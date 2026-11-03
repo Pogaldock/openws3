@@ -70,7 +70,7 @@ static void t_edit(void)
 {
     fresh(0); go(C_CHARGE, 0);
     CHECK(menu_event(OK) == MA_CHANGED && menu_editing());                         /* edit the target voltage */
-    more(1);                                                                       /* 4.35 V is not allowed: skipped */
+    more(1);                                                                       /* ALLOW 4.35V switched off (fresh): skipped */
     CHECK(settings.volt == VOLT_3_80 && has(menu_text(1), "3.80V"));                 /* live */
     more(1); CHECK(settings.volt == VOLT_3_85);
     more(1); CHECK(settings.volt == VOLT_3_85);                                      /* values stop at the ends */

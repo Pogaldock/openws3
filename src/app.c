@@ -404,10 +404,15 @@ static void handle_buttons(void)
             break;
         case EV_OK: menu_enter(); buzz_play(PAT_KEY); break;
         case EV_B2_LONG: ports_enter(); buzz_play(PAT_KEY); break;
-        case EV_B2:                                  /* what the cells show (current, mAh, time to full, health).  Not the voltage: that is
-                                                        in the menu, so a tap meant for the views can never change the target */
-            view = (uint8_t)((view + 1) & 3);
-            view_lo = (uint16_t)now_ms; view_lo += VIEW_LABEL_MS; view_lbl_on = 1;
+        case EV_B2:
+            if (run) {                                   /* charging: what the cells show (current, mAh, time to full, health) */
+                view = (uint8_t)((view + 1) & 3);
+                view_lo = (uint16_t)now_ms; view_lo += VIEW_LABEL_MS; view_lbl_on = 1;
+            } else {                                     /* stopped: the target voltage (4.35 V skipped when ALLOW 4.35V is off) */
+                settings.volt = (uint8_t)((settings.volt + 1) % NVOLTS);
+                if (settings.volt == VOLT_4_35 && !settings.hv) settings.volt++;
+                save_later();
+            }
             buzz_play(PAT_KEY);
             break;
         }
@@ -587,7 +592,7 @@ void app_pass(void)
     ui.blink = (uint8_t)((hal_ms() >> 9) & 1);
     ui.tphase = (uint8_t)(((hal_ms() >> 10) & 3) == 3);
     ui.usb_off = settings.usb_off;
-    ui.view = view;
+    ui.view = run ? view : 0;
     if (view_lbl_on) { el_s = view_lo; el_s -= (uint16_t)now_ms; if (el_s > VIEW_LABEL_MS) view_lbl_on = 0; }   /* once, not every 65 s */
     ui.view_lbl = view_lbl_on;
     ui.ps = screen != SCR_PORTS ? 0 : portset_editing() ? 2 : 1; ui.sel = portset_port(); ui.locked = portset_locked(); ui.mixed = 0;

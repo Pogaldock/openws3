@@ -199,8 +199,8 @@ static void s_storage(void)
     int p;
     sim_attach(0, 4.15, 120); sim_attach(1, 4.05, 120); sim_attach(2, 3.60, 120);
     boot();
-    both(0.12); both(0.12); both(0.12); tap(2);                   /* menu, CHARGING, edit VOLTAGE: 4.20 -> 3.80 V storage (B2 on the main
-                                                                     screen no longer changes it; 4.35 V is skipped, not allowed) */
+    both(0.12); both(0.12); both(0.12); tap(2); tap(2);           /* menu, CHARGING, edit VOLTAGE: 4.20 -> 4.35 -> 3.80 V storage (B2 on
+                                                                     the main screen no longer changes it) */
     both(0.12); both(1.0); both(1.0);                             /* confirm, back, close (saved) */
     CHECK(settings.volt == 2);
     start(); run_for(30 * 60);
@@ -615,14 +615,31 @@ static void s_menu_edit_start(void)
     S.usb_host = 1;
     boot();
     both(0.12); both(0.12);                                        /* the menu, CHARGING */
-    both(0.12); tap(2);                                            /* editing VOLTAGE: 3.80 V (4.35 V is skipped) */
+    both(0.12); tap(2);                                            /* editing VOLTAGE: 4.35 V (allowed by default) */
     usb(go, 3); run_for(1);
     printf("  host start while VOLTAGE is being edited: result %u (1 = refused), charging: %s", usb_tx[17], S.pwm[0] ? "YES" : "no");
     CHECK(usb_tx[17] == 1 && !S.pwm[0]);
     both(0.12); both(1.0); both(1.0); run_for(1);                  /* OK (the edit confirmed), back, back (menu closed, saved) */
     usb(go, 3); run_for(5);
     printf("; after closing the menu: result %u, port active %s at target index %u\n", usb_tx[17], S.pwm[0] || S.sw[0] ? "yes" : "NO", settings.volt);
-    CHECK(usb_tx[17] == 0 && S.global && (S.pwm[0] || S.sw[0]) && settings.volt == 2);   /* running at 3.80 V: the 3.9 V cell bleeds */
+    CHECK(usb_tx[17] == 0 && S.global && S.pwm[0] && settings.volt == 1);   /* running at 4.35 V, the edit kept */
+}
+
+/* B2 on the main screen: stopped, the target voltage (4.35 V skipped when ALLOW 4.35V is off); charging, the views only */
+static void s_b2_volt(void)
+{
+    int a, b, c, d;
+    sim_attach(0, 3.9, 300);
+    S.usb_host = 1;
+    cfg_load(); settings.hv = 0; cfg_save();
+    boot();
+    tap(2); a = settings.volt; tap(2); b = settings.volt; tap(2); c = settings.volt;
+    settings.hv = 1; tap(2); d = settings.volt;
+    printf("  B2 stopped, 4.35 V off: target %d %d %d (2 3 0: 4.35 V skipped); allowed: %d (1)", a, b, c, d);
+    CHECK(a == 2 && b == 3 && c == 0 && d == 1);
+    start(); run_for(5); tap(2); tap(2); run_for(2);
+    printf("; charging, two taps: target still %u\n", settings.volt);
+    CHECK(settings.volt == 1 && S.pwm[0] > 0);
 }
 
 typedef struct { const char *name; void (*fn)(void); } scen_t;
@@ -636,7 +653,7 @@ static const scen_t SC[] = {
     { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
     { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot }, { "no_dev", s_no_dev },
     { "stats", s_stats }, { "store", s_store }, { "store_back", s_store_back }, { "fault_full", s_fault_full },
-    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start },
+    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt },
     { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
     { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
    

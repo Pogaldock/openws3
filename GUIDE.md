@@ -92,14 +92,15 @@ A port held by a limit shows `LIMIT`, and a port set to `OFF` shows `OFF`; the `
 | Action | Effect |
 |---|---|
 | **B1** tap | charge current +0.1 A: 0.3 A, 0.4 A ... 1.3 A, then back to 0.3 A |
-| menu, CHARGING, **VOLTAGE** | the target voltage: 4.20 V, 3.80 V storage, 3.85 V storage, and 4.35 V only once ALLOW 4.35V is `YES` |
-| **B2** tap | what the cells show (below). It does not change the voltage: that is only in the menu, so a tap can never change it by accident |
+| **B2** tap | target voltage: 4.20 V, 4.35 V, 3.80 V storage, 3.85 V storage, then back to 4.20 V (4.35 V skipped when ALLOW 4.35V is `NO`). While charging, B2 changes what the cells show instead (below) |
 
-The current is saved a few seconds after your last tap; the voltage when the menu closes.
+The choice is saved a few seconds after your last tap. **Check the target in the right-hand box before you start**: one tap too many
+puts LiPo cells on 4.35 V.
 
-**4.35 V is off until you allow it.** In the menu, CHARGING, set **ALLOW 4.35V** to `YES`. Do that only if you charge LiHV cells,
-and only after checking your unit: charge a cell on 4.20 V, let it rest 5 minutes and measure it at its connector with a multimeter
-(4.17 to 4.23 V is right). A drone's on-screen voltage is not good enough for this: two drones read the same cell 150 mV apart.
+**If you charge only LiPo cells, switch 4.35 V off:** menu, CHARGING, **ALLOW 4.35V** = `NO`. It is on by default because whoop
+cells are almost all LiHV. Either way, check your unit once: charge a cell, let it rest 5 minutes and measure it at its connector
+with a multimeter (4.17 to 4.23 V on 4.20 V, 4.32 to 4.38 V on 4.35 V). A drone's on-screen voltage is not good enough for this:
+two drones read the same cell 150 mV apart.
 
 | Target | Use |
 |---|---|
@@ -119,7 +120,7 @@ supply (see [When something is wrong](#when-something-is-wrong)).
 
 ### What the cells show while charging
 
-**Tap B2** to change what the line under each voltage shows. The middle box names the view for a moment.
+**Tap B2 while charging** to change what the line under each voltage shows. The middle box names the view for a moment.
 
 | View | Shows |
 |---|---|
@@ -203,8 +204,8 @@ While you edit, the item is marked orange and the bottom row changes to `< -`, `
 
 | Category | Item | What it does |
 |---|---|---|
-| **CHARGING** | VOLTAGE | the target voltage (the only place it is set): 4.20 V, 3.80 V or 3.85 V storage, and 4.35 V once allowed |
-| | ALLOW 4.35V | `NO` (default) or `YES`: whether 4.35 V (LiHV) can be chosen. Back to `NO` takes a 4.35 V target back to 4.20 V |
+| **CHARGING** | VOLTAGE | the target voltage, as the right button does on the main screen |
+| | ALLOW 4.35V | `YES` (default) or `NO`: whether 4.35 V (LiHV) can be chosen. `NO` for LiPo-only use; it takes a 4.35 V target back to 4.20 V |
 | | CURRENT | the charge current, 0.3 to 1.3 A in 0.1 A steps |
 | **LIMITS** | MAX IN AMPS | a ceiling on the current taken from the input: `OFF`, or 0.5 to 3.0 A in 0.1 A steps, then 0.5 A steps up to 10 A |
 | | MIN IN VOLTS | a floor for the input voltage: `OFF`, or 4.80 to 5.00 V in 0.05 V steps, up to 6.0 V in 0.1 V steps, then 0.5 V steps up to 25 V |
@@ -324,12 +325,12 @@ PREFERENCES, SOUND: `ON`, `HEARTBEAT` (as `ON`, plus the heartbeat) or `OFF` (mu
 ## Default settings
 
 A unit with nothing saved starts with these values. Installing 0.2-beta.2 over an earlier build also brings them back (the settings
-layout changed, so that no old value could switch 4.35 V on):
+layout changed):
 
 | Setting | Default |
 |---|---|
 | VOLTAGE | 4.20 V |
-| ALLOW 4.35V | NO |
+| ALLOW 4.35V | YES |
 | CURRENT | 0.3 A |
 | MAX IN AMPS | OFF |
 | MIN IN VOLTS | 4.90 V |

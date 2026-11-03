@@ -43,6 +43,7 @@ M = [
  ("src/app.c", "        if (adc_saturated(port_v_ch(k))) cin.v_now[k] = V_SATURATED;", "        ;", "saturated"),
  ("src/app.c", "    if (screen == SCR_MENU && menu_editing()) return 0;   /* an edit open: finish it first (the voltage must not change mid-run) */", "    ;", "menu_edit_start"),
  ("src/menu.c", "    if (it == IT_VOLT && *v == VOLT_4_35 && !settings.hv) { if (up) (*v)++; else (*v)--; }   /* 4.35 V is skipped until it is allowed */", "    ;", "TEST"),
+ ("src/app.c", "                if (settings.volt == VOLT_4_35 && !settings.hv) settings.volt++;", "                ;", "b2_volt"),
  ("src/menu.c", "    if (editing && level && is_locked(item())) { *SLOT[item()] = backup; editing = 0; }", "    ;", "TEST"),
  ("src/cfg_pure.c", "    if (!settings.hv && settings.volt == VOLT_4_35) settings.volt = VOLT_4_20;   /* 4.35 V only once it is allowed */", "    ;", "TEST"),
  ("src/stats.c", "                if (w.ron && ++w.tt >= R_GIVE_UP) w.ron = 0;    /* no stable second in 60 s (a limited supply): no reading this fill */", "                ;", "TEST"),

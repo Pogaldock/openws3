@@ -231,11 +231,11 @@ static void t_cfg(void)
     CHECK(cfg_valid_buzzer(0) == 0); CHECK(cfg_valid_buzzer(1) == 1);
     CHECK(cfg_valid_usb_off(1) == 1 && cfg_valid_usb_off(0) == 0 && cfg_valid_usb_off(0xFF) == 0);
     memset(&settings, 0xFF, sizeof settings); cfg_validate();                     /* erased page: the defaults */
-    CHECK(settings.cur == 21 && settings.volt == 0 && settings.sound == 1 && settings.hv == 0);
+    CHECK(settings.cur == 21 && settings.volt == 0 && settings.sound == 1 && settings.hv == 1);   /* 4.35 V allowed by default */
     CHECK(settings.ilim == 0 && settings.vmin == 98 && settings.vcut == 0 && settings.lmode == LM_BY_CH);
     CHECK(settings.ch_cur[0] == 0 && settings.ch_cur[NPORTS - 1] == 0 && settings.ch_off == 0 && settings.usb_off == 0);
-    /* 4.35 V only once it is allowed: a stored 4.35 V target without the permission loads as 4.20 V; any value but 1 is "not allowed" */
-    CHECK(cfg_valid_hv(1) == 1 && cfg_valid_hv(0) == 0 && cfg_valid_hv(0xFF) == 0 && cfg_valid_hv(4) == 0);
+    /* ALLOW 4.35V: on unless switched off (0); a stored 4.35 V target with it off loads as 4.20 V */
+    CHECK(cfg_valid_hv(1) == 1 && cfg_valid_hv(0) == 0 && cfg_valid_hv(0xFF) == 1);
     settings.volt = VOLT_4_35; settings.hv = 0; cfg_validate(); CHECK(settings.volt == VOLT_4_20);
     settings.volt = VOLT_4_35; settings.hv = 1; cfg_validate(); CHECK(settings.volt == VOLT_4_35);
     settings.volt = VOLT_3_80; settings.hv = 0; cfg_validate(); CHECK(settings.volt == VOLT_3_80);

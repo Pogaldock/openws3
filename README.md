@@ -41,8 +41,8 @@ charge statistics (mAh, time to full, cell resistance), a storage reminder, and 
   was reproduced in the simulator, then fixed and given a test. These were AI reviewers, not people: a human expert has not reviewed it.
 - **Had the whole project audited again** before 0.2-beta.2, by four new AI reviewers who were told to question the assumptions too.
   They found, among others: the sound code able to corrupt a cell-voltage reading from inside an interrupt, the time limits running
-  slow when the screen was busy, over-voltage protection blind at a low chip supply, a way to change the voltage mid-run, and 4.35 V
-  one tap away. All fixed, each with a test; the full list, and what was not fixed and why, is in SAFETY.md.
+  slow when the screen was busy, over-voltage protection blind at a low chip supply, and a way to change the voltage mid-run. All
+  fixed, each with a test; the full list, and what was not fixed and why, is in SAFETY.md.
 - **Broke each safety check on purpose** (mutation testing) to prove the tests notice: the result of the run on this code is being filled in.
 - **Measured it on my charger**: supply, input reading, rail, stack, temperature sensor, the USB-C guard on a laptop port.
 - **Made the build checkable**: GitHub builds it only if every test passes, and publishes checksums and a signed build record.
@@ -51,7 +51,8 @@ charge statistics (mAh, time to full, cell resistance), a storage reminder, and 
 ### What is still risky
 - **The voltage accuracy of your unit.** Resistor tolerance and the chip's reference vary between units. Worst case without a check:
   about plus or minus 3 %, up to **4.33 V on the 4.20 V setting and 4.48 V on 4.35 V**. Check a rested full cell with a multimeter
-  before you trust it (SAFETY.md). That is why **4.35 V is hidden until you allow it** in the menu: allow it only after that check.
+  before you trust it (SAFETY.md). 4.35 V (LiHV) is available by default, because whoop cells are almost all LiHV; if you charge
+  only LiPo, switch it off in the menu (CHARGING, ALLOW 4.35V = NO) and it can no longer be selected by mistake.
 - **On the tested unit itself the 4.35 V accuracy is not confirmed yet**: a rested LiHV cell read 4.33 V on the charger, 4.40 V and
   4.25 V on two drones. Until a multimeter settles it, I charge on 4.20 V.
 - **One unit tested.** Another hardware revision may behave differently.
@@ -105,7 +106,7 @@ Everything not listed here is OpenWS3's, unchanged.
 - **Reactive charging screen**: a charging eye's gaze speeds up with the current; an empty port is static with a sleeping eye that
   opens now and then; when a cell goes in, finishes or faults, every eye looks toward that port; a cell that finishes or faults
   bursts into static first.
-- **Cell views** (B2 on the main screen; it no longer changes the voltage, which is set in the menu only): per cell the current, the mAh put in, the time to full (an estimate, shown with `~`) or the
+- **Charging views** (B2 while charging; stopped, B2 changes the target voltage as in OpenWS3): per cell the current, the mAh put in, the time to full (an estimate, shown with `~`) or the
   cell's health (GOOD / TIRED / RETIRE from its measured resistance).
 - **Finale and run summary**: when every cell is full, the logo burns in through static with a fanfare, then a summary (packs, minutes,
   total mAh, the weakest cell).
@@ -174,7 +175,7 @@ Everything not listed here is OpenWS3's, unchanged.
   holding the left button while plugging in USB-C; one that runs OpenWS3 or WS3 Unlocked restarts into it by itself.
 - **Going back:** OpenWS3 can be installed from its own releases, and an earlier WS3 Unlocked from this repository's releases (hold the
   left button while plugging in USB-C, then install). **No way back to VIFLY's firmware has been tested**: treat installing as one-way.
-- **After installing 0.2-beta.2** every setting is back to its default (0.3 A, 4.20 V, 4.35 V not allowed): set yours again.
+- **After installing 0.2-beta.2** every setting is back to its default (0.3 A, 4.20 V, 4.35 V allowed): set yours again.
 - **First charges:** follow the checklist in SAFETY.md (a multimeter check of a full cell, diagnostics page 1).
 
 ### Check what you downloaded
@@ -223,9 +224,9 @@ The menu has four categories; **OK** opens one and **BACK** returns to the list 
 
 | Category | Item | Setting |
 |---|---|---|
-| CHARGING | VOLTAGE | 4.20 V / 4.35 V (only once ALLOW 4.35V is YES) / 3.80 V storage / 3.85 V storage (not while charging). The only place the target is set |
+| CHARGING | VOLTAGE | 4.20 V / 4.35 V (skipped when ALLOW 4.35V is NO) / 3.80 V storage / 3.85 V storage (not while charging). B2 on the main screen does the same when stopped |
 | | CURRENT | charge current, 0.3 to 1.3 A in 0.1 A steps (not while charging) |
-| | ALLOW 4.35V | `NO` (default) or `YES`: whether the 4.35 V LiHV target can be chosen at all. Set `YES` only for LiHV cells, after checking your unit with a multimeter. Switching it back to `NO` takes a 4.35 V target back to 4.20 V (not while charging) |
+| | ALLOW 4.35V | `YES` (default) or `NO`: whether the 4.35 V LiHV target can be chosen at all. Set `NO` if you charge only LiPo cells, so it cannot be selected by mistake. Switching it to `NO` takes a 4.35 V target back to 4.20 V (not while charging) |
 | LIMITS | MAX IN AMPS | limit on the estimated input current: off, 0.5 to 3.0 A in 0.1 A steps, then 0.5 A steps up to 10 A. The ports are limited smoothly |
 | | MIN IN VOLTS | minimum input voltage: off, 4.80 to 5.00 V in 0.05 V steps, to 6.0 V in 0.1 V steps, then 0.5 V steps up to 25 V |
 | | BELOW MIN | what happens when the input is below that minimum: `LIMIT` reduces the charge current smoothly until the input recovers; `STOP RUN` stops charging after a second and shows `V LIM!` |
