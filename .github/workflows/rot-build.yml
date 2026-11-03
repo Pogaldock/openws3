@@ -54,8 +54,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions: { contents: write, id-token: write, attestations: write }
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2  (for RELEASE_NOTES.md)
-        with: { persist-credentials: false }
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2  (RELEASE_NOTES.md, and the branch check)
+        with: { fetch-depth: 0, persist-credentials: false }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4.3.0
         with: { name: firmware, path: out }
       - name: Checksums still match
@@ -73,6 +73,9 @@ jobs:
           if [ -n "$ver" ]; then                         # a version: its own release, kept; a "-beta" or "-rc" version is a pre-release
             num() { sed -n "s/^#define $1 *\([0-9]*\).*/\1/p" src/version.h; }
             want="v$(num FW_MAJOR).$(num FW_MINOR).0"; [ "$(num FW_PRE)" != 0 ] && want="$want-beta.$(num FW_PRE)"
+            old=$(git rev-parse -q --verify "refs/tags/$ver^{commit}" || true)
+            if [ -n "$old" ] && [ "$old" != "$GITHUB_SHA" ]; then echo "error: tag $ver exists at another commit ($old)"; exit 1; fi
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/rot-theme; then echo "error: $GITHUB_SHA is not on the main branch (rot-theme)"; exit 1; fi
             if [ "$ver" != "$want" ]; then echo "error: version $ver, but src/version.h says $want (what the charger reports)"; exit 1; fi
             if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$ver" >/dev/null 2>&1; then echo "error: release $ver exists already; it is never replaced"; exit 1; fi
             pre=""; case "$ver" in *-*) pre=--prerelease ;; esac

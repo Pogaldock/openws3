@@ -55,7 +55,7 @@ of about 4.6 V or more: below that it shows `INPUT LOW` and waits until a supply
 | Box | Shows |
 |---|---|
 | left | the charge current each port gets (`0.3A`). A `*` after it means some port has its own current or is switched off |
-| middle | the input voltage (`5.00V`). When the unit stops on its own, the reason replaces it, see [When something is wrong](#when-something-is-wrong) |
+| middle | the input voltage (`5.00V`). A stop by MIN IN VOLTS shows `V LIM!` here; the other stops take the whole screen, see [When something is wrong](#when-something-is-wrong) |
 | right | the target voltage the cells are charged to (`4.20V`) |
 
 A green bar under the boxes shows how close the cells are, on average, to the target while charging.
@@ -75,7 +75,7 @@ A cell reading below 1.00 V is treated as not there: a deeply discharged cell is
 | `REST` | resting | output off for a moment; the cell voltage is read to decide what to do next |
 | `FULL` | a spike; the cell turns dark green | the cell is at the target voltage; the port keeps watching it |
 | `BLEED` | a drop | the cell is above the target, so the port discharges it down to the target |
-| `ERR` | a red skull, blinking; the cell turns red | a fault on that port: over-voltage, over-current, a cell below 2.5 V (over-discharged), 30 minutes without reaching 3.0 V, or 3 hours of charging without finishing; it stays off until you remove the cell or stop the run |
+| `ERR` | a red skull, blinking; the cell turns red | a fault on that port: over-voltage, over-current, a cell below 2.5 V (over-discharged), 30 minutes without reaching 3.0 V, 3 hours of charging without finishing, 4.40 V reached while bleeding, or 5 hours of bleeding without getting down; it stays off until you remove the cell or stop the run |
 
 While charging, a port shows its measured current, and for one second in four the current it is aiming for (`>0.6A`).
 
@@ -154,7 +154,8 @@ faulted cell out (or stop the run) and look at it before charging it again.
 
 **Storage reminder.** Full LiPos should not sit at 4.20 or 4.35 V for days. If the cells have been full for 2 hours and the run is
 still on, the charger beeps and offers storage voltage: **B2** stops the run, sets 3.80 V (3.85 V after a 4.35 V charge) and starts
-again, so the cells are discharged to storage; **B1** keeps them full. It asks at most three times, 10 minutes apart. The storage
+again, so the cells are discharged to storage; any other key keeps them full. It asks at most three times, 10 minutes apart (if the menu or another screen is open when it is due, it only beeps, and that
+counts as one of the three). The storage
 target is for that run only: when you stop the run (or the power goes), your own target comes back. The summary then says
 `ALL STORED`.
 
@@ -181,7 +182,7 @@ While charging you can look at the values but not change them (`LOCKED`).
 
 ## The menu
 
-**Tap both buttons (OK)** on the main screen to open the menu. It works while charging too, but the voltage and the current are then locked.
+**Tap both buttons (OK)** on the main screen to open the menu. It works while charging too, but VOLTAGE, CURRENT, ALLOW 4.35V and DISABLE USB POWER are then locked.
 
 <img src="docs/screens/menu_categories.png" width="480">
 
@@ -205,8 +206,8 @@ While you edit, the item is marked orange and the bottom row changes to `< -`, `
 | Category | Item | What it does |
 |---|---|---|
 | **CHARGING** | VOLTAGE | the target voltage, as the right button does on the main screen |
-| | ALLOW 4.35V | `YES` (default) or `NO`: whether 4.35 V (LiHV) can be chosen. `NO` for LiPo-only use; it takes a 4.35 V target back to 4.20 V |
 | | CURRENT | the charge current, 0.3 to 1.3 A in 0.1 A steps |
+| | ALLOW 4.35V | `YES` (default) or `NO`: whether 4.35 V (LiHV) can be chosen. `NO` for LiPo-only use; it takes a 4.35 V target back to 4.20 V |
 | **LIMITS** | MAX IN AMPS | a ceiling on the current taken from the input: `OFF`, or 0.5 to 3.0 A in 0.1 A steps, then 0.5 A steps up to 10 A |
 | | MIN IN VOLTS | a floor for the input voltage: `OFF`, or 4.80 to 5.00 V in 0.05 V steps, up to 6.0 V in 0.1 V steps, then 0.5 V steps up to 25 V |
 | | BELOW MIN | what happens when the input falls below that floor: `LIMIT` or `STOP RUN` |
@@ -219,7 +220,7 @@ While you edit, the item is marked orange and the bottom row changes to `< -`, `
 |---|---|---|
 | <img src="docs/screens/menu_charging.png" width="300"> | <img src="docs/screens/menu_limits.png" width="300"> | <img src="docs/screens/menu_preferences.png" width="300"> |
 
-While a run is going, **OK** on VOLTAGE or CURRENT does nothing and the bottom row says why:
+While a run is going, **OK** on a locked item gives the error sound, changes nothing, and the bottom row says why:
 
 <img src="docs/screens/menu_locked.png" width="480">
 

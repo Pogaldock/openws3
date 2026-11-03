@@ -187,7 +187,7 @@ progress { width: 100%; height: 10px; margin-top: 10px; accent-color: var(--acce
       <p><b>Before you install, check that this charger is a WhoopStor V3</b> (six ports, a 160 x 80 colour screen, two buttons, USB-C).
         WS3 Unlocked is written for that board. On another charger, or another hardware revision, it can drive the power stage wrongly.
         If you are not sure, do not install it.</p>
-      <p>Installing replaces the firmware now on the charger, and this page does not keep a copy of it. The manufacturer's firmware can be put back later with the vendor's update package. Take all cells out of the charger first.</p>
+      <p>Installing replaces the firmware now on the charger, and this page cannot keep a copy of it. <b>No way back to the manufacturer's firmware has been tested: treat installing as one-way.</b> OpenWS3 and earlier WS3 Unlocked builds can be installed again. Take all cells out of the charger first.</p>
     </div>
     <p>Only the USB-C cable and this page are needed.</p>
     <ol class="steps">
@@ -482,7 +482,6 @@ $('bStart').onclick = async () => {
 $('bStop').onclick = async () => { try { await command(1); msg = ''; } catch (e) { msg = e.message; } };
 $('bBeep').onclick = () => { beep = 3; dirty = true; };
 addEventListener('keydown', e => { if (e.key === 'Escape') { if (inDev()) allOff(); else if (p1 && p1.run) command(1).catch(() => {}); } });
-addEventListener('pagehide', () => { if (dev && out) sendRaw([9, SESSION, 0]); });   // best effort; the watchdog covers the rest
 setInterval(() => { if (dev && kind === 'fw' && performance.now() - lastRx > 1500) reopen(); }, 500);
 if ('hid' in navigator) {
   navigator.hid.addEventListener('disconnect', e => { if (e.device === dev) disconnected(); });

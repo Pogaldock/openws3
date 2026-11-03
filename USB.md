@@ -4,7 +4,7 @@ The firmware is a USB **HID** device (VID `34bf`, PID `1004`, product "WS3 Unloc
 needed. The report descriptor uses a vendor-defined usage page, so the host does not turn the telemetry into keyboard or other input events. On Linux it shows up as `/dev/hidrawN`. Use `tools/fwmon.py`.
 
 * Telemetry: 64-byte **IN** reports, polled every 10 ms, in two pages sent alternately (byte 3 = page): page 1 is the charger, page 2 the
-  limiter and supervisor, so each page is refreshed every 20 ms. It is available from power-up, and the commands work in every state,
+  limiter and supervisor, so each page is refreshed every 20 ms. It is available from power-up; the commands work in every state once the splash is over (about 3 s after power-up),
   also in a fatal condition (everything stays off; the unit can still be read, stopped and flashed). `fwmon.py` merges the two pages into one snapshot.
 * Commands: one 64-byte **OUT** report. The interrupt only stores it. `app_pass` executes it in the main loop with the same rules as
   the buttons, so the power path is never touched from interrupt context. There is no raw PWM or pin access: OpenWS3's developer

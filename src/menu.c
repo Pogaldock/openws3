@@ -58,7 +58,11 @@ uint8_t menu_event(uint8_t ev)
     if (editing) {
         if (up || dn) { step(item(), dn); return MA_CHANGED; }
         if (ev == EV_OK) { editing = 0; return MA_CHANGED; }
-        if (ev == EV_BACK) { *SLOT[item()] = backup; editing = 0; return MA_CHANGED; }
+        if (ev == EV_BACK) {
+            *SLOT[item()] = backup; editing = 0;
+            if (!settings.hv && settings.volt == VOLT_4_35) settings.volt = VOLT_4_20;   /* the undo keeps the 4.35 V rule */
+            return MA_CHANGED;
+        }
         return MA_NONE;
     }
     if (up) { cursor = cursor ? (uint8_t)(cursor - 1) : (uint8_t)(count() - 1); return MA_CHANGED; }

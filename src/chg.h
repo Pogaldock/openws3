@@ -70,7 +70,8 @@ void chg_cut(void);              /* rail trip: duties to zero and the soft ramp 
 #define I_PRE             7      /* 0.1 A */
 #define T_CHG_MAX_S       10800  /* 3 h of charging one cell, top-ups included (not counting time held by the limits): the port faults */
 #define T_PRE_MAX_S       1800   /* 30 min below V_PRE (at I_PRE) in one fill: a cell that does not come up is damaged: the port faults */
-#define T_BLEED_MAX_S     10800  /* 3 h of bleeding one cell: a discharge path that does not bring it down (or a huge cell): the port faults */
+#define T_BLEED_MAX_S     18000  /* 5 h of bleeding one cell: a discharge path that does not bring it down: the port faults (a storage
+                                    run takes 60 % off a full cell at about 0.2 A: 5 h covers cells up to about 1600 mAh) */
 #define I_ZERO_MAX        4      /* the current offset measured with the output off is used up to this (58 mA); more is not an offset */
 #define V_SATURATED       4600   /* a port reading at the ADC's full scale is passed on as this (5.05 V): over every fault threshold */
 #define PASSES_PER_S      222

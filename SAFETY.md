@@ -23,7 +23,8 @@ goes. Items marked *(upstream too)* are defects that are also in OpenWS3 as of c
 ### A cell charged above its voltage
 The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades, swells and can catch fire.
 - **CV regulation and over-voltage stop (OpenWS3):** the rail is held 15 mV above the target; a port whose voltage goes above the rail
-  and the target is faulted; 4.40 V is an absolute fault.
+  and the target (by 50 mV) for 0.45 s is faulted while charging; a full cell that rises leaves FULL and is bled down; while
+  bleeding, 4.40 V is a fault.
 - **Readings corrected for the chip's supply (WS3 Unlocked, upstream too):** the ADC measures against the chip's own supply (VCC),
   which differs from unit to unit and supply to supply. OpenWS3 corrected only the input voltage, so every port reading scaled with
   VCC. Simulated: OpenWS3 charges to **4.57 V** on a 4.20 V setting at VCC 4.95 V; WS3 Unlocked finishes at 4.200 to 4.203 V from
@@ -50,7 +51,8 @@ The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades,
   4.40 V a LiHV cell reaching 4.35 V can fault at the end of its charge. That is the safe direction.
 
 ### Too much current, or current into a damaged cell
-- **Per-port over-current fault and soft start (OpenWS3).** A 3 A short is cut in 10 ms and stays latched (simulated).
+- **Per-port over-current fault and soft start (OpenWS3).** A 3 A short pulls the port below 1 V and its output is off within 10 ms
+  (the cell-removed check, simulated); a current over twice the setting for 0.9 s faults the port and stays latched.
 - **Over-discharged cells refused (WS3 Unlocked):** a cell resting below 2.5 V faults instead of charging; simulated, a 2.3 V cell
   never gets current (`src/chg.c`).
 - **Pre-charge (WS3 Unlocked):** from 2.5 to 3.0 V a cell charges at 0.1 A, then ramps to its setting; simulated 0.110 A below and
@@ -71,8 +73,8 @@ The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades,
   (a full repaint after a supply dip is about 140 ms) made every limit late: at 9 ms passes the 3 h limit became 6 h (found by the
   audit). The app now measures each pass and hands the passes it lost to the charge logic, which counts them (the 3 h, 30 min and bleed
   limits, and the over-current and over-voltage waits). Unit test: with every pass four passes long, the 3 h limit fires at 3 h.
-- **Bleed time limit (0.2-beta.2):** 3 hours of bleeding one cell faults the port: a discharge path that does not bring the cell down
-  is not left on for ever (about 1 W a port).
+- **Bleed time limit (0.2-beta.2):** 5 hours of bleeding one cell faults the port: a discharge path that does not bring the cell down
+  is not left on for ever (about 1 W a port). 5 h, not 3: a storage run on a large full cell legitimately bleeds for hours.
 
 ### Heat
 - **Fan (OpenWS3)** by the board thermistor.
@@ -137,7 +139,7 @@ bypass conducts both ways: a pack plugged into the XT60 afterwards would be fed 
   (simulated: one flipped bit that would have selected 4.35 V loads 4.20 V).
 - **Flash wear (WS3 Unlocked):** settings changed by a host are saved once it stops changing them, so a program cannot wear the flash out.
 - **New layout in 0.2-beta.2:** the byte that held the theme now holds ALLOW 4.35V. So that no old value can switch 4.35 V on, the
-  layout number changed: **installing 0.2-beta.2 resets every setting to its default** (0.3 A, 4.20 V, sound on, limits off).
+  layout number changed: **installing 0.2-beta.2 resets every setting to its default** (0.3 A, 4.20 V, 4.35 V allowed, sound on, MAX IN AMPS off, MIN IN VOLTS 4.90 V).
 
 ### The installer and the files you download
 - **The page checks itself:** the firmware inside `openws3.html` comes with its SHA-256; the page computes it again and refuses to
@@ -152,7 +154,7 @@ bypass conducts both ways: a pack plugged into the XT60 afterwards would be fed 
 - **The release:** built by GitHub Actions only after every test passed, in a job that has no write access; published by a separate job
   with `SHA256SUMS` and a signed build-provenance attestation. Actions are pinned to commit SHAs and the compiler download is checked
   by its SHA-256. Each version (a `v*` tag) is kept as its own release; `rot-latest` is the newest build of the branch.
-- **Releases (0.2-beta.2):** a version is released only from the main branch, only if its name matches what the firmware reports
+- **Releases (0.2-beta.2):** a version is released only from a commit on the main branch, only if its name matches what the firmware reports
   (`src/version.h`), and never over an existing release; LICENSE is shipped with the files.
 - **Not covered:** the installer does not read the flash back after writing (the loader's read command is not used); the loader's
   answers to its erase commands are not checked (what a good answer looks like is not documented; checking a guess could break every
@@ -163,7 +165,7 @@ bypass conducts both ways: a pack plugged into the XT60 afterwards would be fed 
 ## How it was checked
 
 ### Unit tests (OpenWS3's, extended) - `make test`
-52,238 checks on the PC: the charge state machine (9,514), the input limits (20,852), the menu (324), port settings (4,490), and
+52,239 checks on the PC: the charge state machine (9,515), the input limits (20,852), the menu (324), port settings (4,490), and
 settings, display text, the melody engine, the statistics and helpers (17,058). WS3 Unlocked added the refusal, pre-charge, time-limit,
 real-time, current-offset, rail-alarm, 4.35 V switch, menu-lock and statistics tests and the diagnostics text.
 
@@ -171,7 +173,7 @@ real-time, current-offset, rail-alarm, 4.35 V switch, menu-lock and statistics t
 The real firmware (`src/app.c` and every module it calls; only the register layer is replaced) runs on the PC against a model of the
 board: the supply and its USB-C / XT60 paths, the inverted rail with sag, six ports, cells with an open-circuit curve, internal
 resistance, polarisation and optional leakage, an ADC referenced to VCC with noise, gain errors and reference spread, the display's bus
-time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 43 scenarios:
+time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 48 scenarios:
 - full charges at VCC 4.45 to 4.95 V, reference spread plus or minus 1 %, ADC noise, combined worst case
 - user stop, input lost, cell pulled mid-charge, short circuit and its latch, storage voltage, power cycle mid-charge
 - dead cell, deeply discharged cell, internally shorted cell, cell that never fills, leaking cell, never-full cells under MAX IN AMPS
@@ -182,9 +184,12 @@ time, the watchdog and the thermistor. It presses the buttons like a person and 
 - a host asking for the removed developer mode: refused, no output ever driven
 - the statistics: mAh within 2 % of the model, resistance and time to full against the model's cell; the storage offer after 2 h
   full, and B2 on it taking the cells down to 3.85 V
+- passes running long for the whole run (a never-full cell must still stop at 3 h), a 4.35 V edit raced by a USB host, a stop
+  pressed while the rail is paused
 - after the audit: a storage run giving the user's target back when stopped (and never saving the storage one); a full cell next to a
   faulted one (no finale, no storage offer, the fault stays); a cell that sags after full (one finale, then the offer, not one per
-  top-up); a cell over 4.40 V at a low VCC (faults); a host start while the voltage is being edited (refused)
+  top-up); a cell over 4.40 V at a low VCC (faults); a host start while the voltage is being edited (refused); B2 on the stopped
+  main screen (skips 4.35 V when switched off, changes nothing while charging); a new cell after the finale (a finale of its own)
 - USB-C: XT60 alone, a pack plugged in on a laptop and on a PD charger, packs present at power-up, PD start and reset, PD back at 5 V
 - in every scenario: the watchdog is never starved
 
@@ -197,15 +202,16 @@ a fault removed, a guard bypassed), and the suites run against the broken firmwa
 earlier code: 15 of 29 planted bugs survived at least one suite, among them a disabled charge over-voltage cut, a removed 4.40 V bleed
 fault and developer mode ignoring a lost input. The scenarios added since (the rail sensor reading low, the overcharged cell, developer
 mode rules, the soft ramp after pre-charge) were written to catch exactly those. The runner and its list of planted bugs are in
-`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit it has 34
+`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit it has 35
 planted bugs, one for each fix. On the current code **the result of the run on this code is being filled in**. The one that survives by design is the fatal-stop rail value in `src/hal.c`:
 the simulator replaces that file with its model, so that line is checked by review and on the charger only (the same change made in
 the model is caught).
 
 ### Tests on a simulated 8051 (WS3 Unlocked) - `make check-8051`
-`int` is 16 bits on the chip and 32 on a PC, so overflow bugs can pass on the PC. The unit tests run again in the s51 simulator, built
-with the same compiler (SDCC 4.6.0) and the same memory model as the firmware, and the charge logic runs one scenario on both, whose
-traces must match line for line (161 lines, every port state). The input-limits suite is left out: it takes over 30 minutes in the simulator.
+`int` is 16 bits on the chip and 32 on a PC, so overflow bugs can pass on the PC. The settings, display, statistics, menu and port
+settings unit tests run again in the s51 simulator, built with the same compiler (SDCC 4.6.0) and the same memory model as the firmware,
+and the charge logic runs one scenario on both, whose traces must match line for line (161 lines, every port state). The input-limits
+suite and the charge-logic unit tests are left out: they take too long in the simulator (the trace covers the charge logic instead).
 
 ### Independent review
 Four separate AI review agents (not people) read the code, each with one area and without the author's conclusions: the charge logic, the hardware
@@ -244,6 +250,10 @@ one is wrong. Their claims were checked against the code before anything was cha
     guard (above) then limits it
   - per-unit calibration: needs a multimeter reading to calibrate against (Still open)
   - human expert review: none yet
+  - a stop clears a latched port fault: when the run stops (by you, or by the supply guard), every port's fault is cleared with it,
+    so the red skull on that port goes away and the cell can be charged again at the next start. Found by the second review round
+    (low). The port is off either way and nothing restarts by itself; but if a supply dip stops the run, the fault screen you would
+    have seen is gone. Look at the port's state before starting again, and pull a cell that faulted once
 
 ### On the charger (one unit, VIFLY WhoopStor V3, chip version A)
 - VCC 4.484 V on every supply tried: two PD chargers, a laptop port, a 4S pack (it comes from its own regulator).

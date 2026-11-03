@@ -1,80 +1,91 @@
 # WS3 Unlocked
 
-Custom firmware for the VIFLY WhoopStor V3, a six-port 1S LiPo / LiHV charger (STC8H8K64U, 8051 core). It replaces the firmware the
-charger ships with: a new look (ROT: neon green, skulls, eyes, static, barbed wire, an animated SYMBIOZE splash), melodies,
-charge statistics (mAh, time to full, cell resistance), a storage reminder, and a set of safety changes on top of
-[OpenWS3](https://github.com/openws3/openws3), the open firmware it is built on.
+Custom firmware for the VIFLY WhoopStor V3, the six-port 1S LiPo / LiHV charger. It's built on
+[OpenWS3](https://github.com/openws3/openws3), the open firmware for this charger, and it changes three things: how it looks (ROT:
+neon green, skulls, eyes that follow your cells, static, barbed wire), how it sounds (a short plucked melody with soft crackle), and
+how carefully it charges.
 
-**Using the charger?** [GUIDE.md](GUIDE.md). **Installing?** Read the next section first, then [Install](#install).
+I'm SYMBIOZE (@fpv.symbioze). I fly whoops, and this started as "make my charger look like the rest of my stuff". It didn't stay
+that simple. The screen and the charging live in the same firmware, so the day I opened the code to change the colours I was also
+holding the code that decides how many volts go into a lithium cell. Most of the work since has gone into that part.
 
-## Read this before you install
+Where to go:
+- **Just want to use it?** [GUIDE.md](GUIDE.md).
+- **Thinking of installing?** Read the rest of this page first, then [Install](#install).
+- **Want to know how I think about it, or want to review or break it?** Start with [APPROACH.md](APPROACH.md). It's the
+  catch-up: what's known, what's assumed, how it was checked, and where to poke. [SAFETY.md](SAFETY.md) has every number behind it.
 
-### This is serious
-- **It is a jailbreak of a lithium battery charger.** Firmware decides how much voltage and current go into your cells. If it gets
-  that wrong, a LiPo can swell, vent or catch fire. That is the stake here, not a crashed app.
-- **It is unofficial.** Not made, tested or supported by VIFLY, and not by the OpenWS3 authors. Installing it replaces VIFLY's
-  firmware.
-- **Much of it was vibe coded.** I am an FPV pilot, not a professional charger or embedded firmware engineer. The look, the safety
-  changes, the tests and these documents were written with an AI coding assistant (Claude), directed and checked by me. That is
-  exactly why the rest of this section exists: so you can see what was done to check it, and judge for yourself.
-- **It has run on one charger.** Everything else is simulation, automated tests and review.
-- **Going back to VIFLY's firmware may not be possible.** No restore package has been tested, and the old firmware cannot be read out
-  before installing. Treat installing as one-way.
-- **It is a beta.** An independent audit of this version found real bugs (now fixed, listed in SAFETY.md). There will be more.
+## Before you install, the honest version
 
-### What I did to make it as safe as I could
-- **Audited the charging code** before changing it, and found that OpenWS3's voltage readings drift with the charger's internal supply:
-  in simulation, cells reached **4.57 V on a 4.20 V setting**. Fixed (every reading is now corrected with the chip's own reference).
-- **Removed OpenWS3's developer mode**, which let a USB program switch every output by hand. Its guards had real holes (two found by
-  review); without it, nothing outside the charge logic can drive a port.
-- **Added the protections a charger is expected to have** and OpenWS3 did not: refusing over-discharged cells, a gentle pre-charge
-  with its own time limit, a 3 hour charge limit, a board over-temperature stop, a watchdog that resets a frozen chip, a clean reset
-  on a collapsing supply.
-- **Protected what is plugged into the charger:** a guard so that a pack on the XT60 cannot be fed backwards into a laptop or phone
-  charger on the USB-C port.
-- **Built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and ran the real firmware against it in 43
-  scenarios: full charges, shorts, dead cells, cells that never fill, overheating, stuck hardware, supply faults, a hostile USB host.
-- **Ran the tests on a simulated copy of the chip**, with the same compiler, because the chip does arithmetic differently from a PC.
-  That caught a real bug the PC tests could not: the rail-fault alarm never sounded (also present in OpenWS3).
-- **Had the code reviewed** by four separate AI review agents, one per area, each without my conclusions. They found real defects
-  (a way for a USB program to push a cell to 4.45 V, a time limit that never fired, a hole in my own USB-C guard, and more). Every one
-  was reproduced in the simulator, then fixed and given a test. These were AI reviewers, not people: a human expert has not reviewed it.
-- **Had the whole project audited again** before 0.2-beta.2, by four new AI reviewers who were told to question the assumptions too.
-  They found, among others: the sound code able to corrupt a cell-voltage reading from inside an interrupt, the time limits running
-  slow when the screen was busy, over-voltage protection blind at a low chip supply, and a way to change the voltage mid-run. All
-  fixed, each with a test; the full list, and what was not fixed and why, is in SAFETY.md.
-- **Broke each safety check on purpose** (mutation testing) to prove the tests notice: the result of the run on this code is being filled in.
-- **Measured it on my charger**: supply, input reading, rail, stack, temperature sensor, the USB-C guard on a laptop port.
-- **Made the build checkable**: GitHub builds it only if every test passes, and publishes checksums and a signed build record.
-- Everything above, with numbers, is in [SAFETY.md](SAFETY.md).
+### What this is
+- **It's a jailbreak of a lithium battery charger.** If firmware gets the voltage or current wrong, a pack can swell, vent or catch
+  fire. That's the stake, not a crashed app.
+- **It's unofficial.** Not made, tested or supported by VIFLY, or by the OpenWS3 authors. Installing it replaces VIFLY's firmware.
+- **Much of it was vibe coded.** I'm not an embedded engineer. I wrote this with an AI coding assistant (Claude): I decided what it
+  should do, it wrote most of the code, and I tested it on my charger and argued with it. I'd rather tell you than have you find out.
+- **It's run on one charger.** Mine. Everything else is simulation, automated tests and review.
+- **Going back to VIFLY's firmware may not be possible.** I don't have a tested way, and the old firmware can't be read out before
+  installing. Treat installing as one-way.
+- **It's a beta.** Every audit so far has found real bugs. They're fixed, and each left a test behind, but assume there are more.
 
-### What is still risky
-- **The voltage accuracy of your unit.** Resistor tolerance and the chip's reference vary between units. Worst case without a check:
-  about plus or minus 3 %, up to **4.33 V on the 4.20 V setting and 4.48 V on 4.35 V**. Check a rested full cell with a multimeter
-  before you trust it (SAFETY.md). 4.35 V (LiHV) is available by default, because whoop cells are almost all LiHV; if you charge
-  only LiPo, switch it off in the menu (CHARGING, ALLOW 4.35V = NO) and it can no longer be selected by mistake.
-- **On the tested unit itself the 4.35 V accuracy is not confirmed yet**: a rested LiHV cell read 4.33 V on the charger, 4.40 V and
-  4.25 V on two drones. Until a multimeter settles it, I charge on 4.20 V.
-- **One unit tested.** Another hardware revision may behave differently.
-- **No cell temperature sensing.** The board measures its own temperature, not the cells'.
-- **The over-temperature stop is an estimate.** The sensor is not calibrated.
-- **Hardware faults** (a transistor that fails on, a damaged cell) are beyond what firmware can stop.
-- **No human expert review yet.** Both review rounds were AI agents.
-- **What the firmware cannot see:** the cells' temperature, a transistor failing on, a cell damaged inside. Only you watching can.
-- The full list of assumptions and open items is in SAFETY.md.
+### How I've tried to make it safe
+Because an AI writes confident-looking code whether it's right or not, the rule here has been: assume it's wrong until something
+independent shows it isn't. In practice that's several layers, each looking from a different angle:
+
+- **I audited the charging code first**, and found that OpenWS3's voltage readings drift with the charger's own supply: in
+  simulation, cells reached **4.57 V on a 4.20 V setting**. Fixed, by correcting every reading with the chip's internal reference.
+- **I removed OpenWS3's developer mode**, which let a USB program switch outputs by hand. Its guards had real holes; without it,
+  nothing outside the charge logic can drive a port.
+- **I added the protections a charger should have** and OpenWS3 didn't: refusing over-discharged cells, a gentle pre-charge with
+  its own time limit, a 3 hour charge limit, a board over-temperature stop, a watchdog, a clean reset on a collapsing supply, and a
+  guard so a pack on the XT60 can't feed backwards into a laptop on the USB-C port.
+- **I built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and run the real firmware against it in 48
+  scenarios: shorts, dead cells, cells that never fill, overheating, stuck hardware, supply faults, a hostile USB host.
+- **The tests also run on a simulated copy of the chip**, because it does arithmetic differently from a PC. That caught a bug the PC
+  tests couldn't: the rail-fault alarm never sounded (in OpenWS3 too).
+- **I break each safety check on purpose** (mutation testing) to prove the tests notice. The result of the run on this code is being
+  filled in.
+- **AI reviewers, several rounds**, each given only the code and one area, never my conclusions, so they aren't just agreeing with
+  me. They found real defects every round: a way for a USB program to push a cell to 4.45 V, a time limit that never fired, the
+  sound code able to corrupt a voltage reading from inside an interrupt, time limits running slow when the screen was busy. Each one
+  was reproduced, fixed and given a test. I kept going round by round until a round on the changed code found nothing critical or
+  high. These were AI reviewers, not people: no human expert has reviewed it yet.
+- **I measured it on my charger**: supply, input reading, rail, stack, temperature sensor, the USB-C guard on a laptop.
+- **The build is checkable**: GitHub builds it only if every test passes, and publishes checksums and a signed record of which
+  code it came from.
+
+Every bug found went the same way: reproduce it, fix it, write the test that would have caught it, then plant it again as a bug the
+tests must catch. That loop matters more to me than any claim that it's bug-free. The full list, including what isn't fixed and
+why, is in [SAFETY.md](SAFETY.md).
+
+### What's still risky
+- **The voltage accuracy of your unit.** Resistor tolerance and the chip's reference vary between units. Unchecked, the worst case
+  is about plus or minus 3 %: up to **4.33 V on the 4.20 V setting and 4.48 V on 4.35 V**. Check a rested full cell with a
+  multimeter before you trust it (SAFETY.md has the steps).
+- **4.35 V (LiHV) is on by default.** Whoop cells are almost all LiHV, so hiding it would just get in the way. If you only charge
+  LiPo, switch it off (menu, CHARGING, ALLOW 4.35V = NO) and it can't be picked by mistake. B2 changes the target when stopped, so
+  look at the target in the top-right box before you start.
+- **On my own unit the 4.35 V accuracy isn't settled.** A rested LiHV cell read 4.33 V on the charger, and 4.40 V and 4.25 V on two
+  different drones. The drones disagree, so they can't settle it; a multimeter will. Until then I charge on 4.20 V.
+- **One unit tested.** Another batch or hardware revision may behave differently.
+- **What firmware can't see:** the cells' temperature (it only measures the board's, and that sensor isn't calibrated), a
+  transistor failing on, a cell damaged inside. Only you watching can catch those.
+- The full list of assumptions, and what breaks if each is wrong, is in SAFETY.md.
 
 ### No responsibility
-This firmware is provided as is, without any warranty of any kind (see `LICENSE`), including fitness for any purpose. I have done
-my best and documented all of it, but I cannot take any responsibility for damage, fire, injury or loss of any kind arising from
-installing or using it, including to your charger, your cells, your property or anyone around them. If you install it, you accept
-that risk entirely. Charge in a LiPo bag or fireproof box, on a non-flammable surface, supervise every charge, never leave it
-unattended and never charge overnight. Do not charge swollen, damaged or punctured cells. If you are not comfortable judging the
-information above, do not install it. The installer asks you to confirm the main points before it writes anything.
+This firmware is provided as is, without any warranty of any kind (see `LICENSE`), including fitness for any purpose. I've done my
+best and written all of it down, but I can't take any responsibility for damage, fire, injury or loss of any kind from installing or
+using it, to your charger, your cells, your property or anyone around them. If you install it, you accept that risk entirely.
+
+Use it like any charger you don't fully trust: charge in a LiPo bag or fireproof box, on something that can't burn, supervise every
+charge, never leave it unattended, never charge overnight, and don't charge swollen, damaged or punctured cells. If you're not
+comfortable judging all this, don't install it. The installer asks you to confirm the main points before it writes anything.
 
 ### Help make it better
-If you know chargers, firmware or batteries: check it, test it, break it. Open an [issue](https://github.com/Pogaldock/ws3-unlocked/issues)
-with what you found, or a pull request. Independent reviews, measurements on other units and bench tests are exactly what this
-project is missing. The "Still open" list in SAFETY.md is the place to start.
+If you know chargers, firmware or batteries, I really want to hear from you. Check it, measure it, break it, and open an
+[issue](https://github.com/Pogaldock/ws3-unlocked/issues) or a pull request. A multimeter reading from your unit, a scope on the
+outputs, or one human expert reading `src/chg.c` is worth more than another round of AI review. [APPROACH.md](APPROACH.md) says
+where to start; the "Still open" list in SAFETY.md is the detail.
 
 ## Built on OpenWS3: full credit
 
@@ -94,7 +105,7 @@ that work this fork would not exist.
 
 ## What WS3 Unlocked changed and added
 
-Everything not listed here is OpenWS3's, unchanged.
+The reference list, file by file. Everything not listed here is OpenWS3's, unchanged.
 
 ### The look
 - **ROT, the only look** (`src/theme.c`, `src/ui.c`, `src/lcd.c`): black, neon green and white, red only for trouble. A barbed-wire
@@ -134,7 +145,7 @@ Everything not listed here is OpenWS3's, unchanged.
 - **USB-C backfeed guard** (`src/adc.c`, `src/hal.c`): a pack plugged into the XT60 while USB-C powers the charger is no longer fed
   backwards into the laptop or charger on the USB-C side.
 - **Developer mode removed** (`src/dev.c`, `tools/devtool.py` deleted): commands 7 to 9 are refused as unknown, the installer page
-  no longer offers it. Before removal it had been hardened *(upstream too)*: a host could push a cell past the cut by switching a
+  hides its controls. Before removal it had been hardened *(upstream too)*: a host could push a cell past the cut by switching a
   port on and off, and drain a cell below 3.0 V (SAFETY.md).
 - **Fatal stop leaves the rail at its lowest** *(upstream too)* (`src/hal.c`): it was driven to its highest.
 - **Settings check byte and flash wear limit** (`src/cfg.c`, `src/app.c`); **one interrupt priority** so their stack frames never
@@ -145,11 +156,12 @@ Everything not listed here is OpenWS3's, unchanged.
 - **Cell resistance**: the step between the cell's resting voltage (read while the port probes it) and its voltage at the working
   current, once that current is stable. Includes the leads and connector: compare cells on the same lead.
 - **Time to full**: from the state of charge (a typical LiPo / LiHV open-circuit curve, corrected for the resistance) and the rate so
-  far, with a 25 % margin. It is an estimate and marked as one; it is not shown until the resistance is known.
+  far, with a 25 % margin. It is an estimate and marked as one; it is not shown until the resistance is known (or its reading has
+  given up after 60 s, on a limited supply).
 - These numbers only display; nothing in the charge logic reads them.
 
 ### Verification
-- **Whole-firmware simulation** (`test/sim`, `make sim`): the real firmware against a simulated board, cells and supplies, 38 scenarios.
+- **Whole-firmware simulation** (`test/sim`, `make sim`): the real firmware against a simulated board, cells and supplies, 48 scenarios.
 - **Tests on a simulated 8051** (`test/run_8051.sh`, `test/s51`, `test/chg_trace.c`, `make check-8051`): the unit tests and a
   charge-logic trace on the chip's own integer sizes, with the compiler the firmware is built with.
 - **New unit tests** in `test/test_pure.c` and `test/test_chg.c`.
@@ -163,7 +175,7 @@ Everything not listed here is OpenWS3's, unchanged.
   shows it in full, and refuses an image that would reach the settings area. USB name "WS3 Unlocked" (`src/usb.c`).
 - **Build and release** (`.github/workflows/rot-build.yml`): every test must pass before anything is published; the published files
   come with SHA256SUMS and a signed build-provenance attestation. OpenWS3's GitHub Pages workflow was removed from this fork.
-- **Documentation**: this README (rewritten top), [SAFETY.md](SAFETY.md) (new), and edits to `GUIDE.md` (the look, the views,
+- **Documentation**: this README (rewritten top), [APPROACH.md](APPROACH.md) (new), [SAFETY.md](SAFETY.md) (new), and edits to `GUIDE.md` (the look, the views,
   summary, storage reminder and sounds, the alarm note) and `USB.md` (stop reason 6, developer mode removed, screen 12, product name).
 - **Build guard** (`Makefile`): an image that would reach the chip's settings area (`CODE_LIMIT`, 0xF400) fails the build.
 
@@ -192,7 +204,7 @@ Everything not listed here is OpenWS3's, unchanged.
 ```bash
 make                 # build/fw.bin and build/openws3.html (SDCC 4.6.0; the chip's internal RAM is full: older versions may not link)
 make test            # unit tests: charge logic, limits, menu, settings (plain C on the PC)
-make sim             # the whole firmware against a simulated board: 38 safety scenarios
+make sim             # the whole firmware against a simulated board: 48 safety scenarios
 make check-8051      # unit tests and a charge-logic trace on a simulated 8051 (needs s51 from sdcc-ucsim; about 16 minutes)
 ```
 
@@ -284,11 +296,11 @@ Opened from the menu. B2 is the next page, B1 the previous page, BACK (both held
 |---|---|
 | Button 1, tap | current setting +0.1 A (0.3 … 1.3 A, wraps); ignored while charging. Taps are saved 1.5 s after the last one, or when charging starts |
 | Button 1, hold (0.35 s) | start / stop charging |
-| Button 2, tap | target voltage: 4.20 V → 4.35 V → 3.80 V storage → 3.85 V storage; ignored while charging |
+| Button 2, tap | stopped: target voltage, 4.20 V → 4.35 V → 3.80 V storage → 3.85 V storage (4.35 V skipped when ALLOW 4.35V is NO); charging: the next cell view |
 | Button 2, hold (0.5 s) | port settings (below) |
 | Both buttons, tap | open the menu |
 
-Header: set current (with a `*` when some port has its own current or is off), input voltage, target voltage (red while charging).
+Header: set current (with a `*` when some port has its own current or is off), input voltage, target voltage.
 Cells: port voltage, and below it the measured current while charging, for one second in four the current the port charges at
 (`>0.8A`), and `LIMIT` when a user limit keeps the port waiting with no current. An idle port shows the current it will charge at
 (`>0.5A`), or `OFF` (dimmed) if it sits the run out; otherwise `TEST` / `REST` / `FULL` / `BLEED` / `ERR`. The dot shows the state.
@@ -316,7 +328,7 @@ src/limits.c       input current / voltage limits (pure)          src/menu.c  se
 src/ctl.c          rail PI, cal.c units, fmt.c text, input_pure.c buttons, buzz_pure.c patterns, cfg*.c settings
 src/usb.c          USB HID monitor (telemetry + commands)         src/ui.c    screens
 src/portset.c      port settings mode (pure)
-src/app.c          boot sequence, 4.5 ms control pass             src/font.c  GENERATED from tools/font5x7.txt
+src/app.c          boot sequence, 4.5 ms control pass
 test/              host tests (C)                                 tools/      fwmon.py (USB monitor / flasher), openws3.html (web tool), bundle.py, isp.py, render_screens.* (the pictures in GUIDE.md)
 
 WS3 Unlocked additions:

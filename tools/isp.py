@@ -193,6 +193,8 @@ def write(dev, data, addr=0, erase=False, dry_run=False, force=False):
     if end > CODE_LIMIT and not force:
         print(f'[-] the image reaches {end:#06x}, past {CODE_LIMIT:#06x} where the settings area starts: not written (--force to override)')
         return 1
+    if not force and addr + len(data) > CODE_LIMIT:
+        data = data[:max(0, CODE_LIMIT - addr)]      # only erased-flash padding is past the limit: not sent at all
     blocks = [data[i:i+128] for i in range(0, len(data), 128)]
     if len(blocks[-1]) < 128:
         blocks[-1] = blocks[-1] + b'\xff' * (128 - len(blocks[-1]))

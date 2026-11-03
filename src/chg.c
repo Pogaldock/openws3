@@ -176,7 +176,7 @@ static uint8_t st_charge(void) REENT
        (shorted inside) is not fed for long.  Time the limits hold the port with no current does not count; held with current flowing
        it does (several ports sharing a tight budget are all held all the time: not counting that let a bad cell charge for ever) */
     IC = W.i > W.i0 ? W.i - W.i0 : 0;
-    if (!W.t_held || IC > I_OPEN) {
+    if (!W.t_held || W.i > I_OPEN) {               /* the raw current here: held time with any current counts (the safe side) */
         W.t_chg_div += LT;               /* passes, and those a long pass lost: real time */
         if (W.t_chg_div >= PASSES_PER_S) {
             W.t_chg_div -= PASSES_PER_S;

@@ -88,7 +88,7 @@ uint8_t buzz_tick(void)
     if (left) { left--; return TONE_KEEP; }
     if (crk) {                                                /* crackle: one 10 ms step, a random high note about one step in five */
         crk--; left = 19;
-        rnd ^= (uint8_t)(rnd << 3); rnd ^= (uint8_t)(rnd >> 5); rnd ^= (uint8_t)(rnd << 1);   /* xorshift: shifts only (see below) */
+        rnd = (uint8_t)((rnd & 1) ? (rnd >> 1) ^ 0xB8 : rnd >> 1);   /* 8-bit LFSR, all 255 states: shifts only (see below) */
         if (rnd < 51 && enabled) { sounding = 1; return (uint8_t)(23 + (rnd & 15)); }   /* notes 22..37 (A6..C8), returned as note + 1 */
         sounding = 0; return TONE_OFF;
     }

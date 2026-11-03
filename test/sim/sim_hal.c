@@ -181,7 +181,7 @@ uint8_t hal_strap(void) { return S.vin > 1.0 ? 0 : 1; }      /* low while USB-C 
 /* ---- lcd.h: nothing is drawn, but the time the bus takes is: 210 clocks per byte at 40 MHz, 2 bytes per pixel, ~11 bytes per window ---- */
 static void lcd_cost(uint32_t pixels, uint32_t windows)
 {
-    S.lcd_us += pixels * 10.5 + windows * 58.0;
+    S.lcd_us += (pixels * 10.5 + windows * 58.0) * (1.0 + S.lcd_slow);
     if (S.lcd_us >= 500) { uint32_t t = (uint32_t)(S.lcd_us / 500); S.lcd_us -= t * 500.0; sim_advance(t); }
 }
 static uint32_t slen(const char *s) { uint32_t n = 0; while (s[n]) n++; return n; }

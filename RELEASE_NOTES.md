@@ -7,7 +7,7 @@ surface, supervise every charge, never overnight. No warranty, no responsibility
 - **Settings are reset to their defaults when you install this** (0.3 A, 4.20 V): set yours again.
 - **ALLOW 4.35V** (menu, CHARGING): on by default (whoop cells are mostly LiHV); set it to NO if you charge only LiPo, and 4.35 V can
   no longer be selected. Check the target in the header before every start, and check your unit once with a multimeter.
-- The time limits (3 h charge, 30 min pre-charge, new 3 h bleed limit) now run on real time, not on how fast the screen draws.
+- The time limits (3 h charge, 30 min pre-charge, new 5 h bleed limit) now run on real time, not on how fast the screen draws.
 - A port reading at the top of the measurable range now counts as over-voltage (it could not fire there at a low chip supply).
 - The current sense offset is measured with the output off and subtracted, so charges end where they should.
 - The sound code can no longer corrupt a cell-voltage reading from inside an interrupt; every build checks this.

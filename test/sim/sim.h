@@ -39,6 +39,7 @@ typedef struct {
     double amps[NPORTS];        /* true current into each cell (charge positive, bleed negative) */
     uint64_t ticks;             /* 0.5 ms */
     double lcd_us;              /* display time not yet turned into ticks */
+    double lcd_slow;            /* extra display time, a multiple of the bus rate (0: none): long passes */
 
     /* ---- what the scenario checks ---- */
     double max_cell_v[NPORTS];  /* the highest cell voltage (open circuit + polarisation, what a meter reads after a short rest) */

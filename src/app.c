@@ -146,6 +146,7 @@ static void cond_draw(uint8_t c)
 static void go_fatal(uint8_t code)
 {
     run = 0; chg_abort();
+    if (store_on) { settings.volt = store_prev; store_on = 0; }   /* as at any stop: the user's own target again */
     hal_all_off();
     screen = 0; fatal_code = code;
     buzz_play(PAT_ERROR);
@@ -249,6 +250,7 @@ static uint8_t start_run(void)
     if (save_at) save_main();
     if (run || sout.stop != STOP_NONE || fatal_code || !test_ok) return 0;
     if (screen == SCR_MENU && menu_editing()) return 0;   /* an edit open: finish it first (the voltage must not change mid-run) */
+    if (!settings.hv && settings.volt == VOLT_4_35) settings.volt = VOLT_4_20;   /* 4.35 V switched off: never run on it, whatever led here */
     run = 1; stop_reason = 0; chg_init(); lim_reset();
     stats_start(); done = 0; store_asks = 0; run_s = now_s;
     return 1;
@@ -275,7 +277,7 @@ static void usb_service(void)
         settings.cur = c[1]; save_later();         /* written once the host stops changing it: flash wear */
         break;
     case 4:                                                                            /* set the target voltage, not while running */
-        if (run || c[1] >= NVOLTS || (c[1] == VOLT_4_35 && !settings.hv)) { res = 1; break; }   /* 4.35 V only once allowed */
+        if (run || c[1] >= NVOLTS || (c[1] == VOLT_4_35 && !settings.hv) || (screen == SCR_MENU && menu_editing())) { res = 1; break; }   /* 4.35 V only once allowed; not during a menu edit */
         settings.volt = c[1]; save_later();
         break;
     case 5: break;                                                                     /* ping */
@@ -388,6 +390,7 @@ static void handle_buttons(void)
         }
         if (cond) {                                      /* a condition is on the screen: the menu is the way out (DISABLE USB POWER) */
             if (ev == EV_OK) { menu_enter(); buzz_play(PAT_KEY); }
+            else if (ev == EV_B1_LONG && run) { stop_run(STOP_USER); buzz_play(PAT_KEY); }   /* a stop is never lost behind a condition */
             continue;
         }
         switch (ev) {
@@ -489,7 +492,7 @@ void app_pass(void)
     pass_d = (uint16_t)hal_ticks(); pass_d -= pass_prev; pass_prev += pass_d;
     pass_d += pass_acc; cin.late = 0;
     while (pass_d >= 2 * PASS_TICKS && cin.late < LATE_MAX) { pass_d -= PASS_TICKS; cin.late++; }
-    pass_acc = pass_d >= PASS_TICKS ? (uint8_t)(pass_d - PASS_TICKS) : 0;
+    pass_acc = pass_d >= PASS_TICKS && pass_d < 2 * PASS_TICKS ? (uint8_t)(pass_d - PASS_TICKS) : 0;   /* capped: the rest is dropped */
     if (cin.late) t_next = hal_ticks() + PASS_TICKS;  /* the lost time is counted: the next pass is a normal pass from now, no catch-up */
     else t_next += PASS_TICKS;
 

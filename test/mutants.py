@@ -16,7 +16,7 @@ M = [
  ("src/chg.c", "#define RAIL_MARGIN     30 ", "#define RAIL_MARGIN     300 ", "rail_sense_low"),
  ("src/chg.c", "    if (W.v >= V_FAULT) return go_fault();", "    ;", "bleed_over"),
  ("src/chg.c", "    else if (W.pre) { W.pre = 0; W.ramp = 1; W.ramp_div = 0; }", "    else if (W.pre) { W.pre = 0; }", "gentle"),
- ("src/chg.c", "    if (!W.t_held || IC > I_OPEN) {", "    if (!W.t_held) {", "held_never_full"),
+ ("src/chg.c", "    if (!W.t_held || W.i > I_OPEN) {", "    if (!W.t_held) {", "held_never_full"),
  ("src/chg.c", "        if (W.pre && ++W.t_pre_s >= T_PRE_MAX_S) return go_fault();", "        ;", "pre_short"),
  ("src/hal.c", "    hal_rail(PWM_PERIOD);", "    hal_rail(0);", "vcc_fatal"),
  ("test/sim/sim_hal.c", "S.global = 0; S.rail_duty = PWM_PERIOD; }", "S.global = 0; S.rail_duty = 0; }", "vcc_fatal"),
@@ -50,7 +50,10 @@ M = [
  ("src/chg.c", "        W.t_chg_div += LT;               /* passes, and those a long pass lost: real time */", "        W.t_chg_div += 1;", "TEST"),
  ("src/chg.c", "    W.i0 = W.i > I_ZERO_MAX ? I_ZERO_MAX : (uint8_t)W.i;   /* the output has been off: what the current reads now is its offset */", "    W.i0 = 0;", "TEST"),
  ("src/chg.c", "    if (W.t_chg_div >= PASSES_PER_S) { W.t_chg_div -= PASSES_PER_S; if (++W.t_bleed_s >= T_BLEED_MAX_S) return go_fault(); }", "    ;", "TEST"),
+ ("src/app.c", "    if (!settings.hv && settings.volt == VOLT_4_35) settings.volt = VOLT_4_20;   /* 4.35 V switched off: never run on it, whatever led here */", "    ;", "hv_race"),
+ ("src/app.c", "            else if (ev == EV_B1_LONG && run) { stop_run(STOP_USER); buzz_play(PAT_KEY); }   /* a stop is never lost behind a condition */", "            ;", "rail_stop"),
  ("src/sup.c", "        if (++ok_cnt >= RAIL_OK_PASSES) { rail_alarm = 0; div_cnt = 0; ok_cnt = 0; }   /* in band for a second, not one lucky pass */", "        { rail_alarm = 0; div_cnt = 0; ok_cnt = 0; }", "TEST"),
+ ("src/app.c", "pass_d -= PASS_TICKS; cin.late++; }", "pass_d -= PASS_TICKS; }", "never_full_slow"),
 ]
 
 def main():

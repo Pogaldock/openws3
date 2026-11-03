@@ -237,6 +237,24 @@ static void s_never_full(void)
     CHECK(S.pwm[0] == 0);
 }
 
+/* Long passes the whole run (a slow panel, a busy screen): the 3 h limit counts real time, not passes */
+static void s_never_full_slow(void)
+{
+    uint64_t end;
+    double t_off = 0;
+    unsigned long n = 0;
+    sim_attach(0, 4.00, 1000000);
+    boot(); start();
+    S.lcd_slow = 12;                                              /* after the boot repaint */
+    run_for(2.9 * 3600);
+    CHECK(S.pwm[0] > 0);
+    end = S.ticks + SEC(0.3 * 3600);
+    while (S.ticks < end) { pass(); n++; if (!t_off && !S.pwm[0]) t_off = S.ticks / 2000.0 / 3600; }
+    printf("  never-full cell, passes %.1f ms on average: charging stopped at %.2f h\n", 0.3 * 3600e3 / n, t_off);
+    CHECK(t_off > 2.9 && t_off < 3.1);
+    S.lcd_slow = 0;
+}
+
 /* VCC jumps mid-charge (another supply plugged in, a sagging input): the readings must not let the cells see a rail spike */
 static void s_vcc_step(void)
 {
@@ -661,18 +679,48 @@ static void s_new_cell_finale(void)
     CHECK(shown == 2);
 }
 
+/* ALLOW 4.35V = NO must hold: switch it to YES in the menu, a host sets 4.35 V mid-edit, the edit is undone; the run must not be at 4.35 V
+   (found by the red-team review, reproduced: a cell reached 4.35 V with the switch off) */
+static void s_hv_race(void)
+{
+    static const uint8_t v435[] = { 4, 1, 7 };
+    sim_attach(0, 4.00, 300);
+    S.usb_host = 1;
+    cfg_load(); settings.hv = 0; settings.volt = 0; cfg_save();
+    boot();
+    both(0.12); both(0.12); tap(2); tap(2);                       /* menu, CHARGING, cursor on ALLOW 4.35V */
+    both(0.12); tap(2);                                            /* editing it: YES (live) */
+    usb(v435, 3);                                                  /* a host asks for 4.35 V during the edit */
+    both(1.0); both(1.0); both(1.0); run_for(1);                   /* the edit undone, back, menu closed */
+    start(); run_for(3600); hold(1); run_for(60);
+    printf("  4.35 V asked by a host during an undone ALLOW edit: switch %u, target %u, cell peak %.3f V\n", settings.hv, settings.volt, S.max_cell_v[0]);
+    CHECK(settings.hv == 0 && settings.volt != 1 && S.max_cell_v[0] < 4.23);
+}
+
+/* a stop asked for while a condition (a rail pause) is on the screen is not lost: no charging when the condition clears */
+static void s_rail_stop(void)
+{
+    sim_attach(0, 3.7, 300);
+    boot(); start(); run_for(20);
+    S.rail_stuck = 4.35; run_for(3);
+    hold(1); run_for(1);
+    S.rail_stuck = 0; run_for(10);
+    printf("  B1 held to stop during a rail pause: after recovery PWM %u, global %u\n", S.pwm[0], S.global);
+    CHECK(!S.pwm[0] && !S.global);
+}
+
 typedef struct { const char *name; void (*fn)(void); } scen_t;
 static const scen_t SC[] = {
     { "nominal", s_nominal }, { "vcc_low", s_vcc_low }, { "vcc_mid", s_vcc_mid }, { "vcc_high", s_vcc_high },
     { "bg_plus", s_bg_plus }, { "bg_minus", s_bg_minus }, { "noise", s_noise }, { "noise_vcc", s_noise_vcc },
     { "user_stop", s_user_stop }, { "input_loss", s_input_loss }, { "removal", s_removal }, { "dead_cell", s_dead_cell },
     { "gentle", s_gentle }, { "broken_rail", s_broken_rail }, { "short", s_short }, { "storage", s_storage },
-    { "power_cycle", s_power_cycle }, { "never_full", s_never_full }, { "vcc_step", s_vcc_step }, { "leaky", s_leaky },
+    { "power_cycle", s_power_cycle }, { "never_full", s_never_full }, { "never_full_slow", s_never_full_slow }, { "vcc_step", s_vcc_step }, { "leaky", s_leaky },
     { "menu_lock", s_menu_lock }, { "rail_pause", s_rail_pause }, { "vcc_fatal", s_vcc_fatal }, { "selftest_fail", s_selftest_fail },
     { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
     { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot }, { "no_dev", s_no_dev },
     { "stats", s_stats }, { "store", s_store }, { "store_back", s_store_back }, { "fault_full", s_fault_full },
-    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale },
+    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale }, { "hv_race", s_hv_race }, { "rail_stop", s_rail_stop },
     { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
     { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
    
