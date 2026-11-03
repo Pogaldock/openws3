@@ -155,7 +155,7 @@ with the same compiler (SDCC 4.6.0) and the same memory model as the firmware, a
 traces must match line for line (161 lines, every port state). The input-limits suite is left out: it takes over 30 minutes in the simulator.
 
 ### Independent review
-Four reviewers read the code separately, each with one area and without the author's conclusions: the charge logic, the hardware
+Four separate AI review agents (not people) read the code, each with one area and without the author's conclusions: the charge logic, the hardware
 layer, USB / installer / build, and the test evidence. Every defect they found was reproduced in the simulator first, then fixed with a
 test where the simulator can show it (the race and interrupt fixes cannot be simulated: they rest on review). That review is where the developer-mode pulse, the time limit under MAX IN AMPS, the fatal-stop
 rail, the start-up hole in the USB-C guard, the interrupt nesting and the settings check came from.
@@ -216,7 +216,7 @@ rail, the start-up hole in the USB-C guard, the interrupt nesting and the settin
 - Measure what the XT60 path does when USB-C is higher (does it conduct backwards into a pack?).
 - Measure the stack under every interrupt with USB telemetry running during a full six-port charge.
 - Run long soak tests: six ports, every supply, days.
-- Have someone who knows battery chargers review `src/chg.c`, `src/sup.c` and `src/dev.c`.
+- Have a human who knows battery chargers review `src/chg.c`, `src/sup.c` and `src/dev.c` (all review so far was by AI agents).
 - Read the flash back after installing, in the installer.
 - Run `app.c`, `adc.c`, `dev.c`, `sup.c` and `limits.c` on the simulated 8051 too, not only on the PC.
 - Offer the *(upstream too)* fixes back to OpenWS3.

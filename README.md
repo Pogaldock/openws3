@@ -2,14 +2,62 @@
 
 Custom firmware for the VIFLY WhoopStor V3, a six-port 1S LiPo / LiHV charger (STC8H8K64U, 8051 core). It replaces the firmware the
 charger ships with: a new look (the ROT theme: neon green, skulls, eyes, static, thorns, an animated SYMBIOZE splash) and a set of
-safety changes, each tested in a simulation of the whole firmware and on a simulated copy of the chip.
+safety changes on top of [OpenWS3](https://github.com/openws3/openws3), the open firmware it is built on.
 
-> **This is a jailbreak of a lithium battery charger.** It is unofficial: not made, tested or supported by VIFLY, and not by the
-> OpenWS3 authors either. It has run on one charger. Supervise every charge, never leave it charging unattended, and read
-> [SAFETY.md](SAFETY.md) before you install it: what was changed, how each change was checked, what it assumes, and what is still open.
-> You use it at your own risk.
+**Using the charger?** [GUIDE.md](GUIDE.md). **Installing?** Read the next section first, then [Install](#install).
 
-**Using the charger?** [GUIDE.md](GUIDE.md): the buttons, the screens, every setting. **Installing?** [Install](#install) below.
+## Read this before you install
+
+### This is serious
+- **It is a jailbreak of a lithium battery charger.** Firmware decides how much voltage and current go into your cells. If it gets
+  that wrong, a LiPo can swell, vent or catch fire. That is the stake here, not a crashed app.
+- **It is unofficial.** Not made, tested or supported by VIFLY, and not by the OpenWS3 authors. Installing it replaces VIFLY's
+  firmware.
+- **Much of it was vibe coded.** I am an FPV pilot, not a professional charger or embedded firmware engineer. The theme, the safety
+  changes, the tests and these documents were written with an AI coding assistant (Claude), directed and checked by me. That is
+  exactly why the rest of this section exists: so you can see what was done to check it, and judge for yourself.
+- **It has run on one charger.** Everything else is simulation, automated tests and review.
+
+### What I did to make it as safe as I could
+- **Audited the charging code** before changing it, and found that OpenWS3's voltage readings drift with the charger's internal supply:
+  in simulation, cells reached **4.57 V on a 4.20 V setting**. Fixed (every reading is now corrected with the chip's own reference).
+- **Added the protections a charger is expected to have** and OpenWS3 did not: refusing over-discharged cells, a gentle pre-charge
+  with its own time limit, a 3 hour charge limit, a board over-temperature stop, a watchdog that resets a frozen chip, a clean reset
+  on a collapsing supply.
+- **Protected what is plugged into the charger:** a guard so that a pack on the XT60 cannot be fed backwards into a laptop or phone
+  charger on the USB-C port.
+- **Built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and ran the real firmware against it in 40
+  scenarios: full charges, shorts, dead cells, cells that never fill, overheating, stuck hardware, supply faults, a hostile USB host.
+- **Ran the tests on a simulated copy of the chip**, with the same compiler, because the chip does arithmetic differently from a PC.
+  That caught a real bug the PC tests could not: the rail-fault alarm never sounded (also present in OpenWS3).
+- **Had the code reviewed** by four separate AI review agents, one per area, each without my conclusions. They found real defects
+  (a way for a USB program to push a cell to 4.45 V, a time limit that never fired, a hole in my own USB-C guard, and more). Every one
+  was reproduced in the simulator, then fixed and given a test. These were AI reviewers, not people: a human expert has not reviewed it.
+- **Broke each safety check on purpose** (mutation testing) to prove the tests notice: 20 of 21 planted bugs are caught.
+- **Measured it on my charger**: supply, input reading, rail, stack, temperature sensor, the USB-C guard on a laptop port.
+- **Made the build checkable**: GitHub builds it only if every test passes, and publishes checksums and a signed build record.
+- Everything above, with numbers, is in [SAFETY.md](SAFETY.md).
+
+### What is still risky
+- **The voltage accuracy of your unit.** Resistor tolerance and the chip's reference vary between units. Worst case without a check:
+  about plus or minus 3 %, up to **4.48 V on the 4.35 V setting**. Check a full cell with a multimeter before you trust it (SAFETY.md).
+- **One unit tested.** Another hardware revision may behave differently.
+- **No cell temperature sensing.** The board measures its own temperature, not the cells'.
+- **The over-temperature stop is an estimate.** The sensor is not calibrated.
+- **Hardware faults** (a transistor that fails on, a damaged cell) are beyond what firmware can stop.
+- **No human expert review yet.**
+- The full list of assumptions and open items is in SAFETY.md.
+
+### No responsibility
+This firmware is provided as is, without any warranty (see `LICENSE`). I have done my best and documented all of it, but I cannot
+take any responsibility for damage, fire, injury or loss arising from installing or using it. If you install it, you accept that
+risk. Supervise every charge, on a non-flammable surface, never unattended and never overnight. If you are not comfortable judging
+the information above, do not install it.
+
+### Help make it better
+If you know chargers, firmware or batteries: check it, test it, break it. Open an [issue](https://github.com/Pogaldock/ws3-unlocked/issues)
+with what you found, or a pull request. Independent reviews, measurements on other units and bench tests are exactly what this
+project is missing. The "Still open" list in SAFETY.md is the place to start.
 
 ## Built on OpenWS3: full credit
 
