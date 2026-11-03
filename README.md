@@ -304,7 +304,7 @@ Opened from the menu. B2 is the next page, B1 the previous page, BACK (both held
 | 1 power | bandgap count and the VCC it implies, VIN, rail and its PWM, thermistor count and fan, chip version and its stored reference, strap, USB-C bypass (`BYP ON / OFF / CUT`), stack bytes never used since boot, uptime |
 | 2 port V | raw ADC count and voltage per port |
 | 3 port I | raw ADC count, mA, PWM duty, state, bleed switch |
-| 4 status | run, target voltage, current setting, targets, stop/alarm, strap, USB |
+| 4 status | run, target voltage, current setting, targets, stop/alarm, USB |
 | 5 ADC raw | all 16 channels |
 | 6 limits | estimated input current, the two limits and their modes, the budget (as power and as total port current), which ports the limits hold (H) or keep waiting (W) |
 

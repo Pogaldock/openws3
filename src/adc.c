@@ -74,6 +74,7 @@ static void vin_guard(void) REENT                 /* reentrant: its 32-bit time 
 }
 
 uint8_t adc_bypass_state(void) { return vg_state; }
+uint16_t adc_gain(void) { return gain; }
 
 uint16_t adc_now(uint8_t ch)
 {

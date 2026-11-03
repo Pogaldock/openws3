@@ -5,7 +5,8 @@
 
 /* EV_B1 / EV_B2: one button tapped (reported on release).  EV_OK: both buttons pressed together and released.
  * EV_BACK: both held together for CHORD_LONG.  What holding a single button does depends on the style (input_style):
- * IS_NAV (menus): EV_B1_REP / EV_B2_REP, repeated while it stays down; IS_MAIN (main screen): EV_B1_LONG / EV_B2_LONG, once.
+ * IS_NAV (menus): EV_B1_REP / EV_B2_REP, repeated while it stays down, and EV_B1_LONG / EV_B2_LONG once at the 5th repeat (about
+ * 1 s); IS_MAIN (main screen): EV_B1_LONG / EV_B2_LONG, once.
  * Either way a held button gives no tap on release. */
 enum { EV_NONE = 0, EV_B1, EV_B2, EV_B1_REP, EV_B2_REP, EV_B1_LONG, EV_B2_LONG, EV_OK, EV_BACK };
 enum { IS_NAV = 0, IS_MAIN };

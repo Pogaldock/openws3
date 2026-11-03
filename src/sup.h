@@ -21,6 +21,7 @@ const char *sup_volt_name(uint8_t volt);   /* "4.20V" ... "3.85V STOR" */
 typedef struct {
     uint16_t vin, rail, bandgap, adc0;  /* filtered ADC7, ADC8, ADC15, ADC0 */
     uint16_t setpoint;                  /* rail setpoint S */
+    uint16_t fullscale;                 /* the highest rail reading the ADC can give at this VCC (adc_gain); 0 = not known */
     uint8_t  rail_sat;                  /* the rail ADC is at full scale: the rail is beyond what it can measure */
 } sup_in_t;
 

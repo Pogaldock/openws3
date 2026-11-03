@@ -46,9 +46,10 @@ void sup_reset(void) { div_cnt = 0; nr_cnt = 0; ov_cnt = 0; vh_cnt = 0; st_cur =
 void sup_pass(const sup_in_t XD *in, sup_out_t XD *o)
 {
     uint16_t S = in->setpoint;
-    /* VCC too low: a fixed floor, and per target: the rail ADC's full scale (VCC, as corrected: 4096 x BG_NOM / bandgap) must sit above
-       the setpoint, or the regulator chases a value it can never read and winds the rail up (4.35 V at VCC 4.40 to 4.42 V) */
-    uint8_t vcc_low = in->bandgap >= VCC_STOP || (uint32_t)in->bandgap * (S + RAIL_HEADROOM) > 4096UL * BG_NOM;
+    /* VCC too low: a fixed floor, and per target: the rail ADC's full scale (VCC, as corrected) must sit above the setpoint, or the
+       regulator chases a value it can never read and winds the rail up (4.35 V at VCC 4.40 to 4.42 V).  16-bit only: a multiply here
+       would call a helper and cost this function its shared scratch RAM, which the chip does not have */
+    uint8_t vcc_low = in->bandgap >= VCC_STOP || (in->fullscale && in->fullscale < S + RAIL_HEADROOM);
 
     o->stop = STOP_NONE; o->fatal = SF_NONE;
     o->rail_up = in->rail >= RAIL_UP;

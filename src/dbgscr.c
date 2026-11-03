@@ -58,9 +58,7 @@ const char *dbg_text(uint8_t page, uint8_t row)
     case 2:
         switch (row) {
         case 0: rb_str("PORT V  raw  volts"); break;
-        case 7: rb_str("raw: ADC counts"); break;
-        case 8: rb_str("volts: from the counts"); break;
-        case 9: break;
+        case 7: case 8: case 9: break;
         default:
             k = (uint8_t)(row - 1);
             rb_str("P"); rb_num(k + 1, 0); rb_ch(' '); rb_num(dbg_view.adc[port_v_ch(k)], 4); rb_ch(' '); rb_v3(cal_port_mv(dbg_view.v[k]));
@@ -69,9 +67,8 @@ const char *dbg_text(uint8_t page, uint8_t row)
     case 3:
         switch (row) {
         case 0: rb_str("PORT I raw  mA  duty"); break;
-        case 7: rb_str("raw: counts, mA from them"); break;
-        case 8: rb_str("duty 0..400, sw=bleed path"); break;
-        case 9: break;
+        case 7: rb_str("D: duty of 400, sw: bleeding"); break;
+        case 8: case 9: break;
         default:
             k = (uint8_t)(row - 1);
             rb_str("P"); rb_num(k + 1, 0); rb_ch(' '); rb_num(dbg_view.adc[port_i_ch(k)], 3); rb_ch(' '); rb_num(cal_port_ma(dbg_view.i[k]), 4);
@@ -86,10 +83,7 @@ const char *dbg_text(uint8_t page, uint8_t row)
         case 2: rb_str("SET "); rb_num(settings.cur, 0); rb_str("  "); rb_num(cal_set_to_ma(settings.cur), 0); rb_str("mA"); break;
         case 3: rb_str("TGT "); rb_num(sup_target(settings.volt), 0); rb_str("  RAIL SET "); rb_num(sup_setpoint(settings.volt), 0); break;
         case 4: rb_str("STOP "); rb_num(dbg_view.stop, 0); rb_str(" ALARM "); rb_num(dbg_view.alarm, 0); rb_str(" HOLD "); rb_num(dbg_view.rail_hold, 0); break;
-        case 5: rb_str("STRAP "); rb_num(dbg_view.strap, 0); rb_str("  FAN "); rb_num(dbg_view.fan, 0); break;
-        case 6: rb_str("PORT STATE "); for (k = 0; k < NPORTS; k++) rb_num(dbg_view.state[k], 0); break;
-        case 7: rb_str("PORT SW    "); for (k = 0; k < NPORTS; k++) rb_num(dbg_view.sw[k], 0); break;
-        case 8: rb_str("USB "); rb_str(dbg_view.usb ? "connected" : "no host"); break;
+        case 5: rb_str("USB "); rb_str(dbg_view.usb ? "connected" : "no host"); break;   /* strap, fan: page 1; port states: page 3 */
         }
         break;
     case 6:

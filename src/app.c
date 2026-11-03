@@ -63,10 +63,7 @@ static uint8_t  XD fin_packs;                 /* stats.packs when the finale pla
 static uint8_t  XD store_on, store_prev;      /* a storage run: the target it replaced, put back when the run stops (never saved) */
 static uint8_t  XD view_lbl_on;               /* the view's name is in the input box (until view_lo) */
 static uint16_t XD pass_prev, pass_d;          /* the tick count at the last pass start; ticks since */
-static uint16_t XD pass_acc;
-static uint16_t XD b1_rep_ms;                  /* B1 held on a navigation screen: when its last repeat came, and how many */
-static uint8_t  XD b1_reps;
-#define STOP_REPS       5                      /* the 5th repeat: about 1 s held */                   /* ticks not yet counted as passes: a pass longer than LATE_MAX is counted over the next ones */
+static uint16_t XD pass_acc;                   /* ticks not yet counted as passes: a pass longer than LATE_MAX is counted over the next ones */
 #define LATE_MAX        30                     /* at most this many lost passes handed over per pass (8-bit counters in chg.c); the rest next time */
 static uint32_t XD now_ms;                    /* hal_ms() once a pass */
 static uint16_t XD last_lo, view_lo;          /* its low 16 bits: the previous pass; when the view's name goes */
@@ -387,14 +384,9 @@ static void handle_buttons(void)
     uint8_t ev;
     input_style(screen ? IS_NAV : IS_MAIN);
     while ((ev = input_get()) != EV_NONE) {
-        /* B1 held for about a second stops a run on every screen: in the menu, port settings and diagnostics a held button only
-           repeats, so the repeats are counted (a gap of over 0.25 s between them: a new press) */
-        if (ev == EV_B1_REP) {
-            if ((uint16_t)((uint16_t)now_ms - b1_rep_ms) > 250) b1_reps = 0;
-            b1_rep_ms = (uint16_t)now_ms;
-            if (b1_reps < 255) b1_reps++;
-            if (b1_reps == STOP_REPS && run && screen != SCR_SUMMARY) { stop_run(STOP_USER); buzz_play(PAT_KEY); continue; }
-        }
+        /* B1 held: a stop on every screen.  In the menu, port settings and diagnostics a held button repeats; the input also
+           reports a long press at the 5th repeat (about 1 s) */
+        if (ev == EV_B1_LONG && run && screen && screen != SCR_SUMMARY) { stop_run(STOP_USER); buzz_play(PAT_KEY); continue; }
         if (screen == SCR_MENU) { menu_key(ev); continue; }
         if (screen == SCR_PORTS) { ports_key(ev); continue; }
         if (screen == SCR_SUMMARY) { summary_key(ev); continue; }
@@ -533,7 +525,7 @@ void app_pass(void)
 
     /* ---- supervision ---- */
     sin.vin = adc_get(ADC_VIN); sin.rail = adc_get(ADC_RAIL); sin.rail_sat = adc_saturated(ADC_RAIL); sin.bandgap = adc_get(ADC_BANDGAP); sin.adc0 = adc_get(0);
-    sin.setpoint = sup_setpoint(settings.volt);
+    sin.setpoint = sup_setpoint(settings.volt); sin.fullscale = adc_gain();
     sup_pass(&sin, &sout);
     if (sout.fatal) { go_fatal(sout.fatal); return; }
     cond = sout.stop;                                /* STOP_VIN, STOP_VCC, STOP_RAIL: waiting, on the screen */

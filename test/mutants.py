@@ -59,7 +59,7 @@ M = [
  ("src/sup.c", "    if (vcc_low) o->stop = STOP_VCC;", "    if (in->bandgap >= VCC_STOP) o->stop = STOP_VCC;", "hv_lowvcc"),
  ("src/app.c", "    pass_acc = pass_d >= PASS_TICKS ? pass_d - PASS_TICKS : 0;", "    pass_acc = pass_d >= PASS_TICKS && pass_d < 2 * PASS_TICKS ? pass_d - PASS_TICKS : 0;", "never_full_wobble"),
  ("src/cfg.c", "        for (b = 0; b < 8; b++) cfg_sum = (uint8_t)(cfg_sum & 0x80 ? (cfg_sum << 1) ^ 0x07 : cfg_sum << 1);", "        cfg_sum = (uint8_t)(cfg_sum << 1 | cfg_sum >> 7);", "cfg_damage2"),
- ("src/app.c", "            if (b1_reps == STOP_REPS && run && screen != SCR_SUMMARY) { stop_run(STOP_USER); buzz_play(PAT_KEY); continue; }", "            ;", "stop_any_screen"),
+ ("src/app.c", "        if (ev == EV_B1_LONG && run && screen && screen != SCR_SUMMARY) { stop_run(STOP_USER); buzz_play(PAT_KEY); continue; }", "        ;", "stop_any_screen"),
  ("src/chg.c", "    else if (W.pre && W.v >= V_PRE_EXIT) { W.pre = 0; W.ramp = 1;", "    else if (W.pre && W.v >= V_PRE) { W.pre = 0; W.ramp = 1;", "pre_ir"),
  ("src/app.c", "        if (save_at) save_main();                    /* a pending save first: the storage target is never the one written */", "        ;", "store_saved"),
  ("src/adc.c", "        if (vg_mv + VG_JUMP_MV < vg_off) { if (++vg_lo >= VG_FALL_PASSES) { vg_lo = 0; vg_learn(); } } else vg_lo = 0;", "        if (vg_mv + VG_JUMP_MV < vg_off) vg_learn();", "backfeed_noise"),

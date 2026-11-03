@@ -33,6 +33,7 @@ static void one(uint8_t i, uint8_t now_down, uint8_t ev_tap, uint8_t ev_rep, uin
         } else if (reps[i] ? --next[i] == 0 : held[i] >= REP_DELAY) {
             put(ev_rep);
             if (reps[i] < 255) reps[i]++;
+            if (reps[i] == 5) put(ev_long);                  /* held about 1 s: also a long press (B1: stop, on any screen) */
             next[i] = reps[i] < 5 ? REP_SLOW : reps[i] < 13 ? REP_MID : REP_FAST;
         }
     } else {

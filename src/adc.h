@@ -24,6 +24,7 @@ void     adc_scan_slow_now(void);
 uint16_t adc_raw(uint8_t ch);         /* the latest counts (same as adc_now) */
 uint16_t adc_now(uint8_t ch);         /* the latest value */
 uint16_t adc_get(uint8_t ch);         /* the filtered value */
+uint16_t adc_gain(void);              /* the VCC correction (cal_vcc_gain): also the highest corrected reading, about */
 uint8_t  adc_saturated(uint8_t ch);   /* the latest counts are at full scale: the input is beyond what the ADC measures */
 void     adc_prime(void);             /* scan everything twice so filtered values start at the real readings */
 
