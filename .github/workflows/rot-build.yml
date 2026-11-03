@@ -8,7 +8,9 @@ on:
   push:
     branches: [rot-theme]
     tags: ['v*']
-  workflow_dispatch:
+  workflow_dispatch:                                  # by hand (Actions tab): with a version, publishes that version's release
+    inputs:
+      version: { description: 'Version to release, e.g. v0.2.0-beta.1 (empty: just rebuild rot-latest)', required: false, default: '' }
 permissions: { contents: read }
 concurrency: { group: 'rot-build-${{ github.ref }}', cancel-in-progress: true }   # a tag and the branch build side by side
 jobs:
@@ -59,16 +61,18 @@ jobs:
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be   # v2.4.0
         with: { subject-path: "out/fw.bin\nout/openws3.html" }
       - name: Publish the installer
-        env: { GH_TOKEN: '${{ github.token }}', GH_REPO: '${{ github.repository }}' }
+        env: { GH_TOKEN: '${{ github.token }}', GH_REPO: '${{ github.repository }}', INPUT_VERSION: '${{ inputs.version }}' }
         run: |
           short=$(echo "$GITHUB_SHA" | cut -c1-8)
           notes="Built from commit $short by GitHub Actions, after every test passed. SHA-256 of the files is in SHA256SUMS; check the
           build provenance with: gh attestation verify fw.bin -R $GITHUB_REPOSITORY. Download openws3.html, open it in Chrome or Edge,
           press Connect, follow the install steps. Unofficial firmware that replaces VIFLY's: read SAFETY.md, supervise charging."
-          if [ "$GITHUB_REF_TYPE" = tag ]; then         # a version: its own release, kept; a "-beta" or "-rc" version is a pre-release
-            pre=""; case "$GITHUB_REF_NAME" in *-*) pre=--prerelease ;; esac
-            gh release create "$GITHUB_REF_NAME" out/fw.bin out/openws3.html out/SHA256SUMS --verify-tag $pre \
-              --title "WS3 Unlocked $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          ver="$INPUT_VERSION"; [ "$GITHUB_REF_TYPE" = tag ] && ver="$GITHUB_REF_NAME"
+          if [ -n "$ver" ]; then                         # a version: its own release, kept; a "-beta" or "-rc" version is a pre-release
+            case "$ver" in v[0-9]*) ;; *) echo "not a version: $ver"; exit 1 ;; esac
+            pre=""; case "$ver" in *-*) pre=--prerelease ;; esac
+            gh release create "$ver" out/fw.bin out/openws3.html out/SHA256SUMS --target "$GITHUB_SHA" $pre \
+              --title "WS3 Unlocked $ver" --notes-file RELEASE_NOTES.md
             exit 0
           fi
           gh release delete rot-latest --yes --cleanup-tag || true
