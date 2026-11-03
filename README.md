@@ -29,6 +29,9 @@ Where to go:
   stop where it should, does the fault fire when it should, do the numbers make physical sense. I'm a cognitive science student, and
   that's most of what the field is: building models of a process you can't see inside, then testing whether its outputs hold up. If that's a problem for you, don't
   install it. Simple as that.
+- **This is uncharted territory.** New tools, new methods, firmware nobody has run before: you're past the guardrails that normally
+  protect you, out in the Wild West. That's what this project is. If you're not comfortable being somewhere exploratory and unsafe,
+  you probably shouldn't fuck around with this.
 - **It's run on one charger.** Mine. Everything else is simulation, automated tests and review.
 - **Going back to VIFLY's firmware may not be possible.** I don't have a tested way, and the old firmware can't be read out before
   installing. Treat installing as one-way.

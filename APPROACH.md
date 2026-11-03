@@ -32,6 +32,18 @@ model, and the planted-bug tests are how I check that the model would notice whe
 
 If that's a problem for you, don't install it. Simple as that.
 
+## Where this sits
+
+When you work with emerging technology, cutting-edge tools, new ways of building things, you've gone over the guardrails. The
+barriers that are normally there to protect you (a manufacturer's testing, certification, years of other people using the same
+thing) aren't there yet. You're in the jungle, exploring territory nobody has mapped.
+
+That's what this is. An AI-built firmware for a lithium charger, checked with methods I put together myself, on one unit: it's the
+Wild West. I've done everything I can to make it as safe as I can, and the rest of this document is how. But it is not the safe,
+paved road, and nothing I write can make it one.
+
+If you don't feel comfortable being in an unsafe, exploratory environment like that, you probably shouldn't fuck around with this.
+
 I still don't trust it by default, and neither should you. An AI writes code that looks confident whether it's right or
 not. So the rule for this project has been: **assume it's wrong until something independent shows it isn't.** Everything below is
 about how "something independent" was done.
