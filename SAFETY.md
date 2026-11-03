@@ -209,8 +209,8 @@ a fault removed, a guard bypassed), and the suites run against the broken firmwa
 earlier code: 15 of 29 planted bugs survived at least one suite, among them a disabled charge over-voltage cut, a removed 4.40 V bleed
 fault and developer mode ignoring a lost input. The scenarios added since (the rail sensor reading low, the overcharged cell, developer
 mode rules, the soft ramp after pre-charge) were written to catch exactly those. The runner and its list of planted bugs are in
-`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit, the second review round and the red team it has 47
-planted bugs, one for each fix. On the current code **46 of 47 are caught** (GitHub Actions, "Mutation tests", run 41691500703). The one that survives by design is the fatal-stop rail value in `src/hal.c`:
+`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit, the second review round and the red team it has 50
+planted bugs, one for each fix. On the current code **49 of 50 are caught** (GitHub Actions, "Mutation tests", run 41696444265). The one that survives by design is the fatal-stop rail value in `src/hal.c`:
 the simulator replaces that file with its model, so that line is checked by review and on the charger only (the same change made in
 the model is caught).
 

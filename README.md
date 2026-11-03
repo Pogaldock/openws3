@@ -54,7 +54,7 @@ independent shows it isn't. In practice that's several layers, each looking from
   tests couldn't: the rail-fault alarm never sounded (in OpenWS3 too).
 - **A fuzzer** throws random button presses, USB commands, cells, supplies and faults at the simulated charger for simulated hours,
   and checks the safety rules after every control pass. A short batch runs on every build; long runs go on GitHub.
-- **I break the safety checks on purpose** (mutation testing, one planted bug per fix) to prove the tests notice: 46 of 47 planted bugs are
+- **I break the safety checks on purpose** (mutation testing, one planted bug per fix) to prove the tests notice: 49 of 50 planted bugs are
   caught. The one left is a line the simulator can't reach by design (it replaces that
   file with its model); it's checked by review and on the charger.
 - **AI reviewers, several rounds**, each given only the code and one area, never my conclusions, so they aren't just agreeing with
@@ -203,9 +203,10 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
   open it in Chrome or Edge, press Connect and follow the steps. A charger that runs the VIFLY firmware is put into its loader by
   holding the left button while plugging in USB-C; one that runs OpenWS3 or WS3 Unlocked restarts into it by itself.
 - **Going back:** OpenWS3 can be installed from its own releases (hold the left button while plugging in USB-C, then install).
-  **Don't install a WS3 Unlocked older than 0.2.0-beta.2** (`v0.2.0-beta.1` and the `build-` pre-releases): they predate the audit
-  and have the bugs SAFETY.md lists as fixed in 0.2-beta.2. **No way back to VIFLY's firmware has been tested**: treat installing as one-way.
-- **After installing 0.2-beta.2** every setting is back to its default (0.3 A, 4.20 V, 4.35 V allowed): set yours again.
+  **Don't install a WS3 Unlocked older than 0.2.0-beta.4**, if you have a copy: older builds lack the audit and red-team fixes
+  in SAFETY.md. Only 0.2.0-beta.4 and later are published. **No way back to VIFLY's firmware has been tested**: treat installing as one-way.
+- **Coming from 0.2.0-beta.2 or older,** every setting is back to its default after installing (0.3 A, 4.20 V, 4.35 V allowed): set
+  yours again. From beta.3 they are kept.
 - **First charges:** follow the checklist in SAFETY.md (a multimeter check of a full cell, diagnostics page 1).
 
 ### Check what you downloaded

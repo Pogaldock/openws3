@@ -3,6 +3,14 @@ It replaces VIFLY's firmware and decides the voltage and current that go into yo
 assistant, directed and checked by me) and has run on one charger. Going back to VIFLY's firmware may not be possible. Charge in a LiPo bag or on a non-flammable
 surface, supervise every charge, never overnight. No warranty, no responsibility taken: you install it at your own risk.
 
+### 0.2.0-beta.4: two gaps closed (replaces beta.3)
+- **A USB stop can't be lost.** The installer page and `fwmon.py` resend a command that isn't acknowledged; the unit runs each
+  command number once, so a resend never does anything twice (USB.md has the rule for other programs).
+- **The input limits are now checked on the whole simulated charger:** MAX IN AMPS against the real input current, MIN IN VOLTS on a
+  weak supply in both modes.
+- Settings are kept from beta.3. From beta.2 or older they load as defaults once: set yours again.
+- Everything else as in beta.3, below.
+
 ### 0.2.0-beta.3: fixes from a red-team round
 Five attackers were sent at 0.2.0-beta.2 to break it. None found a way to overcharge a cell with the sensors in calibration. Fixed:
 - **Hold B1 for about a second to stop, on any screen.** In the menu, port settings and diagnostics it used to only scroll.
@@ -40,7 +48,7 @@ The 4.35 V accuracy on the tested unit is not confirmed by a multimeter yet. No 
 clears a port's fault (SAFETY.md, Not fixed): pull a cell that faulted once.
 
 ### Checked
-57 whole-firmware scenarios, a fuzzer (a short batch on every build), the unit tests on PC and on a simulated 8051, and 46 of 47
+60 whole-firmware scenarios, a fuzzer (a short batch on every build), the unit tests on PC and on a simulated 8051, and 49 of 50
 planted bugs caught (the one left can't be reached by the simulator by design). An audit, a review round on the changes, and a red-team round, all by AI agents.
 
 ### Install and check

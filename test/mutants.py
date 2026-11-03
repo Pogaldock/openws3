@@ -92,8 +92,8 @@ def main():
 if __name__ == '__main__':
     main()
 
-# Result on 2026-11-03, 0.2.0-beta.3 (after the red-team round),
-# run on GitHub (Actions, "Mutation tests", run 41691500703):
+# Result on 2026-11-03, 0.2.0-beta.4,
+# run on GitHub (Actions, "Mutation tests", run 41696444265):
 #   M0 src/chg.c [rail_sense_low]: killed
 #   M1 src/chg.c [rail_sense_low]: killed
 #   M2 src/chg.c [bleed_over]: killed
@@ -141,4 +141,7 @@ if __name__ == '__main__':
 #   M44 src/chg.c [pre_ir]: killed
 #   M45 src/app.c [store_saved]: killed
 #   M46 src/adc.c [backfeed_noise]: killed
-#   46 of 47 planted bugs caught
+#   M47 src/app.c [input_limit]: killed
+#   M48 src/app.c [min_in_volts]: killed
+#   M49 src/app.c [usb_stop_burst]: killed
+#   49 of 50 planted bugs caught
