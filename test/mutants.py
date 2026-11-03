@@ -61,7 +61,8 @@ def main():
 if __name__ == '__main__':
     main()
 
-# Result on 2026-11-03 (developer mode removed; storage and statistics added):
+# Result on 2026-11-03 (developer mode removed; storage and statistics added), and the same on 0.2.0-beta.1 (one look, new screen),
+# run on GitHub (Actions, "Mutation tests", run 41652240488):
 #   M0 src/chg.c [rail_sense_low]: killed
 #   M1 src/chg.c [rail_sense_low]: killed
 #   M2 src/chg.c [bleed_over]: killed
