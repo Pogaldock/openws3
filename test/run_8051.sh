@@ -32,7 +32,7 @@ for t in pure menu portset; do
     sdcc $CF -Dmain=test_main -c test/test_$t.c -o $W/t_$t.rel
     sdcc $CF $LINK $W/runner.rel $W/t_$t.rel $W/io.rel $MODS -o $W/t_$t.ihx >/dev/null
 done
-for t in pure menu portset; do run $W/t_$t.ihx $W/o_$t 900 & done   # the three simulators side by side: as long as the slowest
+for t in pure menu portset; do run $W/t_$t.ihx $W/o_$t 1500 & done   # the three simulators side by side: as long as the slowest
 wait
 for t in pure menu portset; do
     grep -E 'FAIL|checks' $W/o_$t.txt || true

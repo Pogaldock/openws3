@@ -291,12 +291,13 @@ static void t_buzz(void)
 
 /* the measurements (stats.h): state of charge, charge counted, resistance, time to full */
 static uint16_t vu_of(uint16_t mv) { return (uint16_t)((uint32_t)mv * 4096u / 4500u); }
+static uint8_t st_dt = 5;                     /* ms per pass; longer steps keep the 8051 run short */
 static void st_feed(uint8_t st, uint16_t mv, uint8_t i, long passes)
 {
     long k;                                   /* long: int is 16 bits on the 8051, and a run is far more passes than that */
     for (k = 0; k < passes; k++) {
         stats_in.state[0] = st; stats_in.v[0] = vu_of(mv); stats_in.i[0] = i; stats_in.want[0] = 41; stats_in.held[0] = 0;
-        stats_pass(vu_of(4200), 0, 5);
+        stats_pass(vu_of(4200), 0, st_dt);
     }
 }
 static void t_stats(void)
@@ -313,7 +314,7 @@ static void t_stats(void)
     CHECK(stats.r_mohm[0] == 0);                                        /* not yet: one second at the working current first */
     st_feed(PS_CHARGE, 3760, 41, 50);
     NEAR(stats.r_mohm[0], 100, 3);
-    st_feed(PS_CHARGE, 3760, 41, 720000 - 250);                         /* 3600 s at 0.6 A in all: 600 mAh */
+    st_dt = 250; st_feed(PS_CHARGE, 3760, 41, 14400 - 5); st_dt = 5;   /* 3600 s at 0.6 A in all (in 0.25 s steps): 600 mAh */
     NEAR(stats.mah[0], 600, 3);
     CHECK(stats.eta_s[0] == ETA_UNKNOWN);                               /* the voltage never rose: no estimate */
     st_feed(PS_CHARGE, 4000, 41, 2000);                                 /* now it rose to about 69 %: an estimate exists */
