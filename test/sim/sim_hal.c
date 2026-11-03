@@ -164,7 +164,7 @@ uint8_t hal_chip_byte(uint8_t n)
 static uint8_t ee[1024];
 uint8_t hal_ee_read(uint16_t a) { return ee[a & 1023]; }
 void sim_ee_flip(uint16_t a, uint8_t mask) { ee[a & 1023] ^= mask; }
-void hal_ee_erase(uint16_t a) { memset(ee + (a & 1023 & ~511), 0xFF, 512); }
+void hal_ee_erase(uint16_t a) { S.ee_erases++; memset(ee + (a & 1023 & ~511), 0xFF, 512); }
 void hal_ee_write(uint16_t a, uint8_t v) { ee[a & 1023] &= v; }
 uint32_t hal_ms(void) { return (uint32_t)(S.ticks / 2); }
 uint32_t hal_ticks(void) { sim_advance(1); return (uint32_t)S.ticks; }     /* a busy wait on the tick moves time on */

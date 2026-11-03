@@ -467,6 +467,16 @@ static void s_cfg_damage(void)
     CHECK(settings.volt == 0 && settings.usb_off == 0);
 }
 
+/* two bits flipped 8 bytes apart (volt and port 2's current): still caught */
+static void s_cfg_damage2(void)
+{
+    cfg_load(); settings.volt = 0; settings.usb_off = 1; cfg_save();
+    sim_ee_flip(CFG_ADDR + 2, 0x01); sim_ee_flip(CFG_ADDR + 10, 0x01);
+    cfg_load();
+    printf("  settings page with two bits flipped 8 bytes apart: target index %u, USB power off %u (defaults: 0, 0)\n", settings.volt, settings.usb_off);
+    CHECK(settings.volt == 0 && settings.usb_off == 0);
+}
+
 /* the board heats up past 60 C, then cools; then the thermistor is unplugged (reads full scale) */
 static void s_hot(void)
 {
@@ -699,6 +709,119 @@ static void s_hv_race(void)
     CHECK(settings.hv == 0 && settings.volt != 1 && S.max_cell_v[0] < 4.23);
 }
 
+/* VCC 4.40 to 4.42 V with the 4.35 V target: the rail ADC can't read the setpoint there; a waiting stop, not a rail runaway */
+static void s_hv_lowvcc(void)
+{
+    sim_attach(0, 3.9, 300);
+    S.vcc = 4.50; boot(); tap(2); start(); run_for(20);           /* 4.35 V, charging */
+    S.vcc = 4.41; run_for(10);
+    printf("  VCC sags to 4.41 V on a 4.35 V run: fatal 0x%02x, stop %u, rail driven max %.3f V, port %u\n", usb_tx2[54], usb_tx2[52], S.max_rail_driven, S.pwm[0]);
+    CHECK(usb_tx2[54] == 0 && S.max_rail_driven < 4.40 && !S.pwm[0]);
+}
+
+/* VCC stepping every second (each step repaints the screen: a long pass): the 3 h limit still on time */
+static void s_never_full_wobble(void)
+{
+    double t_off = 0; unsigned n = 0;
+    sim_attach(0, 4.00, 1000000);
+    boot(); start();
+    while (S.ticks < SEC(3.5 * 3600) && !t_off) {
+        uint64_t end = S.ticks + SEC(1.0);
+        S.vcc = (n++ & 1) ? 4.47 : 4.55;
+        while (S.ticks < end) { pass(); if (!t_off && !S.pwm[0] && S.ticks > SEC(60)) t_off = S.ticks / 2000.0 / 3600; }
+    }
+    printf("  never-full cell, VCC stepping 4.55 / 4.47 V each second: charging stopped at %.2f h\n", t_off);
+    CHECK(t_off > 2.9 && t_off < 3.1);
+}
+
+/* holding B1 stops a run on every screen, not only the main one (menu, port settings, diagnostics) */
+static void s_stop_any_screen(void)
+{
+    int a, b, c, r = 1;
+    sim_attach(0, 3.7, 300);
+    boot(); start(); run_for(5);
+    both(0.12);                                                   /* the menu, while charging */
+    r &= S.pwm[0] > 0;
+    S.btn1 = 1; run_for(1.5); S.btn1 = 0; run_for(0.5);
+    a = !S.pwm[0];
+    both(1.0); both(1.0); run_for(0.5);                           /* out of the menu */
+    if (!S.pwm[0]) start();
+    run_for(5);
+    S.btn2 = 1; run_for(0.6); S.btn2 = 0; run_for(0.3);           /* port settings */
+    r &= S.pwm[0] > 0;
+    S.btn1 = 1; run_for(1.5); S.btn1 = 0; run_for(0.5);
+    b = !S.pwm[0];
+    both(1.0); run_for(10.5);                                     /* port settings closed (BACK, then its 10 s timeout) */
+    if (!S.pwm[0]) start();
+    run_for(5);
+    both(0.12); tap(2); tap(2); tap(2); both(0.12);               /* menu, DIAGNOSTICS, page 1 */
+    r &= S.pwm[0] > 0;
+    S.btn1 = 1; run_for(1.5); S.btn1 = 0; run_for(0.5);
+    c = !S.pwm[0];
+    printf("  B1 held 1.5 s while charging: stops in the menu %s, in port settings %s, on a diagnostics page %s (charging before each: %s)\n",
+           a ? "yes" : "NO", b ? "yes" : "NO", c ? "yes" : "NO", r ? "yes" : "NO");
+    CHECK(r && a && b && c);
+}
+
+/* a deeply discharged cell with a high resistance (damaged): its reading under current must not end the pre-charge early */
+static void s_pre_ir(void)
+{
+    double mx = 0;
+    uint64_t end;
+    sim_attach(0, 2.70, 300); S.cell[0].r = 0.5;
+    boot(); set_current(10); start();
+    end = S.ticks + SEC(30 * 60);
+    while (S.ticks < end) { pass(); if (sim_ocv_of(S.cell[0].q / S.cell[0].cap_c) < 2.95 && S.amps[0] > mx) mx = S.amps[0]; }
+    printf("  2.70 V cell of 0.5 ohm, 1.0 A setting: highest current while it is below 2.95 V: %.3f A (pre-charge is 0.1 A)\n", mx);
+    CHECK(mx < 0.15);
+}
+
+/* the storage offer left open after a host stop, a host change waiting to be saved, then B2: the storage target is not saved */
+static void s_store_saved(void)
+{
+    static const uint8_t stop[] = { 1, 0, 3 }, cur[] = { 3, 28, 4 };
+    sim_attach(0, 4.30, 300);
+    S.usb_host = 1;
+    cfg_load(); settings.hv = 1; settings.volt = 0; cfg_save();
+    boot(); start(); run_for(600); tap(1);
+    run_for(2 * 3600);
+    usb(stop, 3); run_for(0.2);
+    usb(cur, 3); run_for(0.2);
+    tap(2); run_for(5);
+    hold(1); run_for(2);
+    cfg_load();
+    printf("  storage started from the offer with a save pending: target saved in flash %u (0 = 4.20 V)\n", settings.volt);
+    CHECK(settings.volt == 0);
+}
+
+/* a 6S pack on the XT60 and USB-C plugged in, with ADC noise: the USB-C guard probes once, not again every few minutes */
+static void s_backfeed_noise(void)
+{
+    double fed = 0;
+    uint64_t end, t0;
+    S.adc_noise = 4; S.vcc = 4.55; S.vin = 5.0; S.xt60_v = 0;
+    boot(); run_for(10);
+    S.xt60_v = 22.2;
+    end = S.ticks + SEC(2 * 3600);
+    while (S.ticks < end) { t0 = S.ticks; pass(); if (S.profile && S.xt60_v > S.vin + 0.6) fed += (S.ticks - t0) / 2000.0; }
+    printf("  22.2 V pack on the XT60 for 2 h with ADC noise: USB-C side fed for %.3f s in all\n", fed);
+    S.adc_noise = 0; S.xt60_v = 0;
+    CHECK(fed < 0.06);
+}
+
+/* a host toggling a setting and asking for a start that is always refused must not wear the settings flash out */
+static void s_usb_wear(void)
+{
+    int k; uint8_t c3[] = { 3, 21, 0 }, c2[] = { 2, 0, 0 };
+    sim_attach(0, 3.9, 120); S.usb_host = 1;
+    boot(); S.vin = 3.0; run_for(3);                              /* input low: every start is refused */
+    S.ee_erases = 0;
+    for (k = 0; k < 200; k++) { c3[1] = (k & 1) ? 28 : 21; c3[2] = (uint8_t)(2 * k + 1); usb(c3, 3); c2[2] = (uint8_t)(2 * k + 2); usb(c2, 3); }
+    run_for(3);
+    printf("  200 setting toggles each followed by a refused start: %d settings erases\n", S.ee_erases);
+    CHECK(S.ee_erases <= 2);
+}
+
 /* the last guard: whatever path left 4.35 V selected with ALLOW 4.35V off (one nobody has found), a start runs on 4.20 V */
 static void s_hv_backstop(void)
 {
@@ -733,9 +856,9 @@ static const scen_t SC[] = {
     { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
     { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot }, { "no_dev", s_no_dev },
     { "stats", s_stats }, { "store", s_store }, { "store_back", s_store_back }, { "fault_full", s_fault_full },
-    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale }, { "hv_race", s_hv_race }, { "hv_backstop", s_hv_backstop }, { "rail_stop", s_rail_stop },
+    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale }, { "hv_race", s_hv_race }, { "hv_backstop", s_hv_backstop }, { "usb_wear", s_usb_wear }, { "backfeed_noise", s_backfeed_noise }, { "pre_ir", s_pre_ir }, { "store_saved", s_store_saved }, { "stop_any_screen", s_stop_any_screen }, { "hv_lowvcc", s_hv_lowvcc }, { "never_full_wobble", s_never_full_wobble }, { "rail_stop", s_rail_stop },
     { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
-    { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
+    { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "cfg_damage2", s_cfg_damage2 }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
    
 };
 

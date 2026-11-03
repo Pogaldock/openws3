@@ -6,7 +6,16 @@
 
 static uint8_t XD cfg_sum;                          /* XRAM: the internal RAM is full */
 
-static void sum_bytes(void) { uint8_t k; cfg_sum = 0x5A; for (k = 0; k < sizeof settings; k++) cfg_sum = (uint8_t)((cfg_sum << 1 | cfg_sum >> 7) ^ BYTES[k]); }
+/* CRC-8 (x^8 + x^2 + x + 1): any two flipped bits in the page are caught (the rotate-and-xor it replaces missed two 8 bytes apart) */
+static void sum_bytes(void)
+{
+    uint8_t k, b;
+    cfg_sum = 0x5A;
+    for (k = 0; k < sizeof settings; k++) {
+        cfg_sum ^= BYTES[k];
+        for (b = 0; b < 8; b++) cfg_sum = (uint8_t)(cfg_sum & 0x80 ? (cfg_sum << 1) ^ 0x07 : cfg_sum << 1);
+    }
+}
 
 void cfg_load(void)
 {

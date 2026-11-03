@@ -24,7 +24,7 @@ goes. Items marked *(upstream too)* are defects that are also in OpenWS3 as of c
 The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades, swells and can catch fire.
 - **CV regulation and over-voltage stop (OpenWS3):** the rail is held 15 mV above the target; a port whose voltage goes above the rail
   and the target (by 50 mV) for 0.45 s is faulted while charging; a full cell that rises leaves FULL and is bled down; while
-  bleeding, 4.40 V is a fault.
+  bleeding, 4.40 V is a fault. On 4.35 V the top of the FULL window is 4.40 V itself, so a cell there faults rather than bleeds.
 - **Readings corrected for the chip's supply (WS3 Unlocked, upstream too):** the ADC measures against the chip's own supply (VCC),
   which differs from unit to unit and supply to supply. OpenWS3 corrected only the input voltage, so every port reading scaled with
   VCC. Simulated: OpenWS3 charges to **4.57 V** on a 4.20 V setting at VCC 4.95 V; WS3 Unlocked finishes at 4.200 to 4.203 V from
@@ -173,7 +173,7 @@ real-time, current-offset, rail-alarm, 4.35 V switch, menu-lock and statistics t
 The real firmware (`src/app.c` and every module it calls; only the register layer is replaced) runs on the PC against a model of the
 board: the supply and its USB-C / XT60 paths, the inverted rail with sag, six ports, cells with an open-circuit curve, internal
 resistance, polarisation and optional leakage, an ADC referenced to VCC with noise, gain errors and reference spread, the display's bus
-time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 49 scenarios:
+time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 57 scenarios:
 - full charges at VCC 4.45 to 4.95 V, reference spread plus or minus 1 %, ADC noise, combined worst case
 - user stop, input lost, cell pulled mid-charge, short circuit and its latch, storage voltage, power cycle mid-charge
 - dead cell, deeply discharged cell, internally shorted cell, cell that never fills, leaking cell, never-full cells under MAX IN AMPS
@@ -190,6 +190,10 @@ time, the watchdog and the thermistor. It presses the buttons like a person and 
   faulted one (no finale, no storage offer, the fault stays); a cell that sags after full (one finale, then the offer, not one per
   top-up); a cell over 4.40 V at a low VCC (faults); a host start while the voltage is being edited (refused); B2 on the stopped
   main screen (skips 4.35 V when switched off, changes nothing while charging); a new cell after the finale (a finale of its own)
+- after the red team: B1 held to stop on the menu, port settings and diagnostics screens; a damaged (high resistance) flat cell kept
+  on pre-charge; VCC too low for the 4.35 V target (a waiting stop, not a rail runaway); VCC stepping every second (the 3 h limit on
+  time); two settings bits flipped 8 bytes apart; a host wearing out the settings flash with refused starts; the storage target never
+  saved from the offer; a 6S pack with ADC noise (the USB-C guard probes once)
 - USB-C: XT60 alone, a pack plugged in on a laptop and on a PD charger, packs present at power-up, PD start and reset, PD back at 5 V
 - in every scenario: the watchdog is never starved
 
@@ -202,8 +206,8 @@ a fault removed, a guard bypassed), and the suites run against the broken firmwa
 earlier code: 15 of 29 planted bugs survived at least one suite, among them a disabled charge over-voltage cut, a removed 4.40 V bleed
 fault and developer mode ignoring a lost input. The scenarios added since (the rail sensor reading low, the overcharged cell, developer
 mode rules, the soft ramp after pre-charge) were written to catch exactly those. The runner and its list of planted bugs are in
-`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit and the second review round it has 39
-planted bugs, one for each fix. On the current code **38 of 39 are caught** (GitHub Actions, "Mutation tests", run 41669530173). The one that survives by design is the fatal-stop rail value in `src/hal.c`:
+`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit, the second review round and the red team it has 47
+planted bugs, one for each fix. On the current code **the result of the run on this code is being filled in**. The one that survives by design is the fatal-stop rail value in `src/hal.c`:
 the simulator replaces that file with its model, so that line is checked by review and on the charger only (the same change made in
 the model is caught).
 
@@ -254,6 +258,49 @@ one is wrong. Their claims were checked against the code before anything was cha
     so the red skull on that port goes away and the cell can be charged again at the next start. Found by the second review round
     (low). The port is off either way and nothing restarts by itself; but if a supply dip stops the run, the fault screen you would
     have seen is gone. Look at the port's state before starting again, and pull a cell that faulted once
+
+### Fuzzer (after 0.2-beta.2) - `make fuzz`, and on GitHub: Actions, "Fuzz"
+`test/sim/fuzz.c` runs the same simulated board with random events, each seed reproducible: buttons (menus, edits, port settings,
+diagnostics), USB commands valid and malformed, cells put in, pulled and swapped (2.0 to 4.5 V, small to never-full, healthy to
+damaged, leaking), USB-C levels and PD steps, XT60 packs, VCC 4.30 to 5.2 V, stuck rails, port shorts, thermistor faults, a slow
+display, power cycles. After every control pass it checks the rules this document states: no cell over its target + 30 mV, nothing
+driven while stopped, in a fatal stop or a rail pause, settings unchanged through a run, no 4.35 V with ALLOW 4.35V off, the time
+limits, the supply and temperature stops, the over-current cut, no run that nobody started, the USB-C side fed backwards for no more
+than one probe per supply change. A failing seed is printed with a short list of events that repeats it. Every build runs 24 seeds;
+the first 70 seeds (157 simulated hours) found one bug (the USB-C guard probing again and again with a noisy reading, fixed).
+
+### Red team (after 0.2-beta.2, 2026-11-03)
+Five AI agents, each told to break one surface rather than review it, each finding to come with a reproduction: any way to overcharge
+a cell or drive a port; a hostile USB host and the install tools; the chip's edges (interrupts, stack, arithmetic, flash, timers);
+the build, release and documentation; and the fuzzer above. None found a way to take a cell over its target with the sensors in
+calibration. Fixed in 0.2-beta.3, each with a test and a planted bug:
+- **medium:** holding B1 did not stop a run on the menu, port settings or diagnostics screens (it only scrolled), and on the summary
+  or storage offer it only closed the screen. It now stops on every screen after about a second
+- **medium:** a damaged flat cell (high resistance) left pre-charge early: its reading under the 0.1 A lifted it past 3.0 V while it
+  was really lower, and it got up to 0.68 A. Pre-charge now ends at 3.05 V and holds 0.1 A until then
+- **medium:** with the 4.35 V target and the chip's supply at 4.40 to 4.42 V, the rail could not be read up to its setpoint: the
+  regulator wound it up to 4.43 V and latched a false fatal. Each target now has its own minimum chip supply (a waiting `VCC LOW`)
+- **medium:** a small supply step repainted the whole screen inside one control pass (0.3 s), and the time it lost past 135 ms was
+  dropped: the 3 h limit came at 3.3 h. Lost time is now carried over to the next passes, never dropped
+- **medium:** a host could wear out the settings flash (a refused start saved pending settings, 20 to 40 times a second); a second USB
+  command before the first ran replaced it (a stop could be lost); the installer page and `fwmon.py` could take an old
+  acknowledgement for a new command; `isp.py` flashed into the settings area of a chip that reports it lower than the tested one
+- **low:** the settings check missed two bits flipped 8 bytes apart (now a CRC-8; settings saved by 0.2-beta.2 load as defaults once);
+  the storage target could be saved from the offer screen; a short USB report reused old bytes; the USB-C guard probed again and
+  again with a 6S pack and a noisy reading (found by the fuzzer)
+- **build:** a push cancelled a release in progress; `rot-latest` was deleted before being recreated (a dead link if cancelled); the
+  8051 simulator package was installed before the published files were built; changes were not tested before a merge
+- **documentation:** an automatic stop also clears a port's fault and its time limits (now in the guide); the rail alarm pauses, not
+  stops; on 4.35 V a cell at 4.40 V faults rather than bleeds; the 3 h limit does not count time held at zero current by the input
+  limits; which tests run on the simulated 8051; older releases recommended for going back
+- **not fixed, and why:**
+  - **sensor tolerances that stack:** the rail sensor reading 0.8 % low together with the chip's reference reading 1 % high takes a
+    4.35 V cell to 4.40 V at rest without a fault (4.25 V on the 4.20 V target). Every reading shifts together, so no cross-check in
+    firmware can see it; it is the per-unit accuracy already listed below, and the multimeter check is how you find it. The chip
+    stores its own factory reference value (diagnostics page 1); using it needs the tested unit's value, still to be read
+  - **the millisecond clock wraps after about 25 days of continuous power:** once, a pending settings save or the USB-C guard's
+    steady wait may come early or late. The simulator replaces that code, so a change could not be tested; power it off now and then
+  - the mAh total can lose about 1 mAh on a very long pass (display only)
 
 ### On the charger (one unit, VIFLY WhoopStor V3, chip version A)
 - VCC 4.484 V on every supply tried: two PD chargers, a laptop port, a 4S pack (it comes from its own regulator).
@@ -352,7 +399,8 @@ Each line: what is assumed, how well it is supported, what happens if it is wron
 
 - **After installing 0.2-beta.2 every setting is back to its default** (0.3 A, 4.20 V, 4.35 V allowed): set yours again.
 - **First boot:** the splash plays once with its jingle and the main screen comes up. A splash every few seconds means a reset loop
-  (most likely the tone timer): reinstall the previous build (hold the left button while plugging in USB-C) and report it.
+  (most likely the tone timer): install OpenWS3 from its own releases (hold the left button while plugging in USB-C) and report it.
+  Not a WS3 Unlocked older than 0.2.0-beta.2: those predate the audit fixes.
 - **Multimeter (the important one):** charge a cell to full, let it rest 5 minutes, measure it at the cell. 4.17 to 4.23 V for 4.20 V,
   4.32 to 4.38 V for 4.35 V. Outside that, stop and report it with a photo of diagnostics page 1.
 - **Diagnostics page 1** (menu, DIAGNOSTICS): VCC between 4.45 and 4.95 V (the range the correction was tested over); `STACK` after a

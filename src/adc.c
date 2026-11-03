@@ -36,6 +36,7 @@ static uint8_t  XD vg_n, vg_hi, vg_lo, vg_state;   /* probe passes, passes above
 #define VG_HI_PASSES     3
 #define VG_DROP_MV       2000
 #define VG_LO_PASSES     222                    /* 1 s */
+#define VG_FALL_PASSES   22                     /* about 0.1 s */
 
 static void vg_learn(void) { vg_state = VG_LEARN; vg_tj = hal_ms(); vg_off = vg_mv; }
 
@@ -55,7 +56,7 @@ static void vin_guard(void) REENT                 /* reentrant: its 32-bit time 
         break;
     case VG_PROBE:
         if (++vg_n > VG_PROBE / 2 && vg_mv > vg_ref) vg_ref = vg_mv;
-        if (vg_n >= VG_PROBE) { if (vg_ref >= vg_off + VG_DIODE_MV) { vg_state = VG_OK; vg_hi = 0; } else vg_state = VG_HOLD; }
+        if (vg_n >= VG_PROBE) { if (vg_ref >= vg_off + VG_DIODE_MV) { vg_state = VG_OK; vg_hi = 0; } else { vg_state = VG_HOLD; vg_lo = 0; } }
         break;
     case VG_OK:
         if (vg_mv > vg_ref + VG_RISE_MV) { if (++vg_hi >= VG_HI_PASSES) vg_learn(); } else vg_hi = 0;
@@ -65,7 +66,8 @@ static void vin_guard(void) REENT                 /* reentrant: its 32-bit time 
         break;
     default:                                    /* VG_HOLD: a higher reading is still the XT60 supply; a fall may mean it has gone */
         if (vg_mv > vg_off) vg_off = vg_mv;
-        else if (vg_mv + VG_JUMP_MV < vg_off) vg_learn();
+        /* a fall that lasts: one noisy low sample under a peak that crept up with the noise would probe again and again */
+        if (vg_mv + VG_JUMP_MV < vg_off) { if (++vg_lo >= VG_FALL_PASSES) { vg_lo = 0; vg_learn(); } } else vg_lo = 0;
         break;
     }
     hal_bypass_ok(vg_state == VG_OK || vg_state == VG_PROBE);

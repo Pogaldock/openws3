@@ -7,6 +7,7 @@
 static const CODE uint16_t TGT[NVOLTS] = { VU(4200), VU(4350), VU(3800), VU(3850) };
 
 #define VCC_STOP         1108    /* bandgap count: VCC <= 4.4 V: an undervoltage, and the rail ADC (full scale = VCC) can no longer tell an over-voltage */
+#define RAIL_HEADROOM    12      /* the rail ADC must reach this many counts above the setpoint, or VCC is too low for that target */
 #define VCC_HIGH         976     /* bandgap count: VCC > 5.0 V (the chip takes 5.5 V) */
 #define VCC_HIGH_PASSES  20      /* ... for this many passes in a row */
 #define HOLD_PASSES      222     /* a waiting condition changes to a lesser one, or clears, only after this long (~1 s): no flicker on a falling supply */
@@ -45,12 +46,15 @@ void sup_reset(void) { div_cnt = 0; nr_cnt = 0; ov_cnt = 0; vh_cnt = 0; st_cur =
 void sup_pass(const sup_in_t XD *in, sup_out_t XD *o)
 {
     uint16_t S = in->setpoint;
+    /* VCC too low: a fixed floor, and per target: the rail ADC's full scale (VCC, as corrected: 4096 x BG_NOM / bandgap) must sit above
+       the setpoint, or the regulator chases a value it can never read and winds the rail up (4.35 V at VCC 4.40 to 4.42 V) */
+    uint8_t vcc_low = in->bandgap >= VCC_STOP || (uint32_t)in->bandgap * (S + RAIL_HEADROOM) > 4096UL * BG_NOM;
 
     o->stop = STOP_NONE; o->fatal = SF_NONE;
     o->rail_up = in->rail >= RAIL_UP;
 
     /* ---- VCC, and the input voltage it follows down: the input is the cause, so it is said first ---- */
-    if (in->bandgap >= VCC_STOP) o->stop = STOP_VCC;
+    if (vcc_low) o->stop = STOP_VCC;
     if (in->vin < VIN_MIN) o->stop = STOP_VIN;
     if (in->bandgap < VCC_HIGH) { if (vh_cnt < VCC_HIGH_PASSES) vh_cnt++; } else vh_cnt = 0;
     if (vh_cnt >= VCC_HIGH_PASSES) o->fatal = SF_VCC_HIGH;
@@ -62,14 +66,14 @@ void sup_pass(const sup_in_t XD *in, sup_out_t XD *o)
     } else if (div_cnt) div_cnt--;
     /* over-voltage = the rail beyond what the ADC can measure (about 4.5 V); its own count, so time spent low (a sagging input)
        does not make one overshoot fatal */
-    if (in->rail_sat && in->bandgap < VCC_STOP) { if (++ov_cnt >= RAIL_CUT_PASSES) { ov_cnt = RAIL_CUT_PASSES; o->fatal = SF_RAIL_OVER; } }
+    if (in->rail_sat && !vcc_low) { if (++ov_cnt >= RAIL_CUT_PASSES) { ov_cnt = RAIL_CUT_PASSES; o->fatal = SF_RAIL_OVER; } }
     else if (ov_cnt) ov_cnt--;
     if (rail_alarm && in->rail + RAIL_OK_BAND >= S && in->rail <= S + RAIL_OK_BAND) {
         if (++ok_cnt >= RAIL_OK_PASSES) { rail_alarm = 0; div_cnt = 0; ok_cnt = 0; }   /* in band for a second, not one lucky pass */
     } else ok_cnt = 0;
     if (rail_alarm && o->stop == STOP_NONE) o->stop = STOP_RAIL;   /* out of regulation for long; a low input or VCC is the cause, and is said first */
     /* never up although the input and VCC are fine: the buck stage or its sense is broken (a low input is the waiting STOP_VIN) */
-    if (!o->rail_up && in->vin >= VIN_MIN && in->bandgap < VCC_STOP) { if (nr_cnt < NO_RAIL_PASSES) nr_cnt++; } else nr_cnt = 0;
+    if (!o->rail_up && in->vin >= VIN_MIN && !vcc_low) { if (nr_cnt < NO_RAIL_PASSES) nr_cnt++; } else nr_cnt = 0;
     if (nr_cnt >= NO_RAIL_PASSES) o->fatal = SF_NO_RAIL;
 
     /* ---- board temperature (the thermistor, ADC0): too hot or a broken sensor stops charging until it is back in range ---- */

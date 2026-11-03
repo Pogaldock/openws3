@@ -8,11 +8,14 @@ on:
   push:
     branches: [rot-theme]
     tags: ['v*']
+  pull_request:                                       # a proposed change is tested before it can be merged (it never publishes: see publish)
+    branches: [rot-theme]
   workflow_dispatch:                                  # by hand (Actions tab): with a version, publishes that version's release
     inputs:
       version: { description: 'Version to release, e.g. v0.2.0-beta.1 (empty: just rebuild rot-latest)', required: false, default: '' }
 permissions: { contents: read }
-concurrency: { group: 'rot-build-${{ github.ref }}', cancel-in-progress: true }   # a tag and the branch build side by side
+# a newer push cancels an older push build; a release by hand (with a version) has its own group, so a push never cancels it
+concurrency: { group: "rot-build-${{ github.ref }}-${{ inputs.version || github.event_name }}", cancel-in-progress: true }
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -30,10 +33,8 @@ jobs:
         run: make test
       - name: Whole-firmware safety scenarios on a simulated board
         run: make sim
-      - name: Pure, menu and port-settings unit tests and the charge-logic trace on a simulated 8051 (16-bit int, as on the charger)
-        run: |
-          sudo apt-get install -y -qq sdcc-ucsim >/dev/null      # s51, the 8051 simulator; this job holds no write token
-          make check-8051
+      - name: Fuzzer, a short batch (random events, the safety rules checked every pass; the long run is the Fuzz workflow)
+        run: make fuzz FUZZ_SEED=1 FUZZ_SEEDS=24 FUZZ_HOURS=6
       - name: Firmware and installer
         run: make
       - name: Flash use and checksums
@@ -46,6 +47,12 @@ jobs:
           cd build && sha256sum fw.bin openws3.html > SHA256SUMS && cat SHA256SUMS | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4.6.2
         with: { name: firmware, path: "build/fw.bin\nbuild/openws3.html\nbuild/SHA256SUMS", if-no-files-found: error }
+      # last, after the published files are built and uploaded: the 8051 simulator comes from the distribution's packages, so
+      # nothing it installs can touch them; publish still needs this step to pass
+      - name: Pure, menu and port-settings unit tests and the charge-logic trace on a simulated 8051 (16-bit int, as on the charger)
+        run: |
+          sudo apt-get install -y -qq sdcc-ucsim >/dev/null      # s51, the 8051 simulator; this job holds no write token
+          make check-8051
 
   publish:
     needs: test
@@ -83,6 +90,12 @@ jobs:
               --title "WS3 Unlocked $ver" --notes-file RELEASE_NOTES.md
             exit 0
           fi
-          gh release delete rot-latest --yes --cleanup-tag || true
-          gh release create rot-latest out/fw.bin out/openws3.html out/SHA256SUMS LICENSE --target "$GITHUB_SHA" --prerelease \
-            --title "WS3 Unlocked, latest build ($short)" --notes "$notes"
+          # rot-latest is updated in place (never deleted first), so its link always works
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/rot-latest" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/rot-latest" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh release upload rot-latest out/fw.bin out/openws3.html out/SHA256SUMS LICENSE --clobber
+            gh release edit rot-latest --title "WS3 Unlocked, latest build ($short)" --notes "$notes" --prerelease
+          else
+            gh release create rot-latest out/fw.bin out/openws3.html out/SHA256SUMS LICENSE --target "$GITHUB_SHA" --prerelease \
+              --title "WS3 Unlocked, latest build ($short)" --notes "$notes"
+          fi

@@ -48,17 +48,23 @@ independent shows it isn't. In practice that's several layers, each looking from
 - **I added the protections a charger should have** and OpenWS3 didn't: refusing over-discharged cells, a gentle pre-charge with
   its own time limit, a 3 hour charge limit, a board over-temperature stop, a watchdog, a clean reset on a collapsing supply, and a
   guard so a pack on the XT60 can't feed backwards into a laptop on the USB-C port.
-- **I built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and run the real firmware against it in 49
+- **I built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and run the real firmware against it in 57
   scenarios: shorts, dead cells, cells that never fill, overheating, stuck hardware, supply faults, a hostile USB host.
 - **The tests also run on a simulated copy of the chip**, because it does arithmetic differently from a PC. That caught a bug the PC
   tests couldn't: the rail-fault alarm never sounded (in OpenWS3 too).
-- **I break each safety check on purpose** (mutation testing) to prove the tests notice: 38 of 39 planted bugs are caught. The one
-  left is a line the simulator can't reach by design (it replaces that file with its model); it's checked by review and on the charger.
+- **A fuzzer** throws random button presses, USB commands, cells, supplies and faults at the simulated charger for simulated hours,
+  and checks the safety rules after every control pass. A short batch runs on every build; long runs go on GitHub.
+- **I break the safety checks on purpose** (mutation testing, one planted bug per fix) to prove the tests notice. The result of the
+  run on this code is being filled in. The one expected to survive is a line the simulator can't reach by design (it replaces that
+  file with its model); it's checked by review and on the charger.
 - **AI reviewers, several rounds**, each given only the code and one area, never my conclusions, so they aren't just agreeing with
   me. They found real defects every round: a way for a USB program to push a cell to 4.45 V, a time limit that never fired, the
   sound code able to corrupt a voltage reading from inside an interrupt, time limits running slow when the screen was busy. Each one
   was reproduced, fixed and given a test. I kept going round by round until a round on the changed code found nothing critical or
-  high. These were AI reviewers, not people: no human expert has reviewed it yet.
+  high. Then, after releasing 0.2.0-beta.2, I sent five attackers at it whose only job was to break it (any way to overcharge a cell,
+  a hostile USB host, the chip's edges, the build and the docs, and the fuzzer). None found a way to overcharge a cell with the sensors
+  in calibration; what they did find is fixed in 0.2.0-beta.3 (SAFETY.md, "Red team"). These were AI agents, not people: no human
+  expert has reviewed it yet.
 - **I measured it on my charger**: supply, input reading, rail, stack, temperature sensor, the USB-C guard on a laptop.
 - **The build is checkable**: GitHub builds it only if every test passes, and publishes checksums and a signed record of which
   code it came from.
@@ -139,7 +145,7 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
 - **Sprites and font** as editable text files: `tools/sprites.txt`, `tools/font_rot.txt`, turned into C by `tools/gen_sprites.py` and
   `tools/gen_font.py` (`src/sprites.c`, `src/font_rot.c`).
 - The look only draws: it reads the values the charge logic produces and changes no charging behaviour. Its code was written to fit
-  the chip's full internal RAM (no new direct-RAM use) and its stack (measured on the charger: 24 to 45 bytes free).
+  the chip's full internal RAM (no new direct-RAM use) and its stack (measured on the charger: 24 to 48 bytes never used, depending on the screen version; at least 24 is the figure to plan with).
 
 ### Safety (details, evidence and limits for each: [SAFETY.md](SAFETY.md))
 - **Charge voltage that no longer depends on the supply** *(upstream too)*: every ADC reading is corrected with the chip's internal
@@ -148,7 +154,9 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
 - **Rail-fault alarm that sounds** *(upstream too)*: with SDCC 4.6 the buzzer's "busy" test compiled to "always busy", so the alarm
   never started (`src/buzz_pure.c`). Found by the tests on a simulated 8051.
 - **Over-discharged cells** (`src/chg.c`): below 2.5 V a cell is refused; from 2.5 to 3.0 V it charges at 0.1 A, at most 30 minutes.
-- **Charge time limit** (`src/chg.c`): 3 hours of charging per cell, top-ups included, also when the input limits share the current.
+- **Charge time limit** (`src/chg.c`): 3 hours of charging per cell, top-ups included. Time a port waits at zero current because the
+  input limits gave its share to others is not counted, so on a small shared budget a run can last longer (in simulation, three
+  never-full cells sharing 0.5 A all stopped by 9.6 h).
 - **Board over-temperature stop** (`src/sup.c`): at an estimated 60 C, or a broken thermistor, charging stops.
 - **Watchdog, low-voltage reset, pin modes at the first instruction, no endless ADC wait** (`src/hal.c`).
 - **USB-C backfeed guard** (`src/adc.c`, `src/hal.c`): a pack plugged into the XT60 while USB-C powers the charger is no longer fed
@@ -170,9 +178,9 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
 - These numbers only display; nothing in the charge logic reads them.
 
 ### Verification
-- **Whole-firmware simulation** (`test/sim`, `make sim`): the real firmware against a simulated board, cells and supplies, 49 scenarios.
-- **Tests on a simulated 8051** (`test/run_8051.sh`, `test/s51`, `test/chg_trace.c`, `make check-8051`): the unit tests and a
-  charge-logic trace on the chip's own integer sizes, with the compiler the firmware is built with.
+- **Whole-firmware simulation** (`test/sim`, `make sim`): the real firmware against a simulated board, cells and supplies, 57 scenarios.
+- **Tests on a simulated 8051** (`test/run_8051.sh`, `test/s51`, `test/chg_trace.c`, `make check-8051`): the settings, display,
+  statistics, menu and port-settings unit tests (the charge and limits suites are too slow there) and a charge-logic trace on the chip's own integer sizes, with the compiler the firmware is built with.
 - **New unit tests** in `test/test_pure.c` and `test/test_chg.c`.
 - **Mutation testing** (`test/mutants.py`, and on GitHub: Actions, "Mutation tests"): each safety check broken on purpose, to show the tests above catch it.
 - **An independent review** of the charge logic, the hardware layer, USB / installer / build and the test evidence; what it found and
@@ -194,8 +202,9 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
   [`rot-latest`](https://github.com/Pogaldock/ws3-unlocked/releases/tag/rot-latest), the newest build, less tried),
   open it in Chrome or Edge, press Connect and follow the steps. A charger that runs the VIFLY firmware is put into its loader by
   holding the left button while plugging in USB-C; one that runs OpenWS3 or WS3 Unlocked restarts into it by itself.
-- **Going back:** OpenWS3 can be installed from its own releases, and an earlier WS3 Unlocked from this repository's releases (hold the
-  left button while plugging in USB-C, then install). **No way back to VIFLY's firmware has been tested**: treat installing as one-way.
+- **Going back:** OpenWS3 can be installed from its own releases (hold the left button while plugging in USB-C, then install).
+  **Don't install a WS3 Unlocked older than 0.2.0-beta.2** (`v0.2.0-beta.1` and the `build-` pre-releases): they predate the audit
+  and have the bugs SAFETY.md lists as fixed in 0.2-beta.2. **No way back to VIFLY's firmware has been tested**: treat installing as one-way.
 - **After installing 0.2-beta.2** every setting is back to its default (0.3 A, 4.20 V, 4.35 V allowed): set yours again.
 - **First charges:** follow the checklist in SAFETY.md (a multimeter check of a full cell, diagnostics page 1).
 
@@ -213,8 +222,8 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
 ```bash
 make                 # build/fw.bin and build/openws3.html (SDCC 4.6.0; the chip's internal RAM is full: older versions may not link)
 make test            # unit tests: charge logic, limits, menu, settings (plain C on the PC)
-make sim             # the whole firmware against a simulated board: 49 safety scenarios
-make check-8051      # unit tests and a charge-logic trace on a simulated 8051 (needs s51 from sdcc-ucsim; about 16 minutes)
+make sim             # the whole firmware against a simulated board: 57 safety scenarios
+make check-8051      # most unit tests and a charge-logic trace on a simulated 8051 (needs s51 from sdcc-ucsim; about 16 minutes)
 ```
 
 Flash from the command line (Linux, read/write access to `/dev/hidraw*`):
@@ -239,7 +248,7 @@ The Advanced view adds the raw inputs, the limiter, setpoints and an event log.
 
 ## Menu
 
-Press **B1 and B2 together** (within about 0.2 s of each other) and release. Holding both for 0.8 s (a beep) closes the menu and saves it.
+Press **B1 and B2 together** (within about 0.2 s of each other) and release. Holding both for 0.8 s (a beep) is **BACK**: one level up, and from the list of categories it closes the menu and saves it.
 
 The menu has four categories; **OK** opens one and **BACK** returns to the list of categories (from there, **BACK** closes the menu and saves).
 

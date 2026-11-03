@@ -256,9 +256,14 @@ void usb_isr(void)
         if (csr & OUTSTSTL) sie_write(OUTCSR1, OUTCLRDT);
         if (csr & OUTOPRDY) {
             uint8_t n = sie_read(COUNT0);
-            for (i = 0; i < n; i++) { uint8_t b = sie_read(FIFO1); if (i < USB_CMD) rx[i] = b; }
+            if (rx_pending) {                       /* one not yet run: the first one wins (a stop is never replaced); this one is */
+                for (i = 0; i < n; i++) sie_read(FIFO1);   /* dropped unacknowledged, so its sender sees no ack and can retry */
+            } else {
+                for (i = 0; i < USB_CMD; i++) rx[i] = 0;   /* a short report: the bytes it did not send read 0, not old ones */
+                for (i = 0; i < n; i++) { uint8_t b = sie_read(FIFO1); if (i < USB_CMD) rx[i] = b; }
+                rx_pending = 1;
+            }
             sie_write(OUTCSR1, 0);
-            rx_pending = 1;
         }
     }
 }

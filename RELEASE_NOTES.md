@@ -3,6 +3,20 @@ It replaces VIFLY's firmware and decides the voltage and current that go into yo
 assistant, directed and checked by me) and has run on one charger. Going back to VIFLY's firmware may not be possible. Charge in a LiPo bag or on a non-flammable
 surface, supervise every charge, never overnight. No warranty, no responsibility taken: you install it at your own risk.
 
+### 0.2.0-beta.3: fixes from a red-team round
+Five attackers were sent at 0.2.0-beta.2 to break it. None found a way to overcharge a cell with the sensors in calibration. Fixed:
+- **Hold B1 for about a second to stop, on any screen.** In the menu, port settings and diagnostics it used to only scroll.
+- A damaged flat cell now stays on the 0.1 A pre-charge until 3.05 V (its reading under current could end it early).
+- 4.35 V with the chip's supply at 4.40 to 4.42 V: a waiting `VCC LOW`, not a rail runaway and a false fatal.
+- The time limits no longer lose time when the screen repaints after a supply step.
+- USB: a refused start no longer writes the settings flash; a second command can't replace a stop; the installer page and
+  `fwmon.py` can't take an old acknowledgement for a new command. `isp.py` refuses a chip whose settings area starts lower.
+- The USB-C guard probes once, not again and again, with a 6S pack and a noisy reading.
+- **Settings load as defaults once** after installing this (a stronger settings check): set yours again.
+- Docs: an automatic stop (`INPUT LOW`, `VCC LOW`, `TOO HOT`) clears a port's fault too; treat a cell that faulted once as suspect.
+- Don't install WS3 Unlocked older than 0.2.0-beta.2: those predate the audit.
+- Details, and what was not fixed: SAFETY.md, "Red team".
+
 ### 0.2.0-beta.2: fixes from an independent audit
 - **Settings are reset to their defaults when you install this** (0.3 A, 4.20 V): set yours again.
 - **ALLOW 4.35V** (menu, CHARGING): on by default (whoop cells are mostly LiHV); set it to NO if you charge only LiPo, and 4.35 V can
@@ -25,8 +39,8 @@ The 4.35 V accuracy on the tested unit is not confirmed by a multimeter yet. No 
 clears a port's fault (SAFETY.md, Not fixed): pull a cell that faulted once.
 
 ### Checked
-49 whole-firmware scenarios, the unit tests on PC and on a simulated 8051, and 38 of 39 planted bugs caught (the one left can't be
-reached by the simulator by design). Two rounds of independent AI review; the last found nothing critical or high.
+57 whole-firmware scenarios, a fuzzer (a short batch on every build), the unit tests on PC and on a simulated 8051, and planted bugs
+(the result is in SAFETY.md). An audit, a review round on the changes, and a red-team round, all by AI agents.
 
 ### Install and check
 Download `openws3.html`, open it in Chrome or Edge, press Connect, follow the steps. `sha256sum -c SHA256SUMS` checks the download

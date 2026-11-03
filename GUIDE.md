@@ -108,10 +108,12 @@ two drones read the same cell 150 mV apart.
 | 4.35 V | a full charge for high-voltage (HV) cells only. Never use it on a cell that is not rated for 4.35 V |
 | 3.80 V storage, 3.85 V storage | storage charge: the same as a full charge, but to a lower voltage, for cells you will not use for a while |
 
-A cell that is **above** the target is discharged down to it (`BLEED`), whichever target you chose.
+A cell that is **above** the target is discharged down to it (`BLEED`), whichever target you chose. A cell at 4.40 V or more is
+not bled: it is a fault (`ERR`) on any target, so on 4.35 V a cell that climbs past the hold window goes straight to `ERR`.
 Check the target before you insert a cell that you want to keep full.
 
-**Start and stop:** hold **B1** (about 0.35 s). Each port with a cell begins charging, ramping its current up gently. Hold **B1** again to stop.
+**Start and stop:** hold **B1** (about 0.35 s). Each port with a cell begins charging, ramping its current up gently. Hold **B1** again to stop. On any other screen
+(the menu, port settings, diagnostics, the summary) holding **B1** for about a second also stops a run.
 A cell inserted after the start is picked up too. A run does not end by itself: when every port says `FULL` the ports stay on guard and top a
 cell up if it sags, so stop the run when you are done.
 
@@ -146,7 +148,9 @@ packs, how long the run took, the total mAh and the cell with the highest resist
 carries on guarding the cells. A cell that sags a little and is topped up does not play it again; a new cell does.
 
 **If a port is in fault (`ERR`), there is no finale, summary or storage offer** while it is: the red cell stays in view. Take the
-faulted cell out (or stop the run) and look at it before charging it again.
+faulted cell out and look at it before charging it again. Stopping the run also clears the fault, and so does any automatic stop
+(`INPUT LOW`, `VCC LOW`, `TOO HOT`): the red skull goes away and that cell would charge again at the next start, with fresh time
+limits. Treat a cell that faulted once as suspect, even if you no longer see its `ERR`.
 
 | Summary | Storage offer |
 |---|---|
@@ -318,7 +322,7 @@ it. Every sound is a piece of that phrase.
 | crackle, then a falling note | an error: a port fault, a stop by MIN IN VOLTS, or a locked item that you tried to change |
 | the phrase twice, the second time climbing to a long high note | every cell is full |
 | the phrase going down, into crackle | the storage reminder |
-| a repeating triple beep | the output rail is out of regulation (`RAIL!`): charging has stopped (on OpenWS3 builds compiled with SDCC 4.6 this alarm is silent; fixed in WS3 Unlocked) |
+| a repeating triple beep | the output rail is out of regulation (`RAIL!`): charging pauses and resumes by itself once it is back (on OpenWS3 builds compiled with SDCC 4.6 this alarm is silent; fixed in WS3 Unlocked) |
 | a soft low double beat, about every 4 s | while charging, with SOUND `HEARTBEAT` only |
 
 PREFERENCES, SOUND: `ON`, `HEARTBEAT` (as `ON`, plus the heartbeat) or `OFF` (mutes all of them).

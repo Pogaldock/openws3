@@ -1,0 +1,28 @@
+# WS3 Unlocked: the randomised fuzzer, long, on demand (Actions tab, "Fuzz", Run workflow).  Random buttons, USB commands, cells,
+# supplies and faults over simulated hours, with the safety rules checked after every control pass (test/sim/fuzz.c).  A failing
+# seed is printed with a short list of events that repeats it: `build/sim_fuzz -1 SEED -v`.  Every build runs a short batch too.
+name: Fuzz
+on:
+  workflow_dispatch:
+    inputs:
+      seeds: { description: 'Number of seeds', required: false, default: '2000' }
+      first: { description: 'First seed', required: false, default: '1000' }
+      hours: { description: 'Longest simulated run per seed, hours', required: false, default: '8' }
+permissions: { contents: read }
+jobs:
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: Fuzz
+        env: { SEEDS: '${{ inputs.seeds }}', FIRST: '${{ inputs.first }}', HOURS: '${{ inputs.hours }}' }
+        run: |
+          case "$SEEDS$FIRST$HOURS" in *[!0-9]*) echo "numbers only"; exit 1 ;; esac
+          make build/sim_fuzz
+          set -o pipefail
+          ./build/sim_fuzz -s "$FIRST" -n "$SEEDS" -j "$(nproc)" -H "$HOURS" 2>&1 | tee fuzz.txt
+          rc=$?
+          { echo '```'; tail -n 60 fuzz.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc

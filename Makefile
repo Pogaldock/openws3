@@ -83,5 +83,17 @@ screens: $(BUILD)/render_screens
 
 clean:
 	rm -rf build
-.PHONY: all test screens clean sim check-8051 FORCE
+# the randomised fuzzer over the same simulated board (test/sim/fuzz.c): FUZZ_SEED, FUZZ_SEEDS, FUZZ_JOBS, FUZZ_HOURS set the run
+$(BUILD)/sim_fuzz: test/sim/fuzz.c test/sim/sim_hal.c test/sim/sim.h $(APP_SRC) $(wildcard src/*.h) $(BUILD)/version_build.h
+	@mkdir -p $(BUILD)
+	$(HOSTCC) -std=gnu99 -O2 -Wall -Wextra -Isrc -I$(BUILD) -Itest/sim -D__code= -o $@ test/sim/fuzz.c test/sim/sim_hal.c $(APP_SRC) -lm
+
+FUZZ_SEED  ?= 1
+FUZZ_SEEDS ?= 20
+FUZZ_JOBS  ?= $(shell nproc 2>/dev/null || echo 1)
+FUZZ_HOURS ?= 6
+fuzz: $(BUILD)/sim_fuzz
+	./$(BUILD)/sim_fuzz -s $(FUZZ_SEED) -n $(FUZZ_SEEDS) -j $(FUZZ_JOBS) -H $(FUZZ_HOURS)
+
+.PHONY: all test screens clean sim fuzz check-8051 FORCE
 FORCE:

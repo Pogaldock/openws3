@@ -63,8 +63,11 @@ static uint8_t  XD fin_packs;                 /* stats.packs when the finale pla
 static uint8_t  XD store_on, store_prev;      /* a storage run: the target it replaced, put back when the run stops (never saved) */
 static uint8_t  XD view_lbl_on;               /* the view's name is in the input box (until view_lo) */
 static uint16_t XD pass_prev, pass_d;          /* the tick count at the last pass start; ticks since */
-static uint8_t  XD pass_acc;                   /* ticks not yet counted as whole passes */
-#define LATE_MAX        30                     /* a pass longer than this many passes (135 ms) is counted as this: no runaway after a stall */
+static uint16_t XD pass_acc;
+static uint16_t XD b1_rep_ms;                  /* B1 held on a navigation screen: when its last repeat came, and how many */
+static uint8_t  XD b1_reps;
+#define STOP_REPS       5                      /* the 5th repeat: about 1 s held */                   /* ticks not yet counted as passes: a pass longer than LATE_MAX is counted over the next ones */
+#define LATE_MAX        30                     /* at most this many lost passes handed over per pass (8-bit counters in chg.c); the rest next time */
 static uint32_t XD now_ms;                    /* hal_ms() once a pass */
 static uint16_t XD last_lo, view_lo;          /* its low 16 bits: the previous pass; when the view's name goes */
 static uint16_t XD now_s, run_s, done_s, ask_s, el_s;    /* "seconds" of 1.024 s (hal_ms >> 10): 16 bits, plain compares */
@@ -247,10 +250,10 @@ static void save_later(void) { save_at = hal_ms() + SAVE_DELAY_MS; if (!save_at)
 
 static uint8_t start_run(void)
 {
-    if (save_at) save_main();
     if (run || sout.stop != STOP_NONE || fatal_code || !test_ok) return 0;
     if (screen == SCR_MENU && menu_editing()) return 0;   /* an edit open: finish it first (the voltage must not change mid-run) */
     if (!settings.hv && settings.volt == VOLT_4_35) settings.volt = VOLT_4_20;   /* 4.35 V switched off: never run on it, whatever led here */
+    if (save_at) save_main();                             /* only a start that happens saves: refused starts can't wear the flash */
     run = 1; stop_reason = 0; chg_init(); lim_reset();
     stats_start(); done = 0; store_asks = 0; run_s = now_s;
     return 1;
@@ -363,7 +366,12 @@ static void summary_close(void) { screen = 0; ui_main_init(); }
 
 static void summary_key(uint8_t ev)
 {
+    if (run && (ev == EV_B1_REP || ev == EV_B1_LONG)) {   /* B1 held: a stop, as on the main screen (not just closing this) */
+        stop_run(STOP_USER); buzz_play(PAT_KEY); summary_close();
+        return;
+    }
     if (sum_mode && ev == EV_B2) {                   /* storage: the same run again at the storage voltage (bleed or charge to it) */
+        if (save_at) save_main();                    /* a pending save first: the storage target is never the one written */
         if (run) stop_run(STOP_USER);
         store_prev = settings.volt;
         settings.volt = settings.volt == VOLT_4_35 ? VOLT_3_85 : VOLT_3_80;
@@ -379,6 +387,14 @@ static void handle_buttons(void)
     uint8_t ev;
     input_style(screen ? IS_NAV : IS_MAIN);
     while ((ev = input_get()) != EV_NONE) {
+        /* B1 held for about a second stops a run on every screen: in the menu, port settings and diagnostics a held button only
+           repeats, so the repeats are counted (a gap of over 0.25 s between them: a new press) */
+        if (ev == EV_B1_REP) {
+            if ((uint16_t)((uint16_t)now_ms - b1_rep_ms) > 250) b1_reps = 0;
+            b1_rep_ms = (uint16_t)now_ms;
+            if (b1_reps < 255) b1_reps++;
+            if (b1_reps == STOP_REPS && run && screen != SCR_SUMMARY) { stop_run(STOP_USER); buzz_play(PAT_KEY); continue; }
+        }
         if (screen == SCR_MENU) { menu_key(ev); continue; }
         if (screen == SCR_PORTS) { ports_key(ev); continue; }
         if (screen == SCR_SUMMARY) { summary_key(ev); continue; }
@@ -490,9 +506,10 @@ void app_pass(void)
        real time even when the screen is slow.  Whole passes of 9 ticks, the remainder kept for the next; the schedule starts again
        from now, so no burst of quick passes follows to count the same time twice */
     pass_d = (uint16_t)hal_ticks(); pass_d -= pass_prev; pass_prev += pass_d;
-    pass_d += pass_acc; cin.late = 0;
+    pass_d += pass_acc; if (pass_d < pass_acc) pass_d = 0xFFFF;   /* a stall of over 30 s: counted as 30 s (the safe side: more time) */
+    cin.late = 0;
     while (pass_d >= 2 * PASS_TICKS && cin.late < LATE_MAX) { pass_d -= PASS_TICKS; cin.late++; }
-    pass_acc = pass_d >= PASS_TICKS && pass_d < 2 * PASS_TICKS ? (uint8_t)(pass_d - PASS_TICKS) : 0;   /* capped: the rest is dropped */
+    pass_acc = pass_d >= PASS_TICKS ? pass_d - PASS_TICKS : 0;   /* nothing dropped: a very long pass is counted over the next passes */
     if (cin.late) t_next = hal_ticks() + PASS_TICKS;  /* the lost time is counted: the next pass is a normal pass from now, no catch-up */
     else t_next += PASS_TICKS;
 

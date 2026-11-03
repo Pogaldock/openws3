@@ -386,7 +386,7 @@ async function sendRaw(bytes) {
   await dev.sendReport(0, b);
 }
 function command(c, arg = 0, extra = []) {           // resolves with the result code once page 1 acknowledges it; extra: bytes 3..
-  seq = seq % 254 + 1;
+  do seq = seq % 254 + 1; while (p1 && p1.cmdSeq === seq);   // never a number the unit already shows as done (a stale ack)
   const s = seq, t0 = performance.now();
   return sendRaw([c, arg, s, ...extra]).then(() => new Promise((ok, fail) => {
     const tick = () => {

@@ -153,6 +153,7 @@ def handshake(isp):
     if d:
         print('    ' + d[:40].hex())
         chip_info(d)
+    handshake.last = d
     return d if c == 0x00 else None
 
 def main():
@@ -196,6 +197,8 @@ def write(dev, data, addr=0, erase=False, dry_run=False, force=False):
     if not force and addr + len(data) > CODE_LIMIT:
         data = data[:max(0, CODE_LIMIT - addr)]      # only erased-flash padding is past the limit: not sent at all
     blocks = [data[i:i+128] for i in range(0, len(data), 128)]
+    if not blocks:
+        print('[-] nothing to write'); return 1
     if len(blocks[-1]) < 128:
         blocks[-1] = blocks[-1] + b'\xff' * (128 - len(blocks[-1]))
     if erase:                            # erased flash already reads 0xFF: the padding at the end need not be sent
@@ -215,6 +218,12 @@ def write(dev, data, addr=0, erase=False, dry_run=False, force=False):
         time.sleep(0.5)
     else:
         print('[-] handshake failed'); return 1
+    d = handshake.last
+    base = d[15] * 256 if d and len(d) > 15 else 0
+    top = addr + len(blocks) * 128
+    if base and top > base and not force:
+        print(f'[-] this chip\'s settings area starts at {base:#06x}, and the image reaches {top:#06x}: not written (--force to override)')
+        return 1
 
     if erase:
         print('[i] erase/setup sequence')

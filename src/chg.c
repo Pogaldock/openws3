@@ -185,8 +185,9 @@ static uint8_t st_charge(void) REENT
         }
     }
     /* a deeply discharged cell starts at 0.1 A; at V_PRE it goes up to its setting through the soft ramp, not in one jump */
-    if (W.v < V_PRE) { W.pre = 1; if (W.iset > I_PRE) W.iset = I_PRE; }
-    else if (W.pre) { W.pre = 0; W.ramp = 1; W.ramp_div = 0; }
+    if (W.v < V_PRE) W.pre = 1;
+    else if (W.pre && W.v >= V_PRE_EXIT) { W.pre = 0; W.ramp = 1; W.ramp_div = 0; }
+    if (W.pre && W.iset > I_PRE) W.iset = I_PRE;
     W.want = W.iset;
     /* current limit supervision: 2*Iset + 7 for 200 passes, Iset being I_PRE while the cell is below V_PRE */
     if (W.i >= (uint16_t)(2u * (W.pre ? I_PRE : IN->iset[K]) + 7u)) {
