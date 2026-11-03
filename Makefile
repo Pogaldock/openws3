@@ -60,6 +60,7 @@ TESTS   = $(patsubst test/%.c,$(BUILD)/%,$(wildcard test/test_*.c))
 
 test: $(TESTS)
 	@for t in $(TESTS); do ./$$t || exit 1; done
+	@python3 tools/reqcheck.py              # every safety requirement has a test that exists (REQUIREMENTS.md)
 
 # the whole firmware (app.c and everything it calls) against a simulated board: test/sim
 APP_SRC = src/app.c src/adc.c src/cfg.c src/ui.c src/font.c src/font_rot.c src/sprites.c src/logo.c src/tele.c $(PURE)

@@ -13,7 +13,8 @@ Where to go:
 - **Just want to use it?** [GUIDE.md](GUIDE.md).
 - **Thinking of installing?** Read the rest of this page first, then [Install](#install).
 - **Want to know how I think about it, or want to review or break it?** Start with [APPROACH.md](APPROACH.md). It's the
-  catch-up: what's known, what's assumed, how it was checked, and where to poke. [SAFETY.md](SAFETY.md) has every number behind it.
+  catch-up: what's known, what's assumed, how it was checked, and where to poke. [REQUIREMENTS.md](REQUIREMENTS.md) is the
+  checklist of what the charger must always or never do, each with its tests. [SAFETY.md](SAFETY.md) has every number behind it.
 
 ## Before you install, the honest version
 
