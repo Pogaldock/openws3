@@ -1,0 +1,18 @@
+# WS3 Unlocked: mutation testing on demand (Actions tab, "Mutation tests", Run workflow).  Each safety check in test/mutants.py is
+# broken on purpose, one at a time, and the tests that should catch it are run against the broken firmware.  About 30 minutes.
+# The result goes to the run's summary page.
+name: Mutation tests
+on: workflow_dispatch
+permissions: { contents: read }
+jobs:
+  mutants:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
+        with: { fetch-depth: 0, persist-credentials: false }
+      - name: Planted bugs
+        run: |
+          python3 test/mutants.py | tee mutants.txt
+          { echo '```'; cat mutants.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          grep -q "SURVIVED" mutants.txt && echo "note: see test/mutants.py for the ones expected to survive" || true

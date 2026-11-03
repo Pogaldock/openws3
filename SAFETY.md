@@ -108,7 +108,7 @@ bypass conducts both ways: a pack plugged into the XT60 afterwards would be fed 
   confirmation, and an image that would reach the charger's settings area is refused.
 - **The release:** built by GitHub Actions only after every test passed, in a job that has no write access; published by a separate job
   with `SHA256SUMS` and a signed build-provenance attestation. Actions are pinned to commit SHAs and the compiler download is checked
-  by its SHA-256. Each build is also kept as a `build-<commit>` release.
+  by its SHA-256. Each version (a `v*` tag) is kept as its own release; `rot-latest` is the newest build of the branch.
 - **Not covered:** the installer does not read the flash back after writing (the loader's read command is not used), and anyone with
   write access to the repository could publish a different build. The attestation and building it yourself are the checks for that.
 
@@ -164,7 +164,12 @@ rail, the start-up hole in the USB-C guard, the interrupt nesting and the settin
 - VCC 4.484 V on every supply tried: two PD chargers, a laptop port, a 4S pack (it comes from its own regulator).
 - Input reading within about 2 % of the supply on a 20 V and a 5 V source.
 - Rail 4.36 V at the 4.35 V LiHV setting; a cell reading 4.338 V while charging at that setting.
-- Stack free 24 bytes after charging one cell, 45 idle (the firmware measures the stack never used since boot).
+- Stack free 24 bytes after charging one cell, 45 idle (the firmware measures the stack never used since boot). With the 0.2 screen
+  (big eyes, melodies): 48, then 45, while charging one cell.
+- **The 4.35 V setting, an open question.** A LiHV cell charged on 4.35 V and rested 5 minutes: the charger read 4.33 V; two drones'
+  flight controllers read the same cell as 4.40 V and 4.25 V. The drones disagree with each other by 150 mV, so they cannot say
+  whether the charger is accurate; a multimeter reading has not been taken yet. Until it is, use 4.20 V, where even the worst case
+  of the uncertainty (about 3 %) stays inside what a LiHV cell is made for.
 - Thermistor about 2150 counts at room temperature.
 
 ## What it takes for granted
@@ -227,7 +232,8 @@ rail, the start-up hole in the USB-C guard, the interrupt nesting and the settin
 
 ## Still open (for anyone who wants to be sure)
 
-- Measure the port voltage divider and the reference on several units, and add a per-unit calibration from a multimeter reading.
+- **Measure a rested cell with a multimeter after a 4.35 V charge** (above). Then measure the port voltage divider and the reference
+  on several units, and add a per-unit calibration from a multimeter reading.
 - Calibrate the thermistor against a thermometer, and decide the stop temperature from it.
 - Watch the power-path pins and the rail with an oscilloscope from power-up to the first instruction, and after a watchdog reset.
 - Measure what the XT60 path does when USB-C is higher (does it conduct backwards into a pack?).

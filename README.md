@@ -139,7 +139,7 @@ Everything not listed here is OpenWS3's, unchanged.
 - **Tests on a simulated 8051** (`test/run_8051.sh`, `test/s51`, `test/chg_trace.c`, `make check-8051`): the unit tests and a
   charge-logic trace on the chip's own integer sizes, with the compiler the firmware is built with.
 - **New unit tests** in `test/test_pure.c` and `test/test_chg.c`.
-- **Mutation testing** (`test/mutants.py`): each safety check broken on purpose, to show the tests above catch it.
+- **Mutation testing** (`test/mutants.py`, and on GitHub: Actions, "Mutation tests"): each safety check broken on purpose, to show the tests above catch it.
 - **An independent review** of the charge logic, the hardware layer, USB / installer / build and the test evidence; what it found and
   what was fixed is in SAFETY.md.
 - **Diagnostics page 1** shows the chip's version and stored reference, the USB-C bypass state and the stack headroom (`src/dbgscr.c`).
@@ -155,7 +155,8 @@ Everything not listed here is OpenWS3's, unchanged.
 
 ## Install
 
-- **The easy way:** download `openws3.html` from the [latest release](https://github.com/Pogaldock/ws3-unlocked/releases/tag/rot-latest),
+- **The easy way:** download `openws3.html` from the newest version on the [releases page](https://github.com/Pogaldock/ws3-unlocked/releases) (or
+  [`rot-latest`](https://github.com/Pogaldock/ws3-unlocked/releases/tag/rot-latest), the newest build, less tried),
   open it in Chrome or Edge, press Connect and follow the steps. A charger that runs the VIFLY firmware is put into its loader by
   holding the left button while plugging in USB-C; one that runs OpenWS3 or WS3 Unlocked restarts into it by itself.
 - **Going back:** the VIFLY firmware can be put back with VIFLY's own update package; OpenWS3 from its own releases.

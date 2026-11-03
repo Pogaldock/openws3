@@ -1,15 +1,16 @@
 # WS3 Unlocked: builds and tests the firmware on every push to the rot-theme branch, then publishes the installer.
 #   test     every check, with a read-only token: unit tests, the whole-firmware simulation, the 8051 tests, the build itself
-#   publish  only after "test" passed: SHA256SUMS, a signed build-provenance attestation, and two releases with the same files:
-#            build-<commit> (kept, never changed) and rot-latest (moves to the newest build)
+#   publish  only after "test" passed: SHA256SUMS, a signed build-provenance attestation, and a release: rot-latest (moves to the
+#            newest build of the branch), or, for a version tag v*, a release of that version with RELEASE_NOTES.md (kept, never changed)
 # Third-party actions are pinned to commit SHAs (the tag in the comment); the SDCC download is checked by its SHA-256.
 name: WS3 Unlocked build
 on:
   push:
     branches: [rot-theme]
+    tags: ['v*']
   workflow_dispatch:
 permissions: { contents: read }
-concurrency: { group: rot-build, cancel-in-progress: true }
+concurrency: { group: 'rot-build-${{ github.ref }}', cancel-in-progress: true }   # a tag and the branch build side by side
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -49,6 +50,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions: { contents: write, id-token: write, attestations: write }
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2  (for RELEASE_NOTES.md)
+        with: { persist-credentials: false }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4.3.0
         with: { name: firmware, path: out }
       - name: Checksums still match
@@ -62,8 +65,12 @@ jobs:
           notes="Built from commit $short by GitHub Actions, after every test passed. SHA-256 of the files is in SHA256SUMS; check the
           build provenance with: gh attestation verify fw.bin -R $GITHUB_REPOSITORY. Download openws3.html, open it in Chrome or Edge,
           press Connect, follow the install steps. Unofficial firmware that replaces VIFLY's: read SAFETY.md, supervise charging."
-          gh release create "build-$short" out/fw.bin out/openws3.html out/SHA256SUMS --target "$GITHUB_SHA" --prerelease \
-            --title "WS3 Unlocked build $short" --notes "$notes"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then         # a version: its own release, kept; a "-beta" or "-rc" version is a pre-release
+            pre=""; case "$GITHUB_REF_NAME" in *-*) pre=--prerelease ;; esac
+            gh release create "$GITHUB_REF_NAME" out/fw.bin out/openws3.html out/SHA256SUMS --verify-tag $pre \
+              --title "WS3 Unlocked $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+            exit 0
+          fi
           gh release delete rot-latest --yes --cleanup-tag || true
           gh release create rot-latest out/fw.bin out/openws3.html out/SHA256SUMS --target "$GITHUB_SHA" --prerelease \
             --title "WS3 Unlocked, latest build ($short)" --notes "$notes"
