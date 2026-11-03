@@ -25,6 +25,11 @@ I know some code, so I've reviewed parts of it myself. Some of it is beyond me. 
 output: does the cell stop where it should, does the fault fire when it should, do the numbers make physical sense. I don't need to
 follow every line of a function to see whether it gives sane results.
 
+That way of working isn't new to me. I'm a cognitive science student, and that's most of what the field is: you can't open up a brain
+and read the code, so you build a model of the process, predict what it should do, and test whether its outputs hold up. A charger
+with firmware I only partly read is a much easier black box than a person. The simulator in this project is exactly that kind of
+model, and the planted-bug tests are how I check that the model would notice when something is wrong.
+
 If that's a problem for you, don't install it. Simple as that.
 
 I still don't trust it by default, and neither should you. An AI writes code that looks confident whether it's right or

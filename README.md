@@ -26,7 +26,8 @@ Where to go:
   voltage, gentle pre-charge for deeply discharged cells, time and temperature cut-offs), how this chip measures voltage, and how
   safety-critical code gets checked (simulation, planted-bug testing, independent review, measuring on the real hardware). I know
   some code, so I've reviewed parts of it myself. Where a function was beyond me, I sanity-checked what it produced: does the cell
-  stop where it should, does the fault fire when it should, do the numbers make physical sense. If that's a problem for you, don't
+  stop where it should, does the fault fire when it should, do the numbers make physical sense. I'm a cognitive science student, and
+  that's most of what the field is: building models of a process you can't see inside, then testing whether its outputs hold up. If that's a problem for you, don't
   install it. Simple as that.
 - **It's run on one charger.** Mine. Everything else is simulation, automated tests and review.
 - **Going back to VIFLY's firmware may not be possible.** I don't have a tested way, and the old firmware can't be read out before
