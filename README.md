@@ -39,7 +39,7 @@ independent shows it isn't. In practice that's several layers, each looking from
 - **I added the protections a charger should have** and OpenWS3 didn't: refusing over-discharged cells, a gentle pre-charge with
   its own time limit, a 3 hour charge limit, a board over-temperature stop, a watchdog, a clean reset on a collapsing supply, and a
   guard so a pack on the XT60 can't feed backwards into a laptop on the USB-C port.
-- **I built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and run the real firmware against it in 48
+- **I built a simulator of the whole charger** (board, cells, supplies, buttons, USB) and run the real firmware against it in 49
   scenarios: shorts, dead cells, cells that never fill, overheating, stuck hardware, supply faults, a hostile USB host.
 - **The tests also run on a simulated copy of the chip**, because it does arithmetic differently from a PC. That caught a bug the PC
   tests couldn't: the rail-fault alarm never sounded (in OpenWS3 too).
@@ -161,7 +161,7 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
 - These numbers only display; nothing in the charge logic reads them.
 
 ### Verification
-- **Whole-firmware simulation** (`test/sim`, `make sim`): the real firmware against a simulated board, cells and supplies, 48 scenarios.
+- **Whole-firmware simulation** (`test/sim`, `make sim`): the real firmware against a simulated board, cells and supplies, 49 scenarios.
 - **Tests on a simulated 8051** (`test/run_8051.sh`, `test/s51`, `test/chg_trace.c`, `make check-8051`): the unit tests and a
   charge-logic trace on the chip's own integer sizes, with the compiler the firmware is built with.
 - **New unit tests** in `test/test_pure.c` and `test/test_chg.c`.
@@ -204,7 +204,7 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
 ```bash
 make                 # build/fw.bin and build/openws3.html (SDCC 4.6.0; the chip's internal RAM is full: older versions may not link)
 make test            # unit tests: charge logic, limits, menu, settings (plain C on the PC)
-make sim             # the whole firmware against a simulated board: 48 safety scenarios
+make sim             # the whole firmware against a simulated board: 49 safety scenarios
 make check-8051      # unit tests and a charge-logic trace on a simulated 8051 (needs s51 from sdcc-ucsim; about 16 minutes)
 ```
 

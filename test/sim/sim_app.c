@@ -691,10 +691,23 @@ static void s_hv_race(void)
     both(0.12); both(0.12); tap(2); tap(2);                       /* menu, CHARGING, cursor on ALLOW 4.35V */
     both(0.12); tap(2);                                            /* editing it: YES (live) */
     usb(v435, 3);                                                  /* a host asks for 4.35 V during the edit */
+    run_for(0.1);
+    CHECK(settings.volt != 1);                                     /* refused during an edit (the undo below is the second guard) */
     both(1.0); both(1.0); both(1.0); run_for(1);                   /* the edit undone, back, menu closed */
     start(); run_for(3600); hold(1); run_for(60);
     printf("  4.35 V asked by a host during an undone ALLOW edit: switch %u, target %u, cell peak %.3f V\n", settings.hv, settings.volt, S.max_cell_v[0]);
     CHECK(settings.hv == 0 && settings.volt != 1 && S.max_cell_v[0] < 4.23);
+}
+
+/* the last guard: whatever path left 4.35 V selected with ALLOW 4.35V off (one nobody has found), a start runs on 4.20 V */
+static void s_hv_backstop(void)
+{
+    sim_attach(0, 4.00, 300);
+    boot();
+    settings.hv = 0; settings.volt = 1;                            /* the state no known path reaches, put straight into RAM */
+    start(); run_for(3600); hold(1); run_for(60);
+    printf("  4.35 V left selected with ALLOW off: target at start %u, cell peak %.3f V\n", settings.volt, S.max_cell_v[0]);
+    CHECK(S.max_cell_v[0] < 4.23);
 }
 
 /* a stop asked for while a condition (a rail pause) is on the screen is not lost: no charging when the condition clears */
@@ -720,7 +733,7 @@ static const scen_t SC[] = {
     { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
     { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot }, { "no_dev", s_no_dev },
     { "stats", s_stats }, { "store", s_store }, { "store_back", s_store_back }, { "fault_full", s_fault_full },
-    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale }, { "hv_race", s_hv_race }, { "rail_stop", s_rail_stop },
+    { "sag_finale", s_sag_finale }, { "saturated", s_saturated }, { "menu_edit_start", s_menu_edit_start }, { "b2_volt", s_b2_volt }, { "new_cell_finale", s_new_cell_finale }, { "hv_race", s_hv_race }, { "hv_backstop", s_hv_backstop }, { "rail_stop", s_rail_stop },
     { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
     { "hot", s_hot }, { "cfg_damage", s_cfg_damage }, { "rail_sense_low", s_rail_sense_low }, { "bleed_over", s_bleed_over },
    

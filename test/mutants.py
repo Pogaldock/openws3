@@ -50,10 +50,11 @@ M = [
  ("src/chg.c", "        W.t_chg_div += LT;               /* passes, and those a long pass lost: real time */", "        W.t_chg_div += 1;", "TEST"),
  ("src/chg.c", "    W.i0 = W.i > I_ZERO_MAX ? I_ZERO_MAX : (uint8_t)W.i;   /* the output has been off: what the current reads now is its offset */", "    W.i0 = 0;", "TEST"),
  ("src/chg.c", "    if (W.t_chg_div >= PASSES_PER_S) { W.t_chg_div -= PASSES_PER_S; if (++W.t_bleed_s >= T_BLEED_MAX_S) return go_fault(); }", "    ;", "TEST"),
- ("src/app.c", "    if (!settings.hv && settings.volt == VOLT_4_35) settings.volt = VOLT_4_20;   /* 4.35 V switched off: never run on it, whatever led here */", "    ;", "hv_race"),
+ ("src/app.c", "    if (!settings.hv && settings.volt == VOLT_4_35) settings.volt = VOLT_4_20;   /* 4.35 V switched off: never run on it, whatever led here */", "    ;", "hv_backstop"),
  ("src/app.c", "            else if (ev == EV_B1_LONG && run) { stop_run(STOP_USER); buzz_play(PAT_KEY); }   /* a stop is never lost behind a condition */", "            ;", "rail_stop"),
  ("src/sup.c", "        if (++ok_cnt >= RAIL_OK_PASSES) { rail_alarm = 0; div_cnt = 0; ok_cnt = 0; }   /* in band for a second, not one lucky pass */", "        { rail_alarm = 0; div_cnt = 0; ok_cnt = 0; }", "TEST"),
  ("src/app.c", "pass_d -= PASS_TICKS; cin.late++; }", "pass_d -= PASS_TICKS; }", "never_full_slow"),
+ ("src/app.c", " || (screen == SCR_MENU && menu_editing())) { res = 1; break; }", ") { res = 1; break; }", "hv_race"),
 ]
 
 def main():

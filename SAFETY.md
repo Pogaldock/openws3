@@ -173,7 +173,7 @@ real-time, current-offset, rail-alarm, 4.35 V switch, menu-lock and statistics t
 The real firmware (`src/app.c` and every module it calls; only the register layer is replaced) runs on the PC against a model of the
 board: the supply and its USB-C / XT60 paths, the inverted rail with sag, six ports, cells with an open-circuit curve, internal
 resistance, polarisation and optional leakage, an ADC referenced to VCC with noise, gain errors and reference spread, the display's bus
-time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 48 scenarios:
+time, the watchdog and the thermistor. It presses the buttons like a person and sends USB commands like a host, in 49 scenarios:
 - full charges at VCC 4.45 to 4.95 V, reference spread plus or minus 1 %, ADC noise, combined worst case
 - user stop, input lost, cell pulled mid-charge, short circuit and its latch, storage voltage, power cycle mid-charge
 - dead cell, deeply discharged cell, internally shorted cell, cell that never fills, leaking cell, never-full cells under MAX IN AMPS
@@ -185,7 +185,7 @@ time, the watchdog and the thermistor. It presses the buttons like a person and 
 - the statistics: mAh within 2 % of the model, resistance and time to full against the model's cell; the storage offer after 2 h
   full, and B2 on it taking the cells down to 3.85 V
 - passes running long for the whole run (a never-full cell must still stop at 3 h), a 4.35 V edit raced by a USB host, a stop
-  pressed while the rail is paused
+  pressed while the rail is paused, 4.35 V left selected with ALLOW 4.35V off by a path nobody has found (the start must still run on 4.20 V)
 - after the audit: a storage run giving the user's target back when stopped (and never saving the storage one); a full cell next to a
   faulted one (no finale, no storage offer, the fault stays); a cell that sags after full (one finale, then the offer, not one per
   top-up); a cell over 4.40 V at a low VCC (faults); a host start while the voltage is being edited (refused); B2 on the stopped
@@ -202,7 +202,7 @@ a fault removed, a guard bypassed), and the suites run against the broken firmwa
 earlier code: 15 of 29 planted bugs survived at least one suite, among them a disabled charge over-voltage cut, a removed 4.40 V bleed
 fault and developer mode ignoring a lost input. The scenarios added since (the rail sensor reading low, the overcharged cell, developer
 mode rules, the soft ramp after pre-charge) were written to catch exactly those. The runner and its list of planted bugs are in
-`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit it has 35
+`test/mutants.py`, with the last result at its end; it also runs on GitHub (Actions, "Mutation tests"). After the audit and the second review round it has 39
 planted bugs, one for each fix. On the current code **the result of the run on this code is being filled in**. The one that survives by design is the fatal-stop rail value in `src/hal.c`:
 the simulator replaces that file with its model, so that line is checked by review and on the charger only (the same change made in
 the model is caught).
