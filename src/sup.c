@@ -19,6 +19,14 @@ static const CODE uint16_t TGT[NVOLTS] = { VU(4200), VU(4350), VU(3800), VU(3850
 #define RAIL_OK_BAND     30
 #define ADC0_HOT         1300    /* board thermistor: the fan runs below this count (warm) ... */
 #define ADC0_COOL        1451    /* ... until it is back above this */
+/* Over-temperature stop.  The thermistor's part and divider are not known; the counts fit a 10 k NTC (B 3950) under a 10 k pull-up to VCC
+   (count = 4096 R / (R + 10k)): about 2150 at room temperature (22 to 24 C measured on one unit), the fan's 1300 / 1451 = 44 / 39 C.
+   ESTIMATED, not calibrated: 815 = 60 C (stop), 1082 = 50 C (may start again).  A reading near either end of the scale is a broken
+   sensor (open: no temperature known; shorted): also a stop. */
+#define ADC0_STOP        815
+#define ADC0_RESUME      1082
+#define ADC0_OPEN        4000
+#define ADC0_SHORT       60
 
 uint16_t sup_target(uint8_t volt)   { return TGT[volt < NVOLTS ? volt : 0]; }
 uint16_t sup_setpoint(uint8_t volt) { return sup_target(volt) + RAIL_ABOVE_TARGET; }
@@ -30,9 +38,9 @@ const char *sup_volt_name(uint8_t volt)
 
 static uint16_t div_cnt, nr_cnt;
 static uint8_t  ov_cnt, vh_cnt, st_cur, st_cnt;
-static uint8_t  rail_alarm, fan;
+static uint8_t  rail_alarm, fan, hot;
 
-void sup_reset(void) { div_cnt = 0; nr_cnt = 0; ov_cnt = 0; vh_cnt = 0; st_cur = 0; st_cnt = 0; rail_alarm = 0; fan = 0; }
+void sup_reset(void) { div_cnt = 0; nr_cnt = 0; ov_cnt = 0; vh_cnt = 0; st_cur = 0; st_cnt = 0; rail_alarm = 0; fan = 0; hot = 0; }
 
 void sup_pass(const sup_in_t XD *in, sup_out_t XD *o)
 {
@@ -62,10 +70,15 @@ void sup_pass(const sup_in_t XD *in, sup_out_t XD *o)
     if (!o->rail_up && in->vin >= VIN_MIN && in->bandgap < VCC_STOP) { if (nr_cnt < NO_RAIL_PASSES) nr_cnt++; } else nr_cnt = 0;
     if (nr_cnt >= NO_RAIL_PASSES) o->fatal = SF_NO_RAIL;
 
+    /* ---- board temperature (the thermistor, ADC0): too hot or a broken sensor stops charging until it is back in range ---- */
+    if (in->adc0 < ADC0_STOP || in->adc0 > ADC0_OPEN || in->adc0 < ADC0_SHORT) hot = 1;
+    else if (in->adc0 >= ADC0_RESUME) hot = 0;
+    if (hot) o->stop = STOP_TEMP;
+
     /* the condition shown: a more important one at once (the input, then VCC, then the rail), a lesser one or none only when it has stayed
        so for a while, so a supply that falls through the thresholds (VCC and the input cross them at different moments) does not flicker */
     {
-        static const CODE uint8_t PRIO[4] = { 0, 3, 2, 1 };               /* by STOP_NONE, STOP_VIN, STOP_VCC, STOP_RAIL */
+        static const CODE uint8_t PRIO[STOP_TEMP + 1] = { 0, 3, 2, 1, 0, 0, 4 };   /* by STOP_*: the temperature first, then the input, VCC, the rail */
         if (PRIO[o->stop] > PRIO[st_cur]) { st_cur = o->stop; st_cnt = 0; }
         else if (o->stop == st_cur) st_cnt = 0;
         else if (++st_cnt >= HOLD_PASSES) { st_cur = o->stop; st_cnt = 0; }

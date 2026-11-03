@@ -122,7 +122,7 @@ void hal_bypass_ok(uint8_t lo) { prof_lo = lo != 0; hal_profile(prof_req); }
 uint8_t hal_profile_on(void) { return S.profile; }
 void hal_profile_allow(void) {}
 void hal_reboot_isp(void) { S.reboot_isp = 1; }
-void hal_all_off(void) { int k; for (k = 0; k < NPORTS; k++) { S.pwm[k] = 0; S.sw[k] = 0; } S.global = 0; S.rail_duty = 0; }
+void hal_all_off(void) { int k; for (k = 0; k < NPORTS; k++) { S.pwm[k] = 0; S.sw[k] = 0; } S.global = 0; S.rail_duty = PWM_PERIOD; }
 
 
 static double noise(void) { return S.adc_noise ? ((double)rand() / RAND_MAX * 2 - 1) * S.adc_noise : 0; }
@@ -138,7 +138,7 @@ uint16_t hal_adc(uint8_t ch)
 {
     int p;
     if (ch == ADC_BANDGAP) return counts(1071.0 * (1 + S.bg_err), ch);
-    if (ch == ADC_IIN) return 2000;                          /* thermistor: cool */
+    if (ch == ADC_IIN) return S.therm ? S.therm : 2150;      /* thermistor counts: about 23 C unless a scenario sets it */
     if (ch == ADC_VIN) return counts(vin_sensed() * 152.5 - 1, ch);
     if (ch == ADC_RAIL) return counts(S.rail / VPC, ch);
     for (p = 0; p < NPORTS; p++) {
@@ -163,6 +163,7 @@ uint8_t hal_chip_byte(uint8_t n)
 
 static uint8_t ee[1024];
 uint8_t hal_ee_read(uint16_t a) { return ee[a & 1023]; }
+void sim_ee_flip(uint16_t a, uint8_t mask) { ee[a & 1023] ^= mask; }
 void hal_ee_erase(uint16_t a) { memset(ee + (a & 1023 & ~511), 0xFF, 512); }
 void hal_ee_write(uint16_t a, uint8_t v) { ee[a & 1023] &= v; }
 uint32_t hal_ms(void) { return (uint32_t)(S.ticks / 2); }
@@ -174,6 +175,7 @@ uint16_t hal_ram_bgv(void) { return 0; }
 void hal_tone(uint8_t level) { (void)level; }
 void hal_fan(uint8_t on) { S.fan = on; }
 uint8_t hal_btn(uint8_t n) { return n == 1 ? (uint8_t)S.btn1 : (uint8_t)S.btn2; }
+uint8_t hal_btns(void) { return (uint8_t)((S.btn1 ? 1 : 0) | (S.btn2 ? 2 : 0)); }
 uint8_t hal_strap(void) { return S.vin > 1.0 ? 0 : 1; }      /* low while USB-C powers the board (measured: Samsung PD, laptop) */
 
 /* ---- lcd.h: nothing is drawn, but the time the bus takes is: 210 clocks per byte at 40 MHz, 2 bytes per pixel, ~11 bytes per window ---- */

@@ -79,7 +79,8 @@ static void budget(void)
 {
     p_sum_ma = 0; p_est = 0; p_vin_mv = cal_vin_mv(lim_in.vin); p_rail_mv = cal_port_mv(lim_in.rail);
     for (p_k = 0; p_k < NPORTS; p_k++) if (lim_in.charging[p_k]) p_sum_ma += cal_port_ma(lim_in.i[p_k]);
-    if (p_vin_mv) p_est = p_rail_mv * p_sum_ma * 100u / ((uint32_t)EFF_PCT * p_vin_mv);       /* input current, mA */
+    /* input current, mA.  Divided by the input first: rail x sum x 100 passed 2^32 above about 10 A in total and wrapped to a small value */
+    if (p_vin_mv) p_est = p_rail_mv * p_sum_ma / p_vin_mv * 100u / EFF_PCT;
     if (p_est > 65535u) p_est = 65535u;
     lim_out.est_ma = (uint16_t)p_est;
 

@@ -167,7 +167,7 @@ def main():
     except KeyboardInterrupt:
         msg = None
     finally:
-        try: fwmon.command(9)                            # everything off, back to the normal screen
+        try: fwmon.command(9, SESSION)                   # everything off, back to the normal screen (our session only)
         except SystemExit: pass
     if msg: sys.exit(msg)
 

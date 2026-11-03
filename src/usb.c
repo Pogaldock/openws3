@@ -135,7 +135,10 @@ void usb_init(void)
     sie_write(POWER, 0x01);
 
     ep0_stage = EPIDLE; rx_pending = 0; configured = 0; start_stream = 0;
-    IP |= 0x02;                        /* the 0.5 ms tick (timer 0) outranks USB */
+    /* timer 0 and USB at the same (low) priority: neither interrupts the other, so the stack holds at most one of their frames
+       (nested, the two needed about 45 bytes together, more than the stack has spare).  A tick that arrives during the USB
+       interrupt waits for it to end (well under the 0.5 ms period) and is not lost */
+    IP &= (uint8_t)~0x02;
     IE2 |= 0x80;                       /* EUSB */
 }
 

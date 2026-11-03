@@ -99,6 +99,7 @@ static void cond_numbers(uint8_t c)
     case STOP_VIN:                   fmt_vin(v1, cal_vin_mv(adc_get(ADC_VIN))); break;
     case SF_RAIL_OVER:               fmt_v2(v1, cal_port_mv(adc_raw(ADC_RAIL))); break;
     case SF_TEST: case C_TESTING:    fmt_v2(v1, cal_port_mv(t1)); fmt_v2(v2, cal_port_mv(t2)); break;
+    case STOP_TEMP:                  fmt_u(v1, adc_get(0)); break;
     default:                         fmt_v2(v1, cal_port_mv(adc_get(ADC_RAIL))); break;
     }
 }
@@ -115,6 +116,7 @@ static void cond_draw(uint8_t c)
     case STOP_VIN:     ui_message(R_WAIT, "INPUT LOW", settings.usb_off ? "USB POWER OFF, USE XT60" : "CHECK THE SUPPLY", v1, 0); break;
     case STOP_VCC:     ui_message(R_WAIT, "VCC LOW", "TRY ANOTHER SUPPLY", v1, 0); break;
     case STOP_RAIL:    ui_message(R_WAIT, "RAIL OUT OF RANGE", "WAITING TO RECOVER", v1, 0); break;
+    case STOP_TEMP:    ui_message(R_WAIT, "TOO HOT", "LET IT COOL, START AGAIN", v1, 0); break;
     case C_TESTING:    ui_message(R_WAIT, "RAIL TEST", "FAILED, TRYING AGAIN", v1, v2); break;
     }
 }
@@ -173,6 +175,7 @@ void app_boot(void)
     ctl_rail_reset(rail_duty);
     hal_irq_on();
 
+    adc_guard_start();                               /* the input bypass guard learns the USB-C level from here (adc.c) */
     adc_prime();
     for (n = 0; n < BOOT_RAIL_PASSES; n++) {         /* the rail comes up under the regulator; what is wrong with the supply or the rail is the main loop's */
         adc_scan(); rail_step();
@@ -258,23 +261,23 @@ static void usb_service(void)
     case 2: res = screen != SCR_DEV && start_run() ? 0 : 1; break;                    /* start (not in developer mode) */
     case 3:                                                                            /* set current (units), not while running */
         if (run || !cal_cur_valid(c[1])) { res = 1; break; }
-        settings.cur = c[1]; cfg_save();
+        settings.cur = c[1]; save_later();         /* written once the host stops changing it: flash wear */
         break;
     case 4:                                                                            /* set the target voltage, not while running */
         if (run || c[1] >= NVOLTS) { res = 1; break; }
-        settings.volt = c[1]; cfg_save();
+        settings.volt = c[1]; save_later();
         break;
     case 5: break;                                                                     /* ping */
     case 6: if (run) { res = 1; break; } hal_reboot_isp(); break;                      /* reboot into the USB ISP loader (not while charging) */
     case 7:                                                                            /* developer mode, byte 1 = session (not while charging, */
-        if (run || fatal_code || (screen == SCR_DEV && dev_taken(c[1]))) { res = 1; break; }   /* nor while another host drives it) */
+        if (run || fatal_code || !c[1] || (screen == SCR_DEV && dev_taken(c[1]))) { res = 1; break; }   /* nor while another host drives it; session 1..255) */
         dev_enter(c[1]);
         break;
     case 8: if (screen != SCR_DEV || !dev_set(c)) res = 1; break;                     /* developer mode: the outputs (the owner only) */
-    case 9: if (screen == SCR_DEV) dev_leave(); break;                                 /* leave developer mode */
+    case 9: if (screen == SCR_DEV && !dev_taken(c[1])) dev_leave(); else res = 1; break;   /* leave developer mode (its owner, byte 1 = session) */
     case 10:                                                                           /* one port's value (portset.h): byte 1 = port, */
         if (run || c[1] >= NPORTS || !portset_valid(c[3]) || (screen == SCR_PORTS && portset_editing())) { res = 1; break; }   /* byte 3 */
-        portset_put(c[1], c[3]); cfg_save();
+        portset_put(c[1], c[3]); save_later();
         break;
     default: res = 2; break;
     }
@@ -500,7 +503,7 @@ void app_pass(void)
         }
         dbg_view.rail = cin.rail; dbg_view.rail_duty = (uint16_t)rail_duty; dbg_view.vin = sin.vin; dbg_view.bandgap = sin.bandgap;
         dbg_view.run = run; dbg_view.stop = stop_reason; dbg_view.alarm = alarm_ui;
-        dbg_view.strap = strap; dbg_view.byp = hal_profile_on() ? 1 : adc_bypass_state() != VG_OK ? 2 : 0; dbg_view.stack = stack_free; dbg_view.rail_hold = rail_hold; dbg_view.fan = sout.fan; dbg_view.usb = usb_configured();
+        dbg_view.strap = strap; dbg_view.byp = hal_profile_on() ? 1 : !strap && !settings.usb_off && adc_bypass_state() != VG_OK ? 2 : 0; dbg_view.stack = stack_free; dbg_view.rail_hold = rail_hold; dbg_view.fan = sout.fan; dbg_view.usb = usb_configured();
         for (n = 0; n < NPORTS; n++) dbg_view.held[n] = cout.held[n];
         ui_text_row(text_row, dbg_text(screen, text_row), text_row == 0 ? th(R_INFO) : th(R_TEXT));       /* one row per pass */
         if (++text_row == DBG_ROWS) text_row = 0;

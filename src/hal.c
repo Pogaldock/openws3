@@ -218,7 +218,7 @@ void hal_all_off(void)
     uint8_t i;
     GLOBAL_EN = 0;
     for (i = 0; i < NPORTS; i++) { hal_sw(i, 0); hal_pwm(i, 0); }
-    hal_rail(0);
+    hal_rail(PWM_PERIOD);       /* the rail actuator is inverted (higher duty = lower rail): full duty is the LOWEST rail.  0 was the highest */
 }
 
 uint16_t hal_adc(uint8_t ch)
@@ -292,5 +292,6 @@ void hal_ee_write(uint16_t addr, uint8_t v) { iap(2, addr, v); iap_idle(); }
 
 void hal_tone(uint8_t level)  { TONE = level; }
 void hal_fan(uint8_t on)      { FAN = on; }
-uint8_t hal_btn(uint8_t n)    { return n == 1 ? !BTN1 : !BTN2; }
+uint8_t hal_btn(uint8_t n)    { return n == 1 ? !BTN1 : !BTN2; }   /* the timer interrupt's: not reentrant (its argument sits in XRAM) */
+uint8_t hal_btns(void)        { return (uint8_t)((!BTN1 ? 1 : 0) | (!BTN2 ? 2 : 0)); }   /* main-loop callers: no argument, safe beside the interrupt */
 uint8_t hal_strap(void)       { return STRAP; }

@@ -294,7 +294,7 @@ const SCR_DEV = 14;
 const SEND_EVERY = 10;                               // telemetry reports (10 ms each) between commands: the firmware's watchdog is 0.5 s
 const HIST = 500;                                    // plot samples (page 3 every 20 ms: 10 s)
 const SESSION = 1 + Math.floor(Math.random() * 255);    // developer mode obeys only the host that entered it
-const STOP = { 1: 'input low', 2: 'VCC low', 3: 'rail', 4: 'user', 5: 'minimum input voltage' };
+const STOP = { 1: 'input low', 2: 'VCC low', 3: 'rail', 4: 'user', 5: 'minimum input voltage', 6: 'board too hot or thermistor broken' };
 const STATE = ['IDLE', 'PROBE', 'CHARGE', 'REST', 'FULL', 'BLEED', 'FAULT'];
 const STATE_TXT = ['Idle', 'Checking', 'Charging', 'Resting', 'Full', 'Discharging', 'Fault'];   // the simple view
 const VOLTS = ['4.20 V', '4.35 V', '3.80 V storage', '3.85 V storage'];
@@ -453,7 +453,7 @@ $('bEnter').onclick = async () => {
     msg = res === 0 ? '' : 'Refused: the unit is charging, or another program drives developer mode.';
   } catch (e) { msg = e.message; }
 };
-$('bLeave').onclick = async () => { out = null; leaving = true; syncControls(); try { await command(9); } catch (e) { msg = e.message; leaving = false; } };
+$('bLeave').onclick = async () => { out = null; leaving = true; syncControls(); try { await command(9, SESSION); } catch (e) { msg = e.message; leaving = false; } };
 $('bOff').onclick = allOff;
 $('bStart').onclick = async () => {
   try { msg = await command(2) === 0 ? '' : 'Start refused: a supervisor stop is active (input, VCC or rail).'; } catch (e) { msg = e.message; }
@@ -461,7 +461,7 @@ $('bStart').onclick = async () => {
 $('bStop').onclick = async () => { try { await command(1); msg = ''; } catch (e) { msg = e.message; } };
 $('bBeep').onclick = () => { beep = 3; dirty = true; };
 addEventListener('keydown', e => { if (e.key === 'Escape') { if (inDev()) allOff(); else if (p1 && p1.run) command(1).catch(() => {}); } });
-addEventListener('pagehide', () => { if (dev && out) sendRaw([9, 0, 0]); });   // best effort; the watchdog covers the rest
+addEventListener('pagehide', () => { if (dev && out) sendRaw([9, SESSION, 0]); });   // best effort; the watchdog covers the rest
 setInterval(() => { if (dev && kind === 'fw' && performance.now() - lastRx > 1500) reopen(); }, 500);
 if ('hid' in navigator) {
   navigator.hid.addEventListener('disconnect', e => { if (e.device === dev) disconnected(); });
@@ -552,6 +552,8 @@ async function ispWrite(image, progress) {          // erase and program the who
     if (!ok) await sleep(500);
   }
   if (!ok) throw new Error('the loader does not answer');
+  const eeBase = chip && chip.length > 15 ? chip[15] * 256 : 0;   // where the settings area starts (0: none)
+  if (eeBase && blocks.length * 128 > eeBase) throw new Error('the image (' + blocks.length * 128 + ' bytes) would reach the settings area at ' + eeBase + ': not written');
   await ispCmd(0x01, [0, 0, 0, 0, 0, 0, 0x80]);
   await ispCmd(0x05, [0, 0, 0x5a, 0xa5]);
   await ispCmd(0x03, [0, 0, 0x5a, 0xa5]);
@@ -564,6 +566,11 @@ async function ispWrite(image, progress) {          // erase and program the who
   try { await ispSend(ispFrame(0xff, [1])); } catch (e) {}   // the unit resets: no answer to wait for
 }
 
+async function sha256hex(b) {                       // of the image without its erased-flash padding, as tools/bundle.py computes it
+  let n = b.length; while (n > 0 && b[n - 1] === 255) n--;
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', b.subarray(0, n)));
+  return Array.from(h, x => x.toString(16).padStart(2, '0')).join('');
+}
 function fwCheck(b) {
   if (!b.length || b.length > 65536 || b[0] !== 0x02) return 'This is not an OpenWS3 firmware image (.bin).';
 }
@@ -591,7 +598,7 @@ function fwShow() {
     const tag = { update: ['Update available', 'upd'], same: ['Up to date', 'ok'], other: ['Another build of this release', ''], newer: ['Newer than this page', ''] }[st] || [];
     rows.push(['On the charger', installed() || (inDev() ? 'developer mode: not shown' : p1.ver ? '…' : 'an earlier OpenWS3 (no version)'), '', tag[0], tag[1]]);
   }
-  if (BUNDLED) rows.push(['Newest (in this page)', bundledText(), 'built ' + BUNDLED.built + ', ' + (BUNDLED.size / 1024).toFixed(1) + ' KB, SHA-256 ' + BUNDLED.sha256.slice(0, 12)]);
+  if (BUNDLED) rows.push(['Newest (in this page)', bundledText(), 'built ' + BUNDLED.built + ', ' + (BUNDLED.size / 1024).toFixed(1) + ' KB, SHA-256 ' + BUNDLED.sha256, bundledOk ? 'checked' : 'not checked', bundledOk ? 'ok' : 'upd']);
   if (fw && !(BUNDLED && fw.name === 'OpenWS3 ' + bundledText())) rows.push(['Selected file', fw.name, (used / 1024).toFixed(1) + ' KB']);
   else if (!fw) rows.push(['Firmware', 'choose a file (.bin) to install']);
   rows.push(...chipRows());
@@ -639,8 +646,11 @@ $('bCheck').onclick = async () => {                  // read the chip's identity
 };
 $('bFlash').onclick = async () => {
   if (busy || !fw) return;
+  let hash = '';
+  try { hash = await sha256hex(fw.data); } catch (e) { fwStatus('Could not compute the SHA-256 of the image: open the page in Chrome or Edge.', true); return; }
+  if (BUNDLED && fw.name === 'OpenWS3 ' + bundledText() && hash !== BUNDLED.sha256) { fwStatus('The image does not match its SHA-256: not written.', true); return; }
   if (kind === 'fw' && (!p1 || p1.run || inDev())) { fwStatus(p1 && p1.run ? 'Stop charging first.' : 'Leave developer mode first.', true); return; }
-  if (!confirm('Replace the firmware on the charger with ' + fw.name + '?' + (kind === 'isp' ? '\nThe current firmware will be erased.' : '') +
+  if (!confirm('Replace the firmware on the charger with ' + fw.name + '?\nSHA-256 ' + hash + (kind === 'isp' ? '\nThe current firmware will be erased.' : '') +
                '\nOpenWS3 is experimental and is made for the WhoopStor V3 only: continue only if this is one.' +
                '\nDo not unplug the charger until it has restarted.')) return;
   busy = true; fwShow();
@@ -667,9 +677,14 @@ $('bFlash').onclick = async () => {
   } catch (e) { fwStatus('Update failed: ' + e.message + '. The unit can still be programmed: hold the left button while plugging in USB-C, then install again.', true); }
   busy = false; prog.hidden = true; fwShow();
 };
-const useBundled = () => fwSet('OpenWS3 ' + bundledText(), Uint8Array.from(atob(BUNDLED.data), c => c.charCodeAt(0)));
+let bundledOk = false;                               // the embedded image matches the SHA-256 written next to it (checked at load)
+const useBundled = () => { if (bundledOk) fwSet('OpenWS3 ' + bundledText(), Uint8Array.from(atob(BUNDLED.data), c => c.charCodeAt(0))); };
 if (BUNDLED) {
-  useBundled();
+  sha256hex(Uint8Array.from(atob(BUNDLED.data), c => c.charCodeAt(0))).then(h => {
+    bundledOk = h === BUNDLED.sha256;
+    if (bundledOk) { useBundled(); fwShow(); }
+    else fwStatus('The firmware inside this page is damaged (its SHA-256 does not match): download the page again.', true);
+  }).catch(e => fwStatus('Could not check the firmware inside this page (' + e.message + '): open the page in Chrome or Edge.', true));
   $('newest').textContent = 'The newest firmware, in this page: OpenWS3 ' + bundledText() + ', built ' + BUNDLED.built + '.';
   $('newest').hidden = false;
 } else $('bFile').classList.remove('adv');           // a page without an image: everyone chooses a file

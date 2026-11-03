@@ -47,6 +47,7 @@ void     hal_tick(void);                         /* called from the 0.5 ms inter
 void     hal_tone(uint8_t level);                /* P4.6 */
 void     hal_fan(uint8_t on);                    /* P0.7 */
 uint8_t  hal_btn(uint8_t n);                     /* 1 = button 1 (P3.2) pressed, 2 = button 2 (P3.6); active low pins */
+uint8_t  hal_btns(void);                         /* both buttons, b0 = B1, b1 = B2 (pressed = 1), for the main loop */
 uint8_t  hal_strap(void);                        /* P3.4 */
 
 #endif

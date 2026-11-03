@@ -42,6 +42,7 @@ typedef struct {
     uint16_t t_chg_s;            /* seconds charged in this fill (T_CHG_MAX_S) ... */
     uint8_t  t_chg_div;          /* ... and passes into the current second */
     uint8_t  pre;                /* charging at I_PRE (the cell is below V_PRE) */
+    uint16_t t_pre_s;            /* seconds charged below V_PRE in this fill (T_PRE_MAX_S) */
 } port_t;
 
 static port_t XD P[NPORTS], W;
@@ -60,7 +61,7 @@ static void p_reset(port_t XD *p, uint8_t iset)
     p->t_over = p->oc = 0;
     p->t_gone = 0;               /* a removed cell is noticed afresh next time */
     p->announced = 0;
-    p->t_chg_s = 0; p->t_chg_div = 0; p->pre = 0;   /* a new fill: its own time limit */
+    p->t_chg_s = 0; p->t_chg_div = 0; p->pre = 0; p->t_pre_s = 0;   /* a new fill: its own time limits */
 }
 
 void chg_init(void)
@@ -166,18 +167,20 @@ static uint8_t st_probe(void)
 static uint8_t st_charge(void) REENT
 {
     uint16_t d0 = W.duty;
-    /* time limit: a cell that never tapers (a damaged one) is not held at full voltage for ever.  Time the limits hold the port does
-       not count: there it charges slower than it was set to */
-    if (!W.t_held && ++W.t_chg_div >= PASSES_PER_S) {
+    /* time limits: a cell that never tapers (a damaged one) is not held at full voltage for ever, and one that stays below V_PRE
+       (shorted inside) is not fed for long.  Time the limits hold the port with no current does not count; held with current flowing
+       it does (several ports sharing a tight budget are all held all the time: not counting that let a bad cell charge for ever) */
+    if ((!W.t_held || W.i > I_OPEN) && ++W.t_chg_div >= PASSES_PER_S) {
         W.t_chg_div = 0;
         if (++W.t_chg_s >= T_CHG_MAX_S) return go_fault();
+        if (W.pre && ++W.t_pre_s >= T_PRE_MAX_S) return go_fault();
     }
     /* a deeply discharged cell starts at 0.1 A; at V_PRE it goes up to its setting through the soft ramp, not in one jump */
     if (W.v < V_PRE) { W.pre = 1; if (W.iset > I_PRE) W.iset = I_PRE; }
     else if (W.pre) { W.pre = 0; W.ramp = 1; W.ramp_div = 0; }
     W.want = W.iset;
-    /* current limit supervision: 2*Iset + 7 for 200 passes */
-    if (W.i >= (uint16_t)(2u * IN->iset[K] + 7u)) {
+    /* current limit supervision: 2*Iset + 7 for 200 passes, Iset being I_PRE while the cell is below V_PRE */
+    if (W.i >= (uint16_t)(2u * (W.pre ? I_PRE : IN->iset[K]) + 7u)) {
         if (++W.oc >= T_OC) { W.oc = 0; return go_fault(); }
     } else if (W.oc) W.oc--;
 
@@ -225,9 +228,9 @@ static uint8_t st_full(void)
         if (W.v < IN->tgt) {
             /* a top-up of the same cell: the time already spent charging it stays, so a cell that keeps sagging (a damaged one
                leaking inside) reaches the limit across its top-ups.  Only removing it or stopping the run starts the count again */
-            uint16_t s = W.t_chg_s;
+            uint16_t s = W.t_chg_s, sp = W.t_pre_s;
             uint8_t st = to_probe();
-            W.t_chg_s = s;
+            W.t_chg_s = s; W.t_pre_s = sp;
             return st;
         }
         return to_bleed();

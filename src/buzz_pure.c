@@ -22,15 +22,19 @@ uint8_t buzz_busy(void) { return active; }
 
 void buzz_play(uint8_t id)
 {
+    /* the 0.5 ms interrupt runs buzz_tick: it is told to leave the pattern alone (one byte, written atomically) while the multi-byte
+       pointer and counters change, and given the new pattern only once they are all set */
+    active = 0;
     switch (id) {
     case PAT_BOOT:  pat = p_boot;  repeat = 0; break;
     case PAT_KEY:   pat = p_key;   repeat = 0; break;
     case PAT_DONE:  pat = p_done;  repeat = 0; break;
     case PAT_ERROR: pat = p_error; repeat = 0; break;
     case PAT_RAIL_ALARM: pat = p_rail; repeat = 1; break;
-    default: pat = 0; active = 0; return;
+    default: pat = 0; return;
     }
-    active = 1; seg = 0; in_off = 0; left = pat[0].on;
+    seg = 0; in_off = 0; left = pat[0].on;
+    active = 1;
 }
 
 uint8_t buzz_tick(void)

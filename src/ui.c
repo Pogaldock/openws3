@@ -290,7 +290,7 @@ static uint16_t ink(uint16_t col, uint16_t bg) { return col == bg ? th(R_BG) : c
 
 static void header(const ui_state_t *s, uint8_t e, char XD *t) REENT
 {
-    static const CODE char *const ALARM[] = { "", "VIN!", "VCC!", "RAIL!", "", "V LIMIT" };   /* by STOP_* */
+    static const CODE char *const ALARM[] = { "", "VIN!", "VCC!", "RAIL!", "", "V LIMIT", "HOT!" };   /* by STOP_* */
     uint16_t col = th(R_TEXT), bg = s->run ? th(R_RUN) : th(R_BOX);
     if (s->ps) {                                     /* port settings: what this is, the port, what the keys do */
         if (e == 0) scopy(t, "PORTS");

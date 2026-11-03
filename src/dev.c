@@ -21,7 +21,7 @@ static uint16_t XD out_duty[NPORTS];                           /* what is applie
 static uint8_t  XD out_sw, out_flags, trip, status, raw_now, session;
 static int16_t  XD rail_duty;
 static uint32_t XD last_cmd;
-static uint16_t XD vcut;
+static uint16_t XD vcut, dv, di;                               /* the cut; the port's voltage and current this pass (XRAM: DSEG is full) */
 
 void dev_reset(uint16_t setpoint, int16_t duty, uint8_t flags, uint8_t s)
 {
@@ -72,7 +72,12 @@ int16_t dev_pass(uint8_t supply_stop, uint8_t warm)
 
     was_sw = out_sw; out_sw = 0;
     for (k = 0; k < NPORTS; k++) {
-        if ((out_duty[k] || (was_sw & (1u << k))) && (adc_get(port_v_ch(k)) >= vcut || adc_get(port_i_ch(k)) >= I_MAX)) trip |= (uint8_t)(1u << k);
+        /* checked whether the port was on or not: switching a port off releases the latch (dev_set), so a check that only ran on driven
+           ports let a host pulse a cell past the cut; a cell already at the cut cannot be driven at all */
+        dv = adc_get(port_v_ch(k)); di = adc_get(port_i_ch(k));
+        if (dv >= vcut || di >= I_MAX) trip |= (uint8_t)(1u << k);
+        if ((was_sw & (1u << k)) && dv < V_PRE) trip |= (uint8_t)(1u << k);                       /* no bleeding a cell below 3.0 V */
+        if (out_duty[k] && dv < V_PRE && di >= 2 * I_PRE) trip |= (uint8_t)(1u << k);             /* below 3.0 V at most 0.2 A, as charging does */
         out_duty[k] = off || (trip & (1u << k)) ? 0 : req_duty[k];
         if (!off && !(trip & (1u << k)) && (req_sw & (1u << k))) out_sw |= (uint8_t)(1u << k);
         hal_pwm(k, out_duty[k]);
@@ -100,7 +105,7 @@ void dev_tele(uint8_t XD *b)
     tele_put16(b, 32, adc_raw(ADC_IIN)); tele_put16(b, 34, adc_raw(ADC_VIN)); tele_put16(b, 36, adc_raw(ADC_RAIL)); tele_put16(b, 38, adc_raw(ADC_BANDGAP));
     tele_put16(b, 52, (uint16_t)rail_duty);
     b[54] = out_sw; b[55] = out_flags;
-    b[56] = (uint8_t)(hal_btn(1) | (hal_btn(2) << 1) | (hal_strap() << 2));
+    b[56] = (uint8_t)(hal_btns() | (hal_strap() << 2));
     b[57] = status; b[58] = trip;
     tele_put16(b, 59, dev_setpoint());
 }

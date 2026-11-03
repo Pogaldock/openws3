@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include "sim.h"
+#include "adc.h"
 #include "app.h"
 #include "cfg.h"
 #include "../check.h"
@@ -302,9 +303,10 @@ static void s_vcc_fatal(void)
     S.vcc = 5.15;
     t = time_until(all_off, 2.0);
     S.vcc = 4.55; run_for(30); start(); run_for(10);
-    printf("  VCC 5.15 V: outputs off after %.2f s; back to normal and start pressed: still locked off: %s\n", t, all_off() ? "yes" : "NO");
+    printf("  VCC 5.15 V: outputs off after %.2f s; back to normal and start pressed: still locked off: %s; rail now %.3f V\n", t, all_off() ? "yes" : "NO", S.rail);
     CHECK(t >= 0 && t < 0.5);
     CHECK(all_off());
+    CHECK(S.rail < 4.0);                                            /* a fatal stop leaves the rail at its lowest, not its highest */
 }
 
 /* the rail cannot be regulated from the start (it sits at 4.20 V): the self-test fails, a run can never start */
@@ -385,7 +387,7 @@ static void plug_pack(const char *src, double usb, double pack, int keeps_runnin
     t = time_until(prof_off, 1.0);
     run_for(10);
     printf("  %s, %.1f V pack plugged in: bypass off after %.4f s (fed backwards %.4f s), charging: %s\n", src, pack, t, S.backfeed_s, any_pwm() ? "yes" : "NO");
-    CHECK(t >= 0 && S.backfeed_s < 0.02);
+    CHECK(t >= 0 && S.backfeed_s < 0.04);                          /* the detection, then one probe */
     CHECK(any_pwm());
     S.xt60_v = 0;                                                   /* unplugged, USB-C still in */
     t = time_until(prof_on, 2.0);
@@ -403,20 +405,120 @@ static void s_pd_steps(void)
     S.vin = 5.0;
     sim_attach(0, 3.70, 300);
     app_boot(); S.booted = 1; run_for(0.6); S.vin = 19.5; run_for(2.0);
+    printf("  dbg after start-up: state %u profile %u\n", adc_bypass_state(), S.profile);
+    run_for(6);
+    printf("  dbg later: state %u profile %u\n", adc_bypass_state(), S.profile);
     start(); run_for(10);
     S.vin = 5.0; run_for(0.3); S.vin = 19.5; run_for(10);
     printf("  PD 5 V -> 20 V at start, a PD reset mid-charge: bypass on: %s\n", S.profile ? "yes" : "NO");
     CHECK(S.profile);
 }
 
-/* USB-C and a pack both in at power-up: a pack voltage that is no PD level is caught when the level is learnt */
+/* USB-C and a pack both in at power-up (or a reset with both in): the bypass must stay off whenever the pack is the higher supply */
+static void both_at_boot(double usb, double pack, double plug_at)
+{
+    double b0 = S.backfeed_s;
+    S.vin = usb; S.xt60_v = plug_at < 0 ? pack : 0;
+    sim_attach(0, 3.70, 300);
+    app_boot(); S.booted = 1;
+    if (plug_at >= 0) { run_for(plug_at); S.xt60_v = pack; }
+    run_for(8); start(); run_for(20);
+    printf("  USB-C %.1f V and a %.1f V pack %s: bypass now %s, fed backwards %.3f s, charging: %s\n", usb, pack,
+           plug_at < 0 ? "in at power-up" : "plugged during the learning", S.profile ? "on" : "off", S.backfeed_s - b0, any_pwm() ? "yes" : "NO");
+    CHECK(S.backfeed_s - b0 < 0.05);                                     /* at most the one probe (about 35 ms) */
+    CHECK(any_pwm());
+}
 static void s_both_at_boot(void)
 {
-    S.vin = 5.0; S.xt60_v = 22.8;                                  /* 6S at storage */
-    sim_attach(0, 3.70, 300);
-    boot(); run_for(5);
-    printf("  laptop and a 22.8 V pack in at power-up: bypass on now: %s, fed backwards %.2f s (the 3 s learning time)\n", S.profile ? "YES" : "no", S.backfeed_s);
-    CHECK(!S.profile && S.backfeed_s <= 3.1);
+    both_at_boot(5.0, 8.0, -1); both_at_boot(5.0, 15.6, -1); both_at_boot(5.0, 22.8, -1);
+    both_at_boot(19.5, 19.8, -1); both_at_boot(19.5, 15.6, -1); both_at_boot(5.0, 16.8, 1.0);
+}
+
+/* MAX IN AMPS 0.5 A, 1.0 A setting, three cells that never fill: the limits hold every port all the time; the 3 h limit must still fire */
+static void s_held_never_full(void)
+{
+    int k;
+    cfg_load(); settings.ilim = 5; settings.cur = 70; cfg_save();
+    for (k = 0; k < 3; k++) sim_attach(k, 4.00, 1000000);
+    boot(); start();
+    run_for(1.0 * 3600);
+    CHECK(any_pwm());
+    run_for(8.6 * 3600);                                             /* each port gets 3 h with current; they take turns in the budget */
+    printf("  MAX IN AMPS 0.5 A, three cells that never fill: PWM after 9.6 h: %u %u %u (each stopped after 3 h with current)\n", S.pwm[0], S.pwm[1], S.pwm[2]);
+    CHECK(!S.pwm[0] && !S.pwm[1] && !S.pwm[2]);
+}
+
+/* a 2.7 V cell with an internal short (0.11 A leak): it never comes up past 3.0 V; the 30 min pre-charge limit gives up on it */
+static void s_pre_short(void)
+{
+    sim_attach(0, 2.70, 300); S.cell[0].leak = 0.11;
+    boot(); start();
+    run_for(25 * 60);
+    CHECK(S.pwm[0] > 0);
+    run_for(10 * 60);
+    printf("  2.7 V cell shorted inside (0.11 A leak): still fed at 25 min, PWM at 35 min: %u, cell %.3f V\n", S.pwm[0], sim_cell_v(0));
+    CHECK(S.pwm[0] == 0);
+}
+
+/* a damaged settings page: one stored field changed behind the check byte's back loads the defaults, not the damaged value */
+static void s_cfg_damage(void)
+{
+    cfg_load(); settings.volt = 0; settings.cur = 21; settings.usb_off = 1; cfg_save();
+    sim_ee_flip(CFG_ADDR + 2, 0x01);                                /* volt 0 -> 1 (4.35 V) */
+    cfg_load();
+    printf("  settings page with one bit flipped: target index %u, USB power off %u (defaults: 0, 0)\n", settings.volt, settings.usb_off);
+    CHECK(settings.volt == 0 && settings.usb_off == 0);
+}
+
+/* the board heats up past 60 C, then cools; then the thermistor is unplugged (reads full scale) */
+static void s_hot(void)
+{
+    double t;
+    sim_attach(0, 3.80, 300);
+    boot(); start(); run_for(10);
+    S.therm = 1280; run_for(10);                                    /* 45 C: the fan, charging goes on */
+    CHECK(any_pwm() && S.fan);
+    S.therm = 780;                                                  /* about 61 C */
+    t = time_until(all_off, 3.0);
+    S.therm = 1000; run_for(5); start(); run_for(2);                /* 53 C: not cool enough to start again */
+    CHECK(!any_pwm());
+    S.therm = 1200; run_for(5); start(); run_for(5);                /* 47 C */
+    printf("  board at 61 C: outputs off after %.2f s; start at 53 C refused: yes; at 47 C charging again: %s\n", t, any_pwm() ? "yes" : "NO");
+    CHECK(t >= 0 && t < 2.0 && any_pwm());
+    S.therm = 4095; t = time_until(all_off, 3.0);                   /* the sensor unplugged */
+    printf("  thermistor open: outputs off after %.2f s\n", t);
+    CHECK(t >= 0 && t < 2.0);
+}
+
+/* developer mode, a host pulsing a port on and off (each "off" used to release the voltage cut) with the rail at its top */
+static void s_dev_pulse(void)
+{
+    static const uint8_t enter[] = { 7, 9, 1 };
+    uint8_t on[19] = { 8, 0x15, 2, 0, 0, 100, 0x01, 0x90 }, off[19] = { 8, 0x15, 2, 0, 0, 100 };   /* rail raw 100, port 1 duty 400 / 0 */
+    int k;
+    double rest;
+    on[18] = off[18] = 9;
+    sim_attach(0, 4.10, 120);
+    boot(); usb(enter, 3);
+    for (k = 0; k < 60000; k++) { usb(on, 19); run_for(0.01); usb(on, 19); run_for(0.01); usb(off, 19); run_for(0.01); }   /* 30 min */
+    usb(off, 19); run_for(0.2); usb((const uint8_t[]){ 9, 9, 1 }, 3); run_for(300);
+    rest = sim_cell_v(0);
+    printf("  developer mode, a host pulsing port 1 on/off for 30 min, rail raw 100: cell peak %.3f V, after 5 min rest %.3f V (cut 4.25 V)\n", S.max_cell_v[0], rest);
+    CHECK(rest < 4.26);
+}
+
+/* developer mode, a host holding a port's bleed switch on: the cell must not be drained below 3.0 V */
+static void s_dev_bleed(void)
+{
+    static const uint8_t enter[] = { 7, 9, 1 };
+    uint8_t set[19] = { 8, 0x15, 2, 0x01, 0, 137 };                 /* port 1 bleed switch on (byte 3), no PWM, rail raw 137 (~4.3 V) */
+    int k;
+    set[18] = 9;
+    sim_attach(0, 3.80, 120);
+    boot(); usb(enter, 3);
+    for (k = 0; k < 7200; k++) { usb(set, 19); run_for(0.5); }     /* 1 h */
+    printf("  developer mode, bleed held on for 1 h: cell %.3f V, switch now %u\n", sim_cell_v(0), S.sw[0]);
+    CHECK(sim_cell_v(0) > 2.95 && !S.sw[0]);
 }
 
 typedef struct { const char *name; void (*fn)(void); } scen_t;
@@ -429,6 +531,8 @@ static const scen_t SC[] = {
     { "menu_lock", s_menu_lock }, { "rail_pause", s_rail_pause }, { "vcc_fatal", s_vcc_fatal }, { "selftest_fail", s_selftest_fail },
     { "dev_top", s_dev_top }, { "dev_mode", s_dev_mode }, { "xt60_only", s_xt60_only }, { "pack_on_laptop", s_pack_on_laptop }, { "pack_on_pd", s_pack_on_pd },
     { "pd_steps", s_pd_steps }, { "both_at_boot", s_both_at_boot },
+    { "dev_pulse", s_dev_pulse }, { "dev_bleed", s_dev_bleed }, { "held_never_full", s_held_never_full }, { "pre_short", s_pre_short },
+    { "hot", s_hot }, { "cfg_damage", s_cfg_damage },
 };
 
 int main(int argc, char **argv)

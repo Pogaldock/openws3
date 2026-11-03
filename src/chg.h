@@ -67,6 +67,7 @@ void chg_cut(void);              /* rail trip: duties to zero and the soft ramp 
 #define V_PRE             2731   /* 3.00 V: below this a cell charges at I_PRE only (a gentle start for a deeply discharged cell) */
 #define I_PRE             7      /* 0.1 A */
 #define T_CHG_MAX_S       10800  /* 3 h of charging one cell, top-ups included (not counting time held by the limits): the port faults */
+#define T_PRE_MAX_S       1800   /* 30 min below V_PRE (at I_PRE) in one fill: a cell that does not come up is damaged: the port faults */
 #define PASSES_PER_S      222
 #define V_FAULT           4004   /* 4.40 V: over-voltage latch while bleeding */
 #define I_TAIL            5      /* tail-current threshold (73 mA) */

@@ -27,7 +27,9 @@ uint16_t adc_get(uint8_t ch);         /* the filtered value */
 uint8_t  adc_saturated(uint8_t ch);   /* the latest counts are at full scale: the input is beyond what the ADC measures */
 void     adc_prime(void);             /* scan everything twice so filtered values start at the real readings */
 
-enum { VG_OK = 0, VG_CUT, VG_LATCHED };       /* input guard (adc.c): bypass allowed / held off while a second supply is in / off until power-up */
+enum { VG_OK = 0, VG_HOLD, VG_LEARN, VG_PROBE };   /* input guard (adc.c): bypass allowed / off, a higher supply is on the XT60 /
+                                                    off, learning the input level / on for a moment, testing which source is highest */
+void     adc_guard_start(void);
 uint8_t  adc_bypass_state(void);
 
 #endif

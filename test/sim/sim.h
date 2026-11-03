@@ -29,6 +29,7 @@ typedef struct {
     uint16_t pwm[NPORTS], rail_duty;
     uint8_t sw[NPORTS], global, power, profile, profile_ever, fan;
     double  xt60_v;                     /* a supply on the XT60 / DC jack, 0 = none; S.vin is USB-C, 0 = none */
+    uint16_t therm;                     /* thermistor counts (0 = room temperature) */
     double  backfeed_s;                 /* time with the bypass on while the XT60 has a supply: fed into the USB-C connector */
 
     /* ---- the plant's state ---- */
@@ -53,6 +54,7 @@ extern sim_t S;
 
 void   sim_reset(void);
 void   sim_advance(uint32_t ticks);
+void sim_ee_flip(uint16_t a, uint8_t mask);  /* damage one stored bit pattern (settings page) */
 double sim_cell_v(int p);                     /* the cell's own voltage (open circuit + polarisation) */
 void   sim_attach(int p, double v0, double cap_mah);
 double sim_ocv_of(double frac);

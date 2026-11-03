@@ -24,10 +24,11 @@ typedef struct {
     uint8_t  rail_sat;                  /* the rail ADC is at full scale: the rail is beyond what it can measure */
 } sup_in_t;
 
-enum { STOP_NONE = 0, STOP_VIN, STOP_VCC, STOP_RAIL, STOP_USER, STOP_VLIM };   /* VLIM: the user's minimum input voltage (limits.h) */
+enum { STOP_NONE = 0, STOP_VIN, STOP_VCC, STOP_RAIL, STOP_USER, STOP_VLIM, STOP_TEMP };   /* VLIM: the user's minimum input voltage (limits.h);
+                                                                                        TEMP: the board over about 60 C, or its sensor broken */
 
 /* Two kinds of condition.  WAITING: a supply condition, the unit does nothing until it clears by itself (STOP_VIN, STOP_VCC, STOP_RAIL
- * below).  FATAL: something is wrong with the unit or its supply, everything stays off until the power is cycled (SF_*). */
+ * STOP_TEMP below).  FATAL: something is wrong with the unit or its supply, everything stays off until the power is cycled (SF_*). */
 enum { SF_NONE = 0, SF_VCC_HIGH = 0x10, SF_RAIL_OVER, SF_NO_RAIL, SF_TEST };   /* SF_TEST (the rail self-test failed) is set by the app */
 
 typedef struct {

@@ -1,5 +1,5 @@
 /* User settings, kept in one EEPROM page: a layout byte, then the fields of cfg_t in order.  A page without the layout byte
- * (erased flash, or an older layout) gives the defaults.  The app works on `settings` directly and calls cfg_save(). */
+ * (erased flash, or an older layout) gives the defaults, and so does one whose check byte (after the fields) does not match.  The app works on `settings` directly and calls cfg_save(). */
 #ifndef CFG_H
 #define CFG_H
 #include "compat.h"
@@ -7,7 +7,7 @@
 #include "board.h"
 
 #define CFG_ADDR     0x0800
-#define CFG_LAYOUT   0xB4             /* change it whenever cfg_t changes: an old page then loads the defaults */
+#define CFG_LAYOUT   0xB5             /* change it whenever cfg_t or the page changes: an old page then loads the defaults (0xB5: check byte added) */
 
 typedef struct {
     uint8_t cur;                      /* charge current, iu: 21..91 (0.3..1.3 A) */

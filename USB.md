@@ -31,8 +31,8 @@ and input do not follow the supply. The raw counts (developer mode, page 3) are 
 | 8 | flags: b0 running, b1–2 target voltage (0..3: 4.20 / 4.35 / 3.80 / 3.85 V), b3 outputs enabled (P5.2), b4 reserved (0), b5 rail alarm pause, b6 strap P3.4, b7 reserved (0) |
 | 9 | current setting (iu: 21 = 0.3 A … 91 = 1.3 A, ×7 per 0.1 A) |
 | 10 | firmware release: major in the high nibble, minor in the low (`src/version.h`); 0 on firmware that predates it |
-| 11 | stop reason: 0 none, 1 input low, 2 VCC low, 3 rail, 4 user, 5 minimum input voltage (user setting) |
-| 12 | low nibble: the condition now, as a stop reason (byte 11: 1 input low, 2 VCC low, 3 rail out of range, 5 minimum input voltage; the first three have a screen of their own); high nibble: screen open on the LCD (0 = main, 1..6 = diagnostics page, 13 = port settings, 14 = developer mode, 15 = menu) |
+| 11 | stop reason: 0 none, 1 input low, 2 VCC low, 3 rail, 4 user, 5 minimum input voltage (user setting), 6 board too hot or thermistor broken |
+| 12 | low nibble: the condition now, as a stop reason (byte 11: 1 input low, 2 VCC low, 3 rail out of range, 5 minimum input voltage, 6 too hot; 1, 2, 3 and 6 have a screen of their own); high nibble: screen open on the LCD (0 = main, 1..6 = diagnostics page, 13 = port settings, 14 = developer mode, 15 = menu) |
 | 13–15 | last event: sequence (increments), code (1 port full, 2 port fault, 3 stopped), port 0..5 (or the stop reason for code 3) |
 | 16, 17 | last command: its sequence number, result (0 ok, 1 refused, 2 unknown) |
 | 18–23 | port states 1..6: 0 idle, 1 probe, 2 charge, 3 rest, 4 full, 5 bleed, 6 fault |
@@ -66,7 +66,7 @@ Same header (bytes 0–7, byte 3 = 2, head / tail sequence in bytes 2 / 63). Eve
 | 47 | pre-release: the beta number of the firmware release (`src/version.h`), 0 for a final release or firmware that predates it |
 | 48–50 | reserved (0) |
 | 51 | some port is charging or bleeding (global enable) |
-| 52–56 | supervisor: stop reason (waiting condition: 1 input low, 2 VCC low, 3 rail out of range), reserved (0), fatal condition (0 none, 0x10 VCC over 5.0 V, 0x11 rail overvoltage, 0x12 no rail), rail alarm (stop reason 3), fan |
+| 52–56 | supervisor: stop reason (waiting condition: 1 input low, 2 VCC low, 3 rail out of range, 6 too hot), reserved (0), fatal condition (0 none, 0x10 VCC over 5.0 V, 0x11 rail overvoltage, 0x12 no rail), rail alarm (stop reason 3), fan |
 | 57–60 | build id: the first 8 hex digits of the git commit the firmware was built from, 32 bit (the page is not sent in developer mode; use byte 10 of page 1 there) |
 | 61 | 1 if the source tree had uncommitted changes when it was built |
 
@@ -104,7 +104,7 @@ The screen open on the LCD (menu, port settings or a diagnostics page) is in byt
 | 6 | – | reboot into the USB ISP loader, so the next flash needs no button. Refused while running. `fwmon.py flash FILE` does this and then writes the image |
 | 7 | session (1..255) | enter developer mode (`tools/devtool.py`): every port output off, the rail stays regulated at its setpoint, the input profile P5.3 stays as it is (the input depends on it), the LCD shows DEV MODE. Refused while running, and while another session is in control and still sending |
 | 8 | bytes 1, 3–18 (below) | developer mode: set the outputs. Must be repeated at least every 0.5 s. Refused outside developer mode or from another session |
-| 9 | – | leave developer mode: everything off, back to the main screen. Holding both buttons on the unit does the same |
+| 9 | session | leave developer mode: everything off, back to the main screen. Only the session that entered it, or anyone once that host has gone quiet (0.5 s). Holding both buttons on the unit does the same |
 | 10 | port 0..5, value in byte 3 | set one port's value, as in page 2 bytes 36–41 (0 off, 1 auto, else a current step in iu), stored in EEPROM. Refused while running, while that port settings mode on the unit is editing, or if not a valid value |
 
 Command 8: byte 1 flags (b0 global enable, b1 fan, b2 profile, b3 beep (a 0→1 change beeps once), b4 rail on raw duty), byte 3 switch
