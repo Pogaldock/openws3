@@ -14,11 +14,13 @@ rm -rf $B; mkdir -p $B
 make -s BUILD=$B HOSTCC="gcc --coverage -O0" test $B/sim_app >/dev/null
 ./$B/sim_app >/dev/null
 command -v gcovr >/dev/null || pip install --break-system-packages -q gcovr
-gcovr -r . --object-directory $B --filter 'src/' --exclude 'src/(font|font_rot|sprites|logo)\.c' > $B/coverage.txt
+# Hot simulator loops run some lines billions of times; gcovr flags such counts as "suspicious" (possible counter wrap) and stops.
+# They are real counts here, so it only warns.
+gcovr --gcov-ignore-parse-errors=suspicious_hits.warn -r . --object-directory $B --filter 'src/' --exclude 'src/(font|font_rot|sprites|logo)\.c' > $B/coverage.txt
 cat $B/coverage.txt
-gcovr -r . --object-directory $B --filter "$SAFETY" --fail-under-line $FLOOR > $B/coverage_safety.txt || {
+gcovr --gcov-ignore-parse-errors=suspicious_hits.warn -r . --object-directory $B --filter "$SAFETY" --fail-under-line $FLOOR > $B/coverage_safety.txt || {
     cat $B/coverage_safety.txt; echo "coverage: a safety file is under $FLOOR % of its lines run by the tests"; exit 1; }
-gcovr -r . --object-directory $B --filter "$SAFETY" --txt-metric branch --fail-under-branch $BFLOOR > $B/branches.txt || {
+gcovr --gcov-ignore-parse-errors=suspicious_hits.warn -r . --object-directory $B --filter "$SAFETY" --txt-metric branch --fail-under-branch $BFLOOR > $B/branches.txt || {
     cat $B/branches.txt; echo "coverage: the safety files' branches under $BFLOOR %"; exit 1; }
 cat $B/branches.txt
 echo "coverage: every safety file at $FLOOR % of its lines or more, and $BFLOOR % of the safety files' branches or more"
