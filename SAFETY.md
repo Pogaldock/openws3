@@ -334,8 +334,9 @@ calibration. Fixed in 0.2-beta.3, each with a test and a planted bug:
 - **not fixed, and why:**
   - **sensor tolerances that stack:** the rail sensor reading 0.8 % low together with the chip's reference reading 1 % high takes a
     4.35 V cell to 4.40 V at rest without a fault (4.25 V on the 4.20 V target). Every reading shifts together, so no cross-check in
-    firmware can see it; it is the per-unit accuracy already listed below, and the multimeter check is how you find it. The chip
-    stores its own factory reference value (diagnostics page 1); using it needs the tested unit's value, still to be read
+    firmware can see it; it is the per-unit accuracy already listed below, and the multimeter check is how you find it. Version B
+    chips store their own factory-measured reference, which could correct it; the tested unit is a version A with none stored
+    (diagnostics page 1: "CHIP A  NO STORED REF"), so on it the multimeter is the only way
   - **the millisecond clock wraps after about 25 days of continuous power:** once, a pending settings save or the USB-C guard's
     steady wait may come early or late. The simulator replaces that code, so a change could not be tested; power it off now and then
   - the mAh total can lose about 1 mAh on a very long pass (display only)
@@ -354,6 +355,11 @@ calibration. Fixed in 0.2-beta.3, each with a test and a planted bug:
   whether the charger is accurate; a multimeter reading has not been taken yet. Until it is, use 4.20 V, where even the worst case
   of the uncertainty (about 3 %) stays inside what a LiHV cell is made for.
 - Thermistor about 2150 counts at room temperature.
+- **0.2-beta.5 candidate, six cells charging at 0.6 A on 4.35 V from a 20 V PD charger** (diagnostics, 89 s after power-up): VCC
+  4.484 V, input 19.36 V, rail 4.364 V (setpoint 14 counts over the 4.35 V target, as designed), rail actuator 23/400, rail ADC 4031 of
+  4095 (64 counts of headroom at that VCC: why the 4.35 V target needs the per-target VCC check), the six currents about 0.64 A
+  each, the input estimate 905 mA (3.6 A of charge at 4.36 V and 90 % efficiency would draw 0.89 A from 19.36 V: consistent), no
+  limit holding a port, stack 41 bytes never used (the worst case worked out from the code leaves 29), no stored reference.
 
 ## What it takes for granted, and what breaks if it is wrong
 

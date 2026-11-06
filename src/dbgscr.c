@@ -67,7 +67,7 @@ const char *dbg_text(uint8_t page, uint8_t row)
     case 3:
         switch (row) {
         case 0: rb_str("PORT I raw  mA  duty"); break;
-        case 7: rb_str("D: duty of 400, sw: bleeding"); break;
+        case 7: rb_str("D: duty/400, sw: bleeding");   /* 26 characters fit a row */ break;
         case 8: case 9: break;
         default:
             k = (uint8_t)(row - 1);

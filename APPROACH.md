@@ -84,7 +84,8 @@ behind.
 - The chip's own supply sits at about 4.48 V on every supply I tried (two PD chargers, a laptop, a 4S pack).
 - The input voltage reading is within about 2 % of the real supply.
 - The rail sits at 4.36 V on the 4.35 V setting, and a charging cell read 4.338 V.
-- The firmware runs with stack to spare (45 to 48 bytes never used with the current screen; 24 on an older one).
+- The firmware runs with stack to spare (41 to 48 bytes never used while charging, depending on the version; the worst case worked
+  out from the code leaves 29).
 - The USB-C guard keeps a pack on the XT60 from feeding backwards into a laptop.
 - The new firmware boots, plays its sounds and draws its screen without resetting.
 
