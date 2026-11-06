@@ -144,7 +144,8 @@ Each charging cell has an eye that looks around faster the more current flows. A
 ### When everything is full
 
 When every cell is full, the charger plays its finale (the logo burns in through static, with a fanfare), then a summary: how many
-packs, how long the run took, the total mAh and the cell with the highest resistance. Any key returns to the main screen; the run
+packs (every cell plugged in during the run, so a cell taken out and put back counts twice: the charger cannot tell it is the
+same cell), how long the run took, the total mAh and the cell with the highest resistance. Any key returns to the main screen; the run
 carries on guarding the cells. A cell that sags a little and is topped up does not play it again; a new cell does.
 
 **If a port is in fault (`ERR`), there is no finale, summary or storage offer** while it is: the red cell stays in view. Take the
