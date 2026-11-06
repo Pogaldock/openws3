@@ -360,6 +360,8 @@ calibration. Fixed in 0.2-beta.3, each with a test and a planted bug:
   4095 (64 counts of headroom at that VCC: why the 4.35 V target needs the per-target VCC check), the six currents about 0.64 A
   each, the input estimate 905 mA (3.6 A of charge at 4.36 V and 90 % efficiency would draw 0.89 A from 19.36 V: consistent), no
   limit holding a port, stack 41 bytes never used (the worst case worked out from the code leaves 29), no stored reference.
+  Port 3, nearly full, already in its constant-voltage phase (duty 400 of 400, 391 mA and falling) while the others held 0.6 A.
+  Holding B1 on the menu screen stopped the run (REQUIREMENTS.md SR-C2, on the charger).
 
 ## What it takes for granted, and what breaks if it is wrong
 

@@ -195,7 +195,8 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
   must stay at 98 % of their lines and 85 % of their branches.
 - **Static analysis** (`tools/cppcheck.sh`, on every build): cppcheck reads the code for known bug patterns; the findings checked by
   hand and kept are in `tools/cppcheck.supp`, each with its reason.
-- **The simulator against a real charge** (`tools/simcompare.py`): log a charge with `fwmon.py log`, and it runs the same charge in the
+- **The simulator against a real charge** (`tools/simcompare.py`): record a charge (the installer page's "Record a charge", or
+  `fwmon.py log`), and it runs the same charge in the
   simulator and shows the difference, so the model the tests rest on can itself be checked.
 - **An independent review** of the charge logic, the hardware layer, USB / installer / build and the test evidence; what it found and
   what was fixed is in SAFETY.md.

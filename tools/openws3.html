@@ -269,6 +269,12 @@ sudo udevadm control --reload-rules</pre>
     <p class="hint devonly">PWM 0..400 per port; BLEED switches the port to its discharge path. A port above 4.40 V or 2.8 A is cut by the
       firmware until it is set to 0 and the bleed switch off. The plot shows the current over the last 10 s.</p>
   </section>
+  <section class="card fwonly mononly">
+    <h2>Record a charge</h2>
+    <p class="hint">Records what the charger reads, once a second, while you charge. Save the file and send it to be compared with the
+      simulator (<code>tools/simcompare.py</code>): it checks the model every test rests on. One cell on one port is easiest to compare.</p>
+    <button id="recBtn">Start recording</button> <button id="recSave" disabled>Save the recording</button> <span id="recInfo" class="hint"></span>
+  </section>
   <section class="card adv fwonly mononly">
     <h2>Events</h2>
     <ol id="log"></ol>
@@ -360,6 +366,28 @@ function parse(dv) {
 }
 const inDev = () => p1 && p1.screen === SCR_DEV;
 
+// the charge recorder: page 1 once a second, as JSON lines (the same fields as tools/fwmon.py log), saved as a file
+const rec = { on: false, rows: [], last: -1 };
+function recTick() {
+  if (!rec.on || !p1 || p1.ms - rec.last < 1000) return;
+  rec.last = p1.ms;
+  rec.rows.push(JSON.stringify({ ms: p1.ms, run: p1.run, volt: p1.volt, iset: p1.iset, state: p1.state, v: p1.v, i: p1.i, duty: p1.duty,
+                                 rail: p1.rail, vin: p1.vin, bandgap: p1.bandgap, stop: p1.stop }));
+  $('recInfo').textContent = rec.rows.length + ' readings (' + (rec.rows.length / 60).toFixed(1) + ' min)';
+}
+$('recBtn').onclick = () => {
+  rec.on = !rec.on;
+  if (rec.on) { rec.rows = []; rec.last = -1; }
+  $('recBtn').textContent = rec.on ? 'Stop recording' : 'Start recording';
+  $('recSave').disabled = rec.on || !rec.rows.length;
+};
+$('recSave').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rec.rows.join('\n') + '\n'], { type: 'application/x-ndjson' }));
+  a.download = 'ws3-charge-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.jsonl';
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
 function logChanges(a, b) {                          // normal mode: what changed between two page 1 reports
   const add = text => { events.unshift({ ms: b.ms, text }); if (events.length > 200) events.pop(); };
   if (a.run !== b.run) add(b.run ? 'charging started' : 'charging stopped');
@@ -371,7 +399,7 @@ function logChanges(a, b) {                          // normal mode: what change
 
 function onReport(e) {
   lastRx = performance.now();
-  parse(e.data);
+  parse(e.data); recTick();
   if (out && p1 && p1.cmdSeq === seq && p1.cmdRes !== 0) { out = null; msg = 'Another program took over developer mode.'; syncControls(); }
   if (p1 && !inDev()) {
     if (out && !leaving) msg = 'The unit left developer mode (both buttons held on the unit?).';

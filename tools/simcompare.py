@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Puts the simulator beside a real charge, so the model the tests rely on can be checked against the charger itself.
 
-  1. On the charger: one cell on one port, start a charge, and log it until it is full:
-         python3 tools/fwmon.py log charge.jsonl
+  1. On the charger: one cell on one port, start a charge, and record it until it is full, either
+         on the installer page (Chrome or Edge, any computer): "Record a charge", then "Save the recording", or
+         python3 tools/fwmon.py log charge.jsonl   (Linux)
   2. Here:
          python3 tools/simcompare.py charge.jsonl --port 1 [--cap MAH]
 
