@@ -179,6 +179,7 @@ void hal_delay_ms(uint16_t ms) { sim_advance((uint32_t)ms * 2); }
 void hal_tick(void) {}
 void hal_wdt_feed(void) { S.wdt_last = S.ticks; S.wdt_on = 1; }
 uint16_t hal_ram_bgv(void) { return 0; }
+uint8_t hal_reset_why(void) { return S.reset_why; }
 void hal_tone_note(uint8_t cmd) { S.tone = cmd == TONE_OFF ? 0 : cmd; }
 void hal_fan(uint8_t on) { S.fan = on; }
 uint8_t hal_btn(uint8_t n) { return n == 1 ? (uint8_t)S.btn1 : (uint8_t)S.btn2; }

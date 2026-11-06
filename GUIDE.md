@@ -232,6 +232,8 @@ While a run is going, **OK** on a locked item gives the error sound, changes not
 ### Diagnostics
 
 DIAGNOSTICS opens six pages of raw readings for troubleshooting: power, port voltages, port currents, status, raw ADC values and the limits.
+Page 4 also says why the charger last restarted: `RESET 16` it was powered on, `128` the watchdog restarted it (the firmware froze:
+please report it, with what it was doing), `32` the supply dipped too low, `0` something else (installing, the loader).
 **B2** is the next page, **B1** the previous one, and **BACK** returns to the menu. You do not need them for normal use.
 The limits page (6) is the one worth knowing: it shows the estimated input current, the power budget and which ports are held (`H`) or waiting (`W`).
 

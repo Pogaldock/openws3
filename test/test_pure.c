@@ -383,7 +383,7 @@ static void t_dbg(void)
     CHECK(!strncmp(dbg_text(3, 4), "P4  22  308 D345 CHARGE", 23));
     CHECK(!strncmp(dbg_text(4, 1), "RUN 0  VOLT 1 4.35V", 19));
     CHECK(!strncmp(dbg_text(4, 2), "SET 21  300mA", 13));
-    CHECK(!strncmp(dbg_text(4, 5), "USB no host", 11));
+    CHECK(!strncmp(dbg_text(4, 5), "USB none  RESET   0", 19));
     dbg_view.adc[10] = 1234; dbg_view.adc[15] = 1073;
     CHECK(!strncmp(dbg_text(5, 4), "A9:  22 A10:1234 A11:   0", 25));
     CHECK(!strncmp(dbg_text(5, 6), "A15:1073", 8));

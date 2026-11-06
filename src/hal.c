@@ -121,8 +121,16 @@ uint8_t hal_stack_free(void)
     return n;
 }
 
+static uint8_t XD reset_why;
+
+/* why the chip last reset (STC8 manual: WDT_CONTR.7 WDT_FLAG set by a watchdog overflow; PCON.4 POF set by power coming on; PCON.5
+   LVDF set by a low-voltage event; all cleared by software).  Read before the first watchdog write, which clears WDT_FLAG. */
+uint8_t hal_reset_why(void) { return reset_why; }
+
 void hal_init(void)
 {
+    reset_why = (WDT_CONTR & 0x80) | (PCON & 0x30);   /* the flags as they are: bit 7 watchdog, bit 4 power on, bit 5 low voltage */
+    PCON &= (uint8_t)~0x30;    /* POF, LVDF cleared: the next reset reports its own cause */
     byp_ok = 0; profile_req = 0;   /* bypass held off until the input guard has run once (adc_prime) */
     pin_modes();
 

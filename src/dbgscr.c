@@ -83,7 +83,9 @@ const char *dbg_text(uint8_t page, uint8_t row)
         case 2: rb_str("SET "); rb_num(settings.cur, 0); rb_str("  "); rb_num(cal_set_to_ma(settings.cur), 0); rb_str("mA"); break;
         case 3: rb_str("TGT "); rb_num(sup_target(settings.volt), 0); rb_str("  RAIL SET "); rb_num(sup_setpoint(settings.volt), 0); break;
         case 4: rb_str("STOP "); rb_num(dbg_view.stop, 0); rb_str(" ALARM "); rb_num(dbg_view.alarm, 0); rb_str(" HOLD "); rb_num(dbg_view.rail_hold, 0); break;
-        case 5: rb_str("USB "); rb_str(dbg_view.usb ? "connected" : "no host"); break;   /* strap, fan: page 1; port states: page 3 */
+        case 5: rb_str(dbg_view.usb ? "USB host" : "USB none"); rb_str("  RESET "); rb_num(dbg_view.reset_why, 3); break;
+            /* strap, fan: page 1; port states: page 3.  RESET: why the chip last reset: 16 power on, 128 WATCHDOG (the firmware
+               hung: worth reporting), 32 low voltage, 0 other (the loader, a software reset) */
         }
         break;
     case 6:

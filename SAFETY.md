@@ -362,6 +362,10 @@ calibration. Fixed in 0.2-beta.3, each with a test and a planted bug:
   limit holding a port, stack 41 bytes never used (the worst case worked out from the code leaves 29), no stored reference.
   Port 3, nearly full, already in its constant-voltage phase (duty 400 of 400, 391 mA and falling) while the others held 0.6 A.
   Holding B1 on the menu screen stopped the run (REQUIREMENTS.md SR-C2, on the charger).
+- **Why the chip reset is now recorded** (after 0.2-beta.5's first test on the charger): a restart in the middle of that session
+  could not be told apart from someone unplugging it. Diagnostics page 4 now shows the reset cause from the chip's own flags (STC8
+  manual: WDT_CONTR.7 set by a watchdog overflow, PCON.4 by power coming on, PCON.5 by a low-voltage event): `RESET 16` power on,
+  `128` watchdog (the firmware hung: report it), `32` low voltage, `0` other (the loader, a software reset).
 
 ## What it takes for granted, and what breaks if it is wrong
 

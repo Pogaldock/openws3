@@ -31,6 +31,7 @@ uint8_t  hal_chip_byte(uint8_t n);
 /* The chip's measured internal reference as its loader left it in RAM (idata EFH-F0H, mV), read at the first instruction of start-up:
  * the way a chip without the CHIPID block (version A) gives it.  Not validated: shown on the diagnostics, not used for any decision. */
 uint16_t hal_ram_bgv(void);
+uint8_t hal_reset_why(void);         /* why the chip last reset: bit 7 watchdog, bit 4 power on, bit 5 low voltage, none: other */
 /* Watchdog: started at the end of hal_init (2.5 s); feed it at least that often: every control pass, and between the steps of the boot */
 void     hal_wdt_feed(void);
 

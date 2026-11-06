@@ -43,7 +43,8 @@ typedef struct {
     uint64_t ticks;             /* 0.5 ms */
     double lcd_us;              /* display time not yet turned into ticks */
     int ee_erases;              /* settings page erases (flash wear) */
-    double lcd_slow;            /* extra display time, a multiple of the bus rate (0: none): long passes */
+    double lcd_slow;
+    uint8_t reset_why;          /* what hal_reset_why reports (hal.h: 0x10 power on, 0x80 watchdog) */            /* extra display time, a multiple of the bus rate (0: none): long passes */
 
     /* ---- what the scenario checks ---- */
     double max_cell_v[NPORTS];  /* the highest cell voltage (open circuit + polarisation, what a meter reads after a short rest) */
