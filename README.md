@@ -1,5 +1,11 @@
 # WS3 Unlocked
 
+> **Warning, 6 November 2026: versions 0.2.0-beta.2 to beta.5 can overcharge.** They corrected every voltage reading with the
+> chip's internal reference, and that reference differs from chip to chip. On the tested charger it reads 1.5 % high, so cells
+> ended about 1.5 % above the setting: **about 4.41 V on 4.35 V, about 4.26 V on 4.20 V**. Found by Paweł Sadowski, OpenWS3's
+> author, and confirmed on the unit's own readings. **Fixed in 0.2.0-beta.6**, which uses the readings as OpenWS3 does. If you run
+> an older WS3 Unlocked: install beta.6, or until then charge LiHV cells on 4.20 V only and don't charge LiPo cells with it.
+
 Custom firmware for the VIFLY WhoopStor V3, the six-port 1S LiPo / LiHV charger. It's built on
 [OpenWS3](https://github.com/openws3/openws3), the open firmware for this charger, and it changes three things: how it looks (ROT:
 neon green, skulls, eyes that follow your cells, static, barbed wire), how it sounds (a short plucked melody with soft crackle), and
@@ -43,8 +49,13 @@ Where to go:
 Because an AI writes confident-looking code whether it's right or not, the rule here has been: assume it's wrong until something
 independent shows it isn't. In practice that's several layers, each looking from a different angle:
 
-- **I audited the charging code first**, and found that OpenWS3's voltage readings drift with the charger's own supply: in
-  simulation, cells reached **4.57 V on a 4.20 V setting**. Fixed, by correcting every reading with the chip's internal reference.
+- **I got the biggest one wrong, and the original author caught it.** My simulator assumed the chip's own supply could drift, so it
+  "found" that OpenWS3's readings would let cells reach 4.57 V, and I "fixed" it by correcting every reading with the chip's internal
+  reference. On the real board that supply is regulated and the readings are accurate as they come; it's the internal reference
+  that varies from chip to chip. On my charger the correction pushed cells 1.5 % over their setting. Paweł Sadowski, who wrote
+  OpenWS3, flagged it; my charger's own diagnostics confirmed it. Since 0.2.0-beta.6 the readings are used as they are, and the
+  reference may only ever make the charger stop earlier. It's the clearest lesson in this project: a simulator only knows what you
+  told it, and real units, and the people who've measured them, outrank it.
 - **I removed OpenWS3's developer mode**, which let a USB program switch outputs by hand. Its guards had real holes; without it,
   nothing outside the charge logic can drive a port.
 - **I added the protections a charger should have** and OpenWS3 didn't: refusing over-discharged cells, a gentle pre-charge with
@@ -149,9 +160,10 @@ The reference list, file by file. Everything not listed here is OpenWS3's, uncha
   the chip's full internal RAM (no new direct-RAM use) and its stack (measured on the charger: 24 to 48 bytes never used, depending on the screen version; at least 24 is the figure to plan with).
 
 ### Safety (details, evidence and limits for each: [SAFETY.md](SAFETY.md))
-- **Charge voltage that no longer depends on the supply** *(upstream too)*: every ADC reading is corrected with the chip's internal
-  reference (`src/adc.c`, `src/cal.c`). In simulation OpenWS3 charged cells to 4.57 V on a 4.20 V setting with the chip's supply at
-  4.95 V; WS3 Unlocked holds 4.20 V from 4.45 to 4.95 V.
+- **Readings and the chip's reference** (`src/adc.c`, `src/cal.c`): the readings are used as they come, as OpenWS3 does; the chip's
+  internal reference may only correct them upwards (if the chip's supply ever rose, which would make raw readings read low), so any
+  error ends a charge early. From 0.2.0-beta.2 to beta.5 it corrected both ways and overcharged units whose reference reads high
+  (the tested one by 1.5 %): see the warning at the top.
 - **Rail-fault alarm that sounds** *(upstream too)*: with SDCC 4.6 the buzzer's "busy" test compiled to "always busy", so the alarm
   never started (`src/buzz_pure.c`). Found by the tests on a simulated 8051.
 - **Over-discharged cells** (`src/chg.c`): below 2.5 V a cell is refused; from 2.5 to 3.0 V it charges at 0.1 A, at most 30 minutes.

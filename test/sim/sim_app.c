@@ -79,11 +79,16 @@ static void full_charge(const char *name, double vcc, double bg_err, double nois
 }
 
 static void s_nominal(void)   { full_charge("nominal (VCC 4.55 V)", 4.551, 0, 0, 4.17, 4.215); }
-static void s_vcc_low(void)   { full_charge("VCC 4.45 V", 4.45, 0, 0, 4.17, 4.215); }
+/* below the regulated value the raw readings read high, and they are not corrected down (0.2-beta.6): the charge ends early, safe */
+static void s_vcc_low(void)   { full_charge("VCC 4.45 V", 4.45, 0, 0, 4.05, 4.215); }
 static void s_vcc_mid(void)   { full_charge("VCC 4.75 V", 4.75, 0, 0, 4.17, 4.215); }
 static void s_vcc_high(void)  { full_charge("VCC 4.95 V", 4.95, 0, 0, 4.17, 4.215); }
 static void s_bg_plus(void)   { full_charge("bandgap +1 % (chip spread)", 4.551, 0.01, 0, 4.15, 4.25); }
 static void s_bg_minus(void)  { full_charge("bandgap -1 % (chip spread)", 4.551, -0.01, 0, 4.15, 4.25); }
+/* the tested unit (found on the charger, raised by OpenWS3's author): the supply where it should be, the internal reference 1.5 %
+   high (1087 counts, not 1071). Before 0.2-beta.6 every reading was corrected 1.5 % down and the cells ended 1.5 % high (4.26 V on
+   the 4.20 V setting, 4.41 V on 4.35 V). The raw readings must be used as they are */
+static void s_bg_unit(void)   { full_charge("reference 1.5 % high (the tested unit)", 4.551, 0.015, 0, 4.17, 4.215); }
 static void s_noise(void)     { full_charge("ADC noise +-4 counts", 4.551, 0, 4, 4.16, 4.22); }
 static void s_noise_vcc(void) { full_charge("noise + VCC 4.9 V + bg -1 %", 4.9, -0.01, 4, 4.14, 4.26); }
 
@@ -709,14 +714,15 @@ static void s_hv_race(void)
     CHECK(settings.hv == 0 && settings.volt != 1 && S.max_cell_v[0] < 4.23);
 }
 
-/* VCC 4.40 to 4.42 V with the 4.35 V target: the rail ADC can't read the setpoint there; a waiting stop, not a rail runaway */
+/* VCC 4.40 to 4.42 V with the 4.35 V target: no rail runaway and no false fatal (since 0.2-beta.6 the readings are not corrected
+   down, so the rail is held lower than the setpoint and the cells charge less) */
 static void s_hv_lowvcc(void)
 {
     sim_attach(0, 3.9, 300);
     S.vcc = 4.50; boot(); tap(2); start(); run_for(20);           /* 4.35 V, charging */
     S.vcc = 4.41; run_for(10);
     printf("  VCC sags to 4.41 V on a 4.35 V run: fatal 0x%02x, stop %u, rail driven max %.3f V, port %u\n", usb_tx2[54], usb_tx2[52], S.max_rail_driven, S.pwm[0]);
-    CHECK(usb_tx2[54] == 0 && S.max_rail_driven < 4.40 && !S.pwm[0]);
+    CHECK(usb_tx2[54] == 0 && S.max_rail_driven < 4.40 && S.max_cell_v[0] < 4.36);
 }
 
 /* VCC stepping every second (each step repaints the screen: a long pass): the 3 h limit still on time */
@@ -1007,7 +1013,7 @@ static void s_rail_stop(void)
 typedef struct { const char *name; void (*fn)(void); } scen_t;
 static const scen_t SC[] = {
     { "nominal", s_nominal }, { "vcc_low", s_vcc_low }, { "vcc_mid", s_vcc_mid }, { "vcc_high", s_vcc_high },
-    { "bg_plus", s_bg_plus }, { "bg_minus", s_bg_minus }, { "noise", s_noise }, { "noise_vcc", s_noise_vcc },
+    { "bg_plus", s_bg_plus }, { "bg_minus", s_bg_minus }, { "bg_unit", s_bg_unit }, { "noise", s_noise }, { "noise_vcc", s_noise_vcc },
     { "user_stop", s_user_stop }, { "input_loss", s_input_loss }, { "removal", s_removal }, { "dead_cell", s_dead_cell },
     { "gentle", s_gentle }, { "broken_rail", s_broken_rail }, { "short", s_short }, { "storage", s_storage },
     { "power_cycle", s_power_cycle }, { "never_full", s_never_full }, { "never_full_slow", s_never_full_slow }, { "vcc_step", s_vcc_step }, { "leaky", s_leaky },

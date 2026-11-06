@@ -40,9 +40,16 @@ uint8_t cal_ma_step_up(uint8_t units)
 
 uint16_t cal_vcc_gain(uint16_t bg8)
 {
+    uint16_t g;
     if (bg8 < BG8_MIN) bg8 = BG8_MIN;
     if (bg8 > BG8_MAX) bg8 = BG8_MAX;
-    return (uint16_t)((((uint32_t)BG_NOM << 15) + bg8 / 2) / bg8);
+    g = (uint16_t)((((uint32_t)BG_NOM << 15) + bg8 / 2) / bg8);
+    /* Only ever up (0.2-beta.6).  The internal reference varies from chip to chip (OpenWS3's author found it unreliable on some
+       units; on the tested unit it reads 1.5 % high), while the raw readings against the board's regulated supply are accurate as they
+       come.  A correction downwards would make a cell read lower than it is and charge it higher (4.41 V on the 4.35 V setting on
+       the tested unit); upwards it only ever makes the charger stop earlier.  So: the raw readings, as OpenWS3 uses them, unless the
+       reference says the supply has risen, which would make raw readings read low. */
+    return g < 4096 ? 4096 : g;
 }
 
 uint16_t cal_vcc_fix(uint16_t raw, uint16_t gain)

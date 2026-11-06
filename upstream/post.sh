@@ -1,11 +1,11 @@
 #!/bin/sh
+# HOLD: talk to OpenWS3's author first (Discord) before posting any of these.
 # Opens the issues in this folder on OpenWS3 (github.com/openws3/openws3), one per fix, from your GitHub account.
 # Needs the GitHub CLI, logged in (gh auth login).  Run from the repository root:  sh upstream/post.sh
 set -e
 R=openws3/openws3
 cd "$(dirname "$0")"
 post() { gh issue create -R "$R" --title "$1" --body-file "$2"; }
-post "Port readings are not corrected for VCC: 4.57 V on the 4.20 V setting at VCC 4.95 V (simulated)" 01-vcc.md
 post "Fatal stop drives the rail to its highest (hal_all_off sets duty 0 on an inverted actuator)" 02-fatal-rail.md
 post "Rail-fault alarm never sounds when built with SDCC 4.6 (buzz_busy pointer test)" 03-alarm.md
 post "Developer mode: pulsing a port defeats the 50 mV cut (4.45 V simulated); bleed switch has no time limit" 04-devmode.md

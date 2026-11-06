@@ -22,14 +22,18 @@ Planted bugs (`test/mutants.py`) then show that the tests named here really catc
 ## Voltage
 
 ### SR-V1: no cell charged above its target
-- **Requirement:** a cell is never charged more than 50 mV above its target, at any chip supply from 4.45 to 4.95 V, with sensor
-  noise and the chip's reference spread (plus or minus 1 %).
-- **Enforced in:** `src/chg.c` (constant voltage, over-voltage fault), `src/adc.c` and `src/cal.c` (every reading corrected for the
-  chip's supply), `src/sup.c` (the rail band).
+- **Requirement:** a cell is never charged more than 50 mV above its target, whatever the chip's own reference reads (it differs from
+  chip to chip), at a chip supply from 4.45 to 4.95 V, with sensor noise. Where an error can't be avoided, it must make the charge
+  end early, never late.
+- **Enforced in:** `src/chg.c` (constant voltage, over-voltage fault), `src/cal.c` (the reference may only correct readings
+  upwards, since 0.2-beta.6), `src/sup.c` (the rail band).
 - **Proof:** `sim:nominal` `sim:vcc_low` `sim:vcc_mid` `sim:vcc_high` `sim:vcc_step` `sim:bg_plus` `sim:bg_minus` `sim:noise`
-  `sim:noise_vcc` `sim:full_rises` `unit:test_chg.t_cut` `unit:test_pure.t_cal` `fuzz`
-- **Limit:** sensor errors that shift every reading together (the reference 1 % high and the rail sensor 0.8 % low) are not visible
-  to the firmware; the multimeter check finds them (SAFETY.md, "Red team").
+  `sim:noise_vcc` `sim:bg_unit` `sim:full_rises` `unit:test_chg.t_cut` `unit:test_pure.t_cal` `fuzz`
+- **History:** up to 0.2-beta.5 every reading was corrected by the chip's internal reference, both ways. On the tested unit that
+  reference reads 1.5 % high, so every reading was pulled 1.5 % down and cells ended 1.5 % high (about 4.41 V on the 4.35 V
+  setting). Raised by OpenWS3's author, confirmed on the unit's own diagnostics; `sim:bg_unit` is that unit.
+- **Limit:** the raw readings are only as accurate as the board's parts and its regulated supply (the resistor dividers' tolerance);
+  the multimeter check is how you find out.
 
 ### SR-V2: a wrong rail sensor is caught by the port readings
 - **Requirement:** if the rail's own sensor reads low, so the rail runs high, the port readings fault a cell that goes over.

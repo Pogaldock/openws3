@@ -71,6 +71,7 @@ M = [
  ("src/hal.c", "if (++n == 0) return 4095;", "if (++n == 0) return 0;", "HAL"),
  ("src/hal.c", "    if (top && !b) carry ^= 0x80000000UL;", "    ;", "HAL"),
  ("src/adc.c", "#define VG_LO_PASSES     3 ", "#define VG_LO_PASSES     222 ", "pd_drop_pack"),
+ ("src/cal.c", "    return g < 4096 ? 4096 : g;", "    return g;", "bg_unit"),
 ]
 
 def main():

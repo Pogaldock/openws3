@@ -9,12 +9,9 @@ OpenWS3's main branch was still at `b20df96` when they were written, so every it
 
 ## Safety
 
-### Port readings are not corrected for the chip's supply
-- **What:** the ADC measures against the chip's own supply (VCC). OpenWS3 corrects only the input voltage, so every port voltage
-  scales with VCC, which differs from unit to unit and supply to supply.
-- **How it shows:** in simulation, a cell charged to **4.57 V** on the 4.20 V setting with VCC at 4.95 V.
-- **Fix:** read the internal reference each pass and correct every port, current and rail reading with it: `src/adc.c`, `src/cal.c`.
-- **Test:** simulation scenarios `vcc_low`, `vcc_mid`, `vcc_high`, `vcc_step` (4.200 to 4.203 V from VCC 4.45 to 4.95 V).
+(An item on correcting the readings with the internal reference was withdrawn on 6 November 2026: OpenWS3's author pointed out
+that the reference is the unreliable part, and he was right; WS3 Unlocked's correction overcharged. See README, the warning.)
+
 
 ### A fatal stop drives the rail to its highest
 - **What:** the rail actuator is inverted (higher duty, lower rail). OpenWS3's fatal stop sets duty 0, the highest rail.

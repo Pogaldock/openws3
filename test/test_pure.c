@@ -436,8 +436,12 @@ static void t_vcc(void)
         uint16_t bg8 = (uint16_t)(BG_NOM * 8 / ratio[k] + 0.5);     /* a higher VCC reads the fixed reference lower */
         uint16_t raw = (uint16_t)(3822 / ratio[k] + 0.5);           /* ... and the cell lower */
         int fixed = cal_vcc_fix(raw, cal_vcc_gain(bg8));
-        CHECK(fixed >= 3822 - 3 && fixed <= 3822 + 3);                /* 3 vu = 3.3 mV */
+        if (ratio[k] >= 1.0) CHECK(fixed >= 3822 - 3 && fixed <= 3822 + 3);   /* a supply that rose: corrected (3 vu = 3.3 mV) */
+        else CHECK(fixed == raw && fixed > 3822);                     /* below: never corrected down, it reads high (charges less) */
     }
+    /* the tested unit: the reference reads 1087 where 1071 was assumed (a chip whose reference is 1.5 % high): no correction, so a
+       cell reads as the raw count says, as OpenWS3 reads it, not 1.5 % lower */
+    CHECK(cal_vcc_gain(1087 * 8) == 4096 && cal_vcc_fix(3964, cal_vcc_gain(1087 * 8)) == 3964);
     /* the uncorrected reading at VCC 4.99 V would be 9 % low: the charger would push the cell to about 4.6 V */
     CHECK((uint16_t)(3822 / (4.99 / 4.55) + 0.5) < 3822 - 300);
     /* absurd bandgap readings are clamped, and nothing overflows */
