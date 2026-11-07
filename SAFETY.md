@@ -456,7 +456,7 @@ Each line: what is assumed, how well it is supported, what happens if it is wron
   Not a WS3 Unlocked older than 0.2.0-beta.2: those predate the audit fixes.
 - **Multimeter (the important one):** charge a cell to full, let it rest 5 minutes, measure it at the cell. 4.17 to 4.23 V for 4.20 V,
   4.32 to 4.38 V for 4.35 V. Outside that, stop and report it with a photo of diagnostics page 1.
-- **Diagnostics page 1** (menu, DIAGNOSTICS): VCC between 4.45 and 4.95 V (the range the correction was tested over); `STACK` after a
+- **Diagnostics page 1** (menu, DIAGNOSTICS): VCC about 4.4 to 4.6 V (worked out from the internal reference, so approximate); `STACK` after a
   long charge with several cells and the finale and summary shown, with the web page connected, 15 or more; `BYP ON` on USB-C alone, `BYP OFF` on the XT60 alone; `THERM` about 2000 to
   2300 in a room.
 - **Outputs off:** with no cells in, after a charge, the ports read near 0 V on page 2.
@@ -465,13 +465,11 @@ Each line: what is assumed, how well it is supported, what happens if it is wron
 
 ## Still open (for anyone who wants to be sure)
 
-- **Measure a rested cell with a multimeter after a 4.35 V charge** (above). Then compare the rail and each port with a multimeter on
-  several units, and add a per-unit calibration from those readings (the biggest open assumption above).
+- The hardware checks in HARDWARE_CHECKS.md, then a per-unit calibration from them.
 - Find out what the loader answers to its erase commands, then check those answers in the installer and `isp.py`.
 - Show the average control-pass length on diagnostics page 1, and count the short fault waits on real time too.
 - Restore a unit to VIFLY's firmware once, with VIFLY's own tool, and document how (or confirm it cannot be done).
 - A capacity cap per fill, and a check that the voltage rises as charge goes in (a cell that takes charge without rising is damaged).
-- Calibrate the thermistor against a thermometer, and decide the stop temperature from it.
 - Watch the power-path pins and the rail with an oscilloscope from power-up to the first instruction, and after a watchdog reset.
 - Measure what the XT60 path does when USB-C is higher (does it conduct backwards into a pack?).
 - Measure the stack under every interrupt with USB telemetry running during a full six-port charge.
