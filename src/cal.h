@@ -21,12 +21,9 @@ uint16_t cal_ma_to_port(uint16_t ma);              /* inverse, rounded down */
  * (raw+1)*4/61 in 0.1 V; i.e. ~26.9 V full scale.  Needs a bench sweep. */
 uint16_t cal_vin_mv(uint16_t raw);
 
-/* VCC correction.  Every ADC count is relative to VCC, which follows the supply (about 4.55 V on USB-C, unknown on XT60 / DC).  The
- * internal 1.19 V bandgap read on the same ADC gives the ratio: gain = 4096 * BG_NOM / bandgap, and corrected = raw * gain / 4096.
- * At the VCC the scales were made at (bandgap BG_NOM) nothing changes.  The bandgap itself differs by about 1 % from chip to chip,
- * which is the error left: far smaller than the up to 10 % a VCC between 4.55 V and the 5.0 V fatal limit would give uncorrected
- * (a cell charged to 4.6 V instead of 4.2 V).  bg8 is the bandgap count x 8 (read every pass, unsmoothed: adc.c); it is clamped to the range the supply
- * supervision allows plus a margin, so a bad reading cannot make an absurd gain. */
+/* VCC correction, one-sided.  ADC counts are relative to VCC.  The internal bandgap gives gain = 4096 * BG_NOM / bandgap, but the
+ * bandgap itself varies between chips (1087 on the tested unit, 1.5 % off BG_NOM), so the gain is never below 4096: it can only raise
+ * readings, which ends a charge earlier.  bg8 is the bandgap count x 8, clamped so a bad reading cannot make an absurd gain. */
 #define BG_NOM      1071
 #define BG8_MIN     (900 * 8)
 #define BG8_MAX     (1250 * 8)
