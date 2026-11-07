@@ -25,17 +25,10 @@ The main risk of any LiPo charger: over 4.2 V (4.35 V for LiHV) a cell degrades,
 - **CV regulation and over-voltage stop (OpenWS3):** the rail is held 15 mV above the target; a port whose voltage goes above the rail
   and the target (by 50 mV) for 0.45 s is faulted while charging; a full cell that rises leaves FULL and is bled down; while
   bleeding, 4.40 V is a fault. On 4.35 V the top of the FULL window is 4.40 V itself, so a cell there faults rather than bleeds.
-- **The readings, and a correction that overcharged (0.2-beta.2 to beta.5, fixed in beta.6):** the ADC measures against the chip's
-  own supply (VCC). Assuming that supply could drift (to 4.95 V in the simulator), 0.2-beta.2 corrected every port, current and rail
-  reading with the chip's internal reference, both ways. On the board, VCC is regulated; the reference is what varies from chip to
-  chip. On the tested unit it reads 1087 counts where 1071 was assumed (1.5 % high), so every reading was pulled 1.5 % down and cells
-  ended 1.5 % high: about 4.41 V on the 4.35 V setting, 4.26 V on 4.20 V. That matches what two drones read on a cell charged on
-  4.35 V (4.40 and 4.42 V, put down at the time to the drones disagreeing). Raised by Paweł Sadowski, OpenWS3's author, who had found
-  the internal reference unreliable on some units while the raw readings appear factory-accurate; confirmed by computing both
-  readings from the unit's own diagnostics (raw 3964: 4.291 V corrected, 4.355 V as OpenWS3 reads it). Since 0.2-beta.6 the readings
-  are used as they come (OpenWS3's scale) and the reference may only correct them upwards: an error can only end a charge early.
-  Simulated, the tested unit (`bg_unit`): 4.265 V before, 4.201 V after. The simulator's model was the root cause: it let VCC move
-  freely, so it invented the drift the correction was meant to cure.
+- **The readings (fixed in 0.2-beta.6):** beta.2 to beta.5 corrected every reading with the chip's internal reference, both ways.
+  It reads 1.5 % high on the tested unit, so cells ended 1.5 % high (4.41 V on 4.35). Raised by OpenWS3's author. Readings are now
+  used as they come; the reference may only correct upwards, so an error ends a charge early. Simulated (`bg_unit`): 4.265 V before,
+  4.201 V after.
 - **Developer mode removed (WS3 Unlocked):** OpenWS3 lets a host program drive the outputs directly. Its guards cut a port 50 mV
   above the selected target, but the cut was checked only on ports that had been on, and switching a port off released it, so a
   host pulsing a port on and off pushed a cell to **4.45 V** (found by review, reproduced in simulation; a held bleed switch also
@@ -211,8 +204,7 @@ time, the watchdog and the thermistor. It presses the buttons like a person and 
 - in every scenario: the watchdog is never starved
 
 The output of the last run is in each CI log. Run against OpenWS3 as of `b20df96`, some scenarios fail: a 2.3 V cell charged, no gentle
-start, no time limit. (An earlier version of this page also listed "cells to 4.57 V at VCC 4.95 V"; that came from the simulator's
-wrong model of the chip's supply, see "The readings" above.)
+start, no time limit.
 
 ### Mutation testing: do the tests catch a real bug?
 A test suite is only worth what it catches. Each safety check was broken on purpose, one at a time (a threshold made ten times wider,

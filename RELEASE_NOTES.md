@@ -4,11 +4,8 @@ assistant, directed and checked by me) and has run on one charger. Going back to
 surface, supervise every charge, never overnight. No warranty, no responsibility taken: you install it at your own risk.
 
 ### 0.2.0-beta.6: fixes an overcharge (install this)
-- **Beta.2 to beta.5 could overcharge.** They corrected every voltage reading with the chip's internal reference, which differs
-  from chip to chip. On the tested charger it reads 1.5 % high, so cells ended about 1.5 % over the setting: **about 4.41 V on
-  4.35 V, 4.26 V on 4.20 V**. Found by Paweł Sadowski, OpenWS3's author; confirmed on the unit's own readings.
-- **Now:** the readings are used as they come, as in OpenWS3; the reference may only correct them upwards, so an error can only
-  end a charge early. On the tested unit, cells now end where OpenWS3 would end them.
+- **Fixes an overcharge:** beta.2 to beta.5 corrected readings with the chip's internal reference, which reads 1.5 % high on
+  some units (4.41 V on 4.35). Readings are now used as they come; the reference may only make a charge end earlier.
 - Also since beta.5: diagnostics page 4 shows why the chip last reset; the installer page can record a charge.
 - Settings are kept from beta.3 and later.
 

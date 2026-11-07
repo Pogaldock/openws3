@@ -48,9 +48,7 @@ The words used in this project's documents, in plain language, grouped by topic.
 - **Pin:** one electrical connection of the chip. It can be an input, or an output driven high or low, or left floating.
 - **ADC (analog-to-digital converter):** turns a voltage into a number the program can use. Every voltage and current the charger
   knows comes through it.
-- **Bandgap / internal reference:** a voltage inside the chip meant to stay constant. In principle measuring it tells the program
-  its own supply (VCC); in practice it differs from chip to chip (1.5 % on the tested unit), so here it may only ever make the
-  charger stop earlier, never later.
+- **Bandgap / internal reference:** a voltage inside the chip, meant to be constant; in practice it varies between chips.
 - **VCC:** the chip's own supply voltage, about 4.5 V here. The ADC measures relative to it.
 - **Interrupt:** a piece of code the hardware runs in between the main program's steps (on a timer tick, a USB packet). Code shared
   by both has to be written so they cannot corrupt each other's data.

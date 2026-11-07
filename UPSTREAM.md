@@ -9,8 +9,6 @@ OpenWS3's main branch was still at `b20df96` when they were written, so every it
 
 ## Safety
 
-(An item on correcting the readings with the internal reference was withdrawn on 6 November 2026: OpenWS3's author pointed out
-that the reference is the unreliable part, and he was right; WS3 Unlocked's correction overcharged. See README, the warning.)
 
 
 ### A fatal stop drives the rail to its highest
